@@ -4669,6 +4669,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyber_robot_viewer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs",
+ "gpui",
+ "image",
+ "project",
+ "serde",
+ "serde_json",
+ "ui",
+ "util",
+ "workspace",
+]
+
+[[package]]
 name = "dap"
 version = "0.1.0"
 dependencies = [
@@ -23002,6 +23018,7 @@ dependencies = [
  "copilot_ui",
  "crashes",
  "csv_preview",
+ "cyber_robot_viewer",
  "dap_adapters",
  "db",
  "debug_adapter_extension",
