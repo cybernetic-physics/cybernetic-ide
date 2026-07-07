@@ -347,6 +347,10 @@ ad hoc scripts first. The default tool surface includes:
   Unitree transport, sim/real mode, DDS domain/interface, simulator
   reachability, topic freshness, and official sidecar readiness when
   `CYBER_UNITREE_TRANSPORT=dds` is selected in simulator mode;
+- upstream research audit: `upstream_robotics_audit`, which inspects the local
+  `~/wagmi` Locomujoco, Unitree MuJoCo, SDK2, and RL clones, reports git
+  commit/dirty status plus known-file availability, and summarizes how each
+  source should inform Cybernetic IDE work;
 - official SDK2 sidecar prep: `unitree_prepare_sdk2_sidecar` and
   `unitree_sdk2_sidecar_status`, which fetch pinned official Unitree sources,
   run the opt-in diagnostic container, initialize CycloneDDS, and create

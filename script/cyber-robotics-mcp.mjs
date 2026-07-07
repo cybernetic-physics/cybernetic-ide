@@ -18,6 +18,72 @@ const POLICY_CONTAINER_DIR = "/opt/unitree-g1-mujoco-protocol/policy";
 const DEFAULT_POLICY_BUNDLE = `${POLICY_CONTAINER_DIR}/g1_yoga_policy.npz`;
 const MAX_LOG_BYTES = 256_000;
 const CAMERA_BOOKMARKS_PATH = ".runtime/robot-viewer-camera-bookmarks.json";
+const UPSTREAM_ROBOTICS_REPOS = [
+  {
+    id: "loco-mujoco",
+    repo: "robfiras/loco-mujoco",
+    local_name: "loco-mujoco",
+    role: "Humanoid locomotion, imitation-learning, retargeting, and MuJoCo/MJX research reference.",
+    cybernetic_use: "Informs packages/g1-yoga-rl pose projection, trajectory export, policy training, and future balance-controller work.",
+    known_files: ["loco_mujoco/environments/humanoids/unitreeG1.py", "examples"],
+  },
+  {
+    id: "unitree_mujoco",
+    repo: "unitreerobotics/unitree_mujoco",
+    local_name: "unitree_mujoco",
+    role: "Official Unitree MuJoCo bridge and G1 MJCF/runtime source.",
+    cybernetic_use: "Source for the official G1 scene, SDK2/CycloneDDS peer, rt/lowcmd, rt/lowstate, visual assets, and sidecar launch probes.",
+    known_files: ["unitree_robots/g1/scene_29dof.xml", "simulate", "README.md"],
+  },
+  {
+    id: "unitree_sdk2_python",
+    repo: "unitreerobotics/unitree_sdk2_python",
+    local_name: "unitree_sdk2_python",
+    role: "Official Python SDK2 package shape and examples.",
+    cybernetic_use: "Reference for unitree_sdk2py compatibility imports, G1ArmActionClient, LocoClient, ChannelPublisher, ChannelSubscriber, and example parity audits.",
+    known_files: ["unitree_sdk2py/g1/arm/g1_arm_action_client.py", "unitree_sdk2py/g1/loco/g1_loco_client.py", "example/g1"],
+  },
+  {
+    id: "unitree_sdk2",
+    repo: "unitreerobotics/unitree_sdk2",
+    local_name: "unitree_sdk2",
+    role: "Official C++ SDK2 headers, IDL, and examples.",
+    cybernetic_use: "Reference for C++-only G1 AGV, hand, Dex3, motion-switcher, CRC, topic, and RPC semantics.",
+    known_files: ["include/unitree/robot/g1", "include/unitree/idl", "example/g1"],
+  },
+  {
+    id: "unitree_rl_gym",
+    repo: "unitreerobotics/unitree_rl_gym",
+    local_name: "unitree_rl_gym",
+    role: "Unitree locomotion policy training/deployment reference.",
+    cybernetic_use: "Feeds future sim-to-real locomotion and learned-policy packaging after the SDK2 provider is stable.",
+    known_files: ["legged_gym", "deploy", "README.md"],
+  },
+  {
+    id: "unitree_rl_lab",
+    repo: "unitreerobotics/unitree_rl_lab",
+    local_name: "unitree_rl_lab",
+    role: "Newer Unitree reinforcement-learning lab material.",
+    cybernetic_use: "Candidate future source for policy workflows once the basic G1 SDK/runtime loop is reliable.",
+    known_files: ["source", "README.md"],
+  },
+  {
+    id: "unitree_rl_mjlab",
+    repo: "unitreerobotics/unitree_rl_mjlab",
+    local_name: "unitree_rl_mjlab",
+    role: "Unitree MuJoCo-oriented RL lab material.",
+    cybernetic_use: "Candidate future source for MuJoCo policy training/deployment conventions.",
+    known_files: ["README.md"],
+  },
+  {
+    id: "mujoco_warp",
+    repo: "google-deepmind/mujoco_warp",
+    local_name: "mujoco_warp",
+    role: "GPU-oriented MuJoCo/Warp simulation research.",
+    cybernetic_use: "Possible later acceleration reference; not required for the current SDK2 G1 provider path.",
+    known_files: ["mujoco_warp", "README.md"],
+  },
+];
 const G1_ACTION_POSES = {
   release_arm: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
   neutral: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
@@ -129,6 +195,22 @@ const tools = [
   tool("unitree_provider_status", "Summarize the active Unitree provider, command path, telemetry path, and limitations.", {}, [], {
     readOnlyHint: true,
   }),
+  tool(
+    "upstream_robotics_audit",
+    "Inspect local ~/wagmi robotics research clones and summarize how each informs Cybernetic IDE.",
+    {
+      wagmi_root: {
+        type: "string",
+        default: "/Users/cuboniks/wagmi",
+        description: "Directory containing cloned upstream robotics repositories.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+  ),
   tool(
     "unitree_sdk_compatibility_audit",
     "Compare cloned official Unitree G1 SDK2 Python examples with Cybernetic's current unitree_sdk2py shim support.",
@@ -1529,6 +1611,8 @@ async function callTool(name, args) {
       return textResult(await unitreeSessionStatus());
     case "unitree_provider_status":
       return textResult(providerStatusFromDiagnostics(await unitreeSessionStatus()));
+    case "upstream_robotics_audit":
+      return textResult(upstreamRoboticsAudit(args));
     case "unitree_sdk_compatibility_audit":
       return textResult(unitreeSdkCompatibilityAudit(args));
     case "unitree_sdk_behavior_smoke":
@@ -1712,7 +1796,7 @@ function getPrompt(name) {
           role: "user",
           content: {
             type: "text",
-            text: "Check sim_status, prepare/start the simulator if needed, open or use the Robot Viewer, then explain what robotics tools are available.",
+            text: "Check sim_status and upstream_robotics_audit, prepare/start the simulator if needed, open or use the Robot Viewer, then explain what robotics tools are available.",
           },
         },
       ],
@@ -1751,6 +1835,80 @@ async function simStatus() {
     docker: inspect.status === 0 ? inspect.stdout.trim() : inspect.stderr.trim(),
     env,
     status,
+  };
+}
+
+function upstreamRoboticsAudit(args = {}) {
+  const wagmiRoot = typeof args.wagmi_root === "string" && args.wagmi_root
+    ? path.resolve(args.wagmi_root.replace(/^~(?=$|\/)/, os.homedir()))
+    : path.join(os.homedir(), "wagmi");
+  const repos = UPSTREAM_ROBOTICS_REPOS.map((spec) => {
+    const localPath = path.join(wagmiRoot, spec.local_name);
+    const exists = fs.existsSync(localPath);
+    const git = exists ? gitSummary(localPath) : null;
+    const knownFiles = spec.known_files.map((relativePath) => {
+      const absolutePath = path.join(localPath, relativePath);
+      return {
+        path: relativePath,
+        exists: fs.existsSync(absolutePath),
+        type: fs.existsSync(absolutePath) ? (fs.statSync(absolutePath).isDirectory() ? "directory" : "file") : "missing",
+      };
+    });
+    return {
+      ...spec,
+      local_path: localPath,
+      exists,
+      git,
+      known_files: knownFiles,
+      ready_for_agent_use: exists && knownFiles.some((entry) => entry.exists),
+    };
+  });
+  const cloned = repos.filter((repo) => repo.exists);
+  const missing = repos.filter((repo) => !repo.exists).map((repo) => repo.local_name);
+  return {
+    ok: missing.length === 0,
+    wagmi_root: wagmiRoot,
+    cloned_count: cloned.length,
+    expected_count: UPSTREAM_ROBOTICS_REPOS.length,
+    missing,
+    repos,
+    cybernetic_integration_summary: {
+      sdk_shape: "unitree_sdk2_python and unitree_sdk2 define the import paths, RPC names, DDS topics, IDL messages, CRC behavior, and example parity targets.",
+      simulator_runtime: "unitree_mujoco defines the official G1 MuJoCo scene and low-level SDK2/CycloneDDS peer used by the managed DDS sidecar.",
+      locomotion_research: "loco-mujoco and Unitree RL repos inform future balance/policy work; current Cybernetic runtime uses them through packages/g1-yoga-rl and optional policy bundles.",
+      current_product_boundary: "Cybernetic IDE supports local simulator facades, managed official lowstate/lowcmd DDS sessions, and an RPC bridge subset; full whole-body balance and real-hardware safety remain future work.",
+    },
+    recommended_next_tools: [
+      "unitree_sdk_compatibility_audit",
+      "unitree_provider_status",
+      "unitree_prepare_sdk2_sidecar",
+      "sim_policy_bundle_info",
+      "robotics_tool_reference",
+    ],
+  };
+}
+
+function gitSummary(repoPath) {
+  if (!fs.existsSync(path.join(repoPath, ".git"))) {
+    return { is_git_repo: false };
+  }
+  const git = (args) => spawnSync("git", ["-C", repoPath, ...args], {
+    encoding: "utf8",
+    timeout: 10_000,
+    maxBuffer: 1024 * 1024,
+  });
+  const read = (args) => {
+    const result = git(args);
+    return result.status === 0 ? result.stdout.trim() : null;
+  };
+  const status = read(["status", "--short"]) || "";
+  return {
+    is_git_repo: true,
+    branch: read(["branch", "--show-current"]),
+    commit: read(["rev-parse", "--short=12", "HEAD"]),
+    remote: read(["remote", "get-url", "origin"]),
+    dirty: status.length > 0,
+    dirty_entries: status ? status.split(/\r?\n/).filter(Boolean).length : 0,
   };
 }
 
@@ -3307,6 +3465,12 @@ function roboticsToolReference() {
         "read",
         "Scans cloned official Unitree G1 Python examples and reports shim import/method coverage.",
         "Official unitree_sdk2_python checkout available under ~/wagmi or supplied path.",
+      ),
+      toolReference(
+        "upstream_robotics_audit",
+        "read",
+        "Inspects local upstream robotics clones, git commits, known files, and Cybernetic integration notes.",
+        "~/wagmi exists on the local machine; missing repos are reported explicitly.",
       ),
       toolReference(
         "unitree_sdk_behavior_smoke",

@@ -604,6 +604,7 @@ sim_policy_bundle_info
 sim_policy_status
 sim_policy_start
 sim_policy_stop
+upstream_robotics_audit
 unitree_provider_status
 unitree_session_status
 unitree_sdk_compatibility_audit

@@ -98,6 +98,14 @@ simulator facades, not whole-body balance controllers.
 
 ## Agent MCP Additions
 
+Use `upstream_robotics_audit` first when an agent needs to adapt or compare
+upstream robotics code. It inspects the local `~/wagmi` clone set, reports
+whether each expected repo exists, includes branch/commit/dirty state when the
+repo is a Git checkout, checks important known files, and returns the
+Cybernetic integration note for each source. This keeps agents from guessing
+which upstream repo should answer a Unitree SDK, MuJoCo, Locomujoco, or policy
+question.
+
 The robotics MCP now gives agents both inline and file-based visual inspection:
 
 - `viewer_camera_control`: orbit, pan, zoom, reset, or read the MuJoCo camera.
