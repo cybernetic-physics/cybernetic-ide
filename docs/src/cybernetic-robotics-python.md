@@ -270,6 +270,7 @@ viewer_snapshot
 viewer_snapshot_file
 viewer_snapshot_series
 sim_validate_behavior
+unitree_session_status
 scene_add_object
 scene_list_objects
 scene_remove_object
@@ -286,6 +287,10 @@ to compare before/after views across multiple steps.
 simulator is ready, the robot is not fallen, the render cache is healthy,
 lowstate telemetry is available, recent lowcmds are fresh when applicable, and
 optionally writes a snapshot for visual evidence.
+`unitree_session_status` answers the broader connection question: which
+transport is selected, which DDS domain/interface would be used, whether the
+current path is implemented, whether the local simulator is reachable, and how
+fresh the `rt/lowcmd` / `rt/lowstate` surfaces are.
 `scene_add_object`, `scene_list_objects`, and `scene_remove_object` let agents
 iterate on simple MuJoCo scene objects. Scene edits write new MJCF copies under
 `.runtime/unitree-g1-mujoco/unitree_mujoco/cybernetic_scenes/`; the simulator

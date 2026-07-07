@@ -53,10 +53,25 @@ with G1Robot.connect() as robot:
 
 ```sh
 cyber-g1 status
+cyber-g1 diagnostics
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 cyber-g1 camera orbit --dx 40 --dy -10
 cyber-g1 step --count 20
 cyber-g1 demo
+```
+
+`cyber-g1 diagnostics` is the quickest way to see what the SDK-shaped bridge is
+actually using. It reports `transport=local_http|dds`, `mode=sim|real`, DDS
+domain/interface, simulator reachability, and `rt/lowcmd` / `rt/lowstate`
+freshness. The `dds` transport is intentionally diagnostic-only until the
+official SDK2/CycloneDDS sidecar is wired in.
+
+The same data is available from Python:
+
+```python
+from cybernetic_robotics import UnitreeSession
+
+print(UnitreeSession.from_env().diagnostics())
 ```
 
 ## Unitree SDK2-Shaped API
@@ -200,6 +215,14 @@ overwriting the pinned upstream Unitree assets.
 - `CYBER_G1_WS_HOST`: fallback WebSocket host, default `127.0.0.1`.
 - `CYBER_G1_WS_PORT`: fallback WebSocket port, default `8788`.
 - `CYBER_ROBOTICS_ROOT`: Cybernetic IDE repo root for harness and scene helpers.
+- `CYBER_UNITREE_TRANSPORT`: `local_http` today, `dds` for planned official
+  SDK2/CycloneDDS diagnostics.
+- `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
+- `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
+- `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be
+  explicit in real mode.
+- `CYBER_UNITREE_REAL_UNLOCK`: real mode stays locked unless set to
+  `I_UNDERSTAND_THIS_CONTROLS_REAL_HARDWARE`.
 - `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS`: simulator lowcmd freshness timeout,
   default `2.0`. `G1Robot.status()` exposes `lowcmd_active`,
   `lowcmd_stale`, and `lowcmd_age_seconds`; SDK-style `LowState_` exposes the

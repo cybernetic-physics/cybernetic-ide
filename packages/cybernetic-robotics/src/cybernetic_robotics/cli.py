@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from .g1 import G1Robot
+from .session import UnitreeSession, UnitreeTransportConfig
 from .harness import DockerHarness
 from .simulator import SimulatorClient
 
@@ -15,6 +16,7 @@ def main(argv: list[str] | None = None) -> int:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("status")
+    subcommands.add_parser("diagnostics")
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
@@ -57,10 +59,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {"prepare", "start", "stop", "logs"}:
         return _harness_command(args)
 
-    robot = G1Robot.connect(wait=args.command != "snapshot")
+    robot = G1Robot.connect(wait=args.command not in {"snapshot", "diagnostics"})
     if args.command == "status":
         status = robot.status()
         return _print({"ready": status.ready, "pose": status.pose, "paused": status.paused, "speed": status.speed})
+    if args.command == "diagnostics":
+        config = UnitreeTransportConfig.from_env(robot.sim.endpoints)
+        return _print(UnitreeSession(config, robot.sim).diagnostics())
     if args.command == "pause":
         return _print(robot.pause())
     if args.command == "resume":

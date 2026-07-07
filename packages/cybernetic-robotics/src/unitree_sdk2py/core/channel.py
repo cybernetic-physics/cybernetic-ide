@@ -11,6 +11,7 @@ from cybernetic_robotics.simulator import SimulatorClient
 class ChannelFactoryConfig:
     domain_id: int = 0
     network_interface: str | None = None
+    initialized: bool = False
 
 
 _CONFIG = ChannelFactoryConfig()
@@ -25,7 +26,7 @@ def ChannelFactoryInitialize(id: int = 0, networkInterface: str | None = None):
     """
 
     global _CONFIG
-    _CONFIG = ChannelFactoryConfig(id, networkInterface)
+    _CONFIG = ChannelFactoryConfig(id, networkInterface, True)
 
 
 def current_channel_factory_config() -> ChannelFactoryConfig:

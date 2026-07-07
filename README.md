@@ -275,6 +275,9 @@ ad hoc scripts first. The default tool surface includes:
 - simulator validation: `sim_validate_behavior`, which checks ready/fallen
   state, render health, lowstate availability, lowcmd freshness, and optional
   snapshot evidence after a script runs;
+- session diagnostics: `unitree_session_status`, which reports the selected
+  Unitree transport, sim/real mode, DDS domain/interface, simulator
+  reachability, and topic freshness;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
@@ -298,6 +301,12 @@ Useful environment variables:
   `cyber/unitree-g1-mujoco-protocol:0.1.0`.
 - `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
   `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
+- `CYBER_UNITREE_TRANSPORT`: `local_http` today, `dds` for planned official
+  SDK2/CycloneDDS diagnostics.
+- `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
+- `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
+- `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be
+  explicit in real mode.
 - `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS`: simulator lowcmd freshness timeout,
   default `2.0`; `/status` and `/lowstate` expose `active`, `stale`,
   `age_seconds`, and `watchdog_seconds`.

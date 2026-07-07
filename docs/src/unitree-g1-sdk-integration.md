@@ -368,6 +368,10 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
   `/joint_state` and compiles joint-name targets back into simulator-backed
   lowcmd slots.
+- `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
+  `unitree_session_status` MCP tool expose the current transport boundary:
+  `local_http` versus planned `dds`, sim/real mode, DDS domain/interface,
+  simulator reachability, and topic freshness.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

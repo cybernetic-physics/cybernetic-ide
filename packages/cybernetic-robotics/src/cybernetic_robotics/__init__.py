@@ -17,6 +17,7 @@ to work directly with the Booster-style simulator protocol.
 from .config import RobotEndpoints
 from .errors import CyberneticRoboticsError, ProtocolError, SimulatorUnavailable
 from .g1 import G1Robot, G1Status, connect
+from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
 from .unitree import AudioClient, LocoClient
 from .websocket import TinyWebSocket
@@ -34,5 +35,7 @@ __all__ = [
     "SimulatorStatus",
     "SimulatorUnavailable",
     "TinyWebSocket",
+    "UnitreeSession",
+    "UnitreeTransportConfig",
     "connect",
 ]

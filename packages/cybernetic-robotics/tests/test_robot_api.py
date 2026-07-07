@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import unittest
 
-from cybernetic_robotics import G1Robot, ProtocolError, RobotEndpoints, SimulatorClient
+from cybernetic_robotics import G1Robot, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
@@ -401,6 +401,58 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_session_diagnostics_reports_transport_and_topics(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            config = UnitreeTransportConfig.from_env(endpoints)
+            diagnostics = UnitreeSession(config, SimulatorClient(endpoints)).diagnostics()
+
+            self.assertTrue(diagnostics["ok"])
+            self.assertTrue(diagnostics["implemented"])
+            self.assertEqual(diagnostics["config"]["transport"], "local_http")
+            self.assertEqual(diagnostics["config"]["mode"], "sim")
+            self.assertEqual(diagnostics["config"]["dds_domain_id"], 1)
+            self.assertEqual(diagnostics["config"]["network_interface"], "lo")
+            self.assertTrue(diagnostics["simulator"]["reachable"])
+            self.assertTrue(diagnostics["topics"]["rt/lowstate"]["available"])
+            self.assertIn("rt/lowcmd", diagnostics["topics"])
+
+    def test_unitree_session_diagnostics_surfaces_real_mode_safety_gate(self):
+        previous = {
+            key: os.environ.get(key)
+            for key in (
+                "CYBER_UNITREE_MODE",
+                "CYBER_UNITREE_TRANSPORT",
+                "CYBER_UNITREE_DDS_DOMAIN",
+                "CYBER_UNITREE_NETWORK_INTERFACE",
+                "CYBER_UNITREE_REAL_UNLOCK",
+            )
+        }
+        os.environ["CYBER_UNITREE_MODE"] = "real"
+        os.environ["CYBER_UNITREE_TRANSPORT"] = "dds"
+        os.environ.pop("CYBER_UNITREE_NETWORK_INTERFACE", None)
+        os.environ.pop("CYBER_UNITREE_REAL_UNLOCK", None)
+        try:
+            with FakeServer() as fake:
+                endpoints = RobotEndpoints(game_control_url=fake.url)
+                config = UnitreeTransportConfig.from_env(endpoints)
+                diagnostics = UnitreeSession(config, SimulatorClient(endpoints)).diagnostics()
+
+            self.assertFalse(diagnostics["ok"])
+            self.assertFalse(diagnostics["implemented"])
+            self.assertEqual(diagnostics["config"]["mode"], "real")
+            self.assertEqual(diagnostics["config"]["transport"], "dds")
+            self.assertEqual(diagnostics["config"]["dds_domain_id"], 0)
+            self.assertIsNone(diagnostics["config"]["network_interface"])
+            self.assertTrue(any("requires CYBER_UNITREE_NETWORK_INTERFACE" in item for item in diagnostics["warnings"]))
+            self.assertTrue(any("real mode is locked" in item for item in diagnostics["warnings"]))
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_lowcmd_rejects_malformed_command_lists(self):
         with FakeServer() as fake:

@@ -1164,6 +1164,7 @@
               "sim_stop": true,
               "sim_restart": true,
               "sim_status": true,
+              "unitree_session_status": true,
               "sim_pause": true,
               "sim_resume": true,
               "sim_reset": true,

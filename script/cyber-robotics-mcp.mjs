@@ -82,6 +82,9 @@ const tools = [
   tool("sim_status", "Read simulator, Docker, render-cache, and robot status.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("unitree_session_status", "Read Unitree G1 session transport, DDS, simulator, and topic diagnostics.", {}, [], {
+    readOnlyHint: true,
+  }),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -521,6 +524,8 @@ async function callTool(name, args) {
       return textResult(runChecked("docker", [...composeArgs(), "restart", DEFAULT_CONTAINER], { timeoutMs: 120000 }));
     case "sim_status":
       return textResult(await simStatus());
+    case "unitree_session_status":
+      return textResult(await unitreeSessionStatus());
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -656,6 +661,87 @@ async function simStatus() {
     env,
     status,
   };
+}
+
+async function unitreeSessionStatus() {
+  const mode = normalizeChoice(process.env.CYBER_UNITREE_MODE, ["sim", "real"], "sim");
+  const transport = normalizeChoice(process.env.CYBER_UNITREE_TRANSPORT, ["local_http", "dds"], "local_http");
+  const ddsDomainId = toInt(process.env.CYBER_UNITREE_DDS_DOMAIN, mode === "sim" ? 1 : 0);
+  const networkInterface = process.env.CYBER_UNITREE_NETWORK_INTERFACE || (mode === "sim" ? "lo" : null);
+  const warnings = [];
+  const result = {
+    ok: true,
+    implemented: transport === "local_http",
+    config: {
+      mode,
+      transport,
+      dds_domain_id: ddsDomainId,
+      network_interface: networkInterface,
+      safety_profile: process.env.CYBER_UNITREE_SAFETY_PROFILE || (mode === "sim" ? "simulator" : "real"),
+      real_unlocked: process.env.CYBER_UNITREE_REAL_UNLOCK === "I_UNDERSTAND_THIS_CONTROLS_REAL_HARDWARE",
+      endpoints: {
+        game_control_url: gameControlUrl(),
+        physics_url: physicsUrl(),
+      },
+    },
+    warnings,
+    simulator: null,
+    topics: {},
+  };
+
+  if (transport === "dds") {
+    warnings.push("dds transport is selected but Cybernetic IDE currently runs the local_http simulator shim");
+  }
+  if (mode === "real") {
+    if (!networkInterface) warnings.push("real mode requires CYBER_UNITREE_NETWORK_INTERFACE");
+    if (!result.config.real_unlocked) warnings.push("real mode is locked; do not send hardware commands until explicitly unlocked");
+  }
+
+  try {
+    const statusValue = await getJson("/status");
+    const simulation = statusValue.simulation && typeof statusValue.simulation === "object" ? statusValue.simulation : {};
+    const lowcmd = simulation.lowcmd && typeof simulation.lowcmd === "object" ? simulation.lowcmd : {};
+    result.simulator = {
+      reachable: true,
+      ready: statusValue.ready === true,
+      pose: simulation.pose || null,
+      paused: simulation.paused === true,
+      fallen: simulation.fallen === true,
+      model_path: simulation.model_path || null,
+    };
+    result.topics["rt/lowcmd"] = {
+      source: transport,
+      active: lowcmd.active === true,
+      stale: lowcmd.stale === true,
+      age_seconds: lowcmd.age_seconds ?? null,
+      watchdog_seconds: lowcmd.watchdog_seconds ?? null,
+      last_received_at: lowcmd.received_at ?? null,
+      message_count: lowcmd.motor_cmd_count ?? null,
+    };
+  } catch (error) {
+    result.ok = false;
+    result.simulator = { reachable: false, error: error.message };
+  }
+
+  try {
+    const lowstate = await getJson("/lowstate");
+    const lowcmd = lowstate.lowcmd && typeof lowstate.lowcmd === "object" ? lowstate.lowcmd : {};
+    result.topics["rt/lowstate"] = {
+      source: transport,
+      available: true,
+      motor_count: Array.isArray(lowstate.motor_state) ? lowstate.motor_state.length : 0,
+      mode_machine: lowstate.mode_machine ?? null,
+      mode_pr: lowstate.mode_pr ?? null,
+      crc: lowstate.crc ?? null,
+      lowcmd_active: lowcmd.active === true,
+      lowcmd_stale: lowcmd.stale === true,
+    };
+  } catch (error) {
+    result.topics["rt/lowstate"] = { available: false, error: error.message };
+  }
+
+  result.ok = Boolean(result.ok && !warnings.some((warning) => warning.includes("requires")));
+  return result;
 }
 
 async function repeatStep(count) {
@@ -1472,6 +1558,12 @@ function respondError(id, code, message) {
 function toInt(value, fallback) {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeChoice(value, allowed, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const normalized = String(value).trim().toLowerCase().replaceAll("-", "_");
+  return allowed.includes(normalized) ? normalized : fallback;
 }
 
 function numericArray(value, length, name) {

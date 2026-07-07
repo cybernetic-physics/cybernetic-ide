@@ -164,8 +164,10 @@ Tasks:
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
-- Add diagnostics that show DDS domain, interface, topic freshness, and last
-  message timestamps.
+- Done: add first transport/session diagnostics that show selected transport,
+  sim/real mode, DDS domain, interface, topic freshness, and lowcmd timestamps.
+- Remaining: connect the diagnostics to a real SDK2/CycloneDDS sidecar instead
+  of reporting `dds` as planned but not implemented.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must
