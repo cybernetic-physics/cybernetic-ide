@@ -70,6 +70,7 @@ python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_lowstate_monitor.py --samples 3
 python3 examples/g1_joint_targets.py
+python3 examples/g1_scene_obstacle.py --activate
 python3 examples/g1_safety_stop.py
 python3 examples/g1_agent_debug_loop.py --behavior raise_hand
 ```
@@ -388,7 +389,7 @@ with TinyWebSocket.from_env() as ws:
 Use `SceneWorkspace` for safe MJCF edits:
 
 ```python
-from cybernetic_robotics.scene import SceneWorkspace
+from cybernetic_robotics import SceneWorkspace
 
 scene = SceneWorkspace.discover()
 host_path, container_path = scene.add_box(
@@ -404,6 +405,17 @@ print(container_path)
 
 Scene helpers write a copy under `.runtime/.../cybernetic_scenes/`. They do
 not overwrite the pinned upstream Unitree MJCF asset.
+
+The matching runnable example is:
+
+```sh
+python3 examples/g1_scene_obstacle.py --activate
+```
+
+It writes `.runtime/g1-control-demo/scene-obstacle-manifest.json` with the
+generated host path, the container path, the object parameters, and an optional
+viewer screenshot result. If the simulator is not running, scene generation
+still succeeds and the manifest records the snapshot error instead of hiding it.
 
 ## Environment
 

@@ -18,6 +18,7 @@ from .config import RobotEndpoints
 from .errors import CyberneticRoboticsError, ProtocolError, SimulatorUnavailable
 from .g1 import G1Robot, G1Status, connect
 from .official import OfficialG1Sim
+from .scene import SceneWorkspace
 from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
 from .unitree import AudioClient, LocoClient
@@ -33,6 +34,7 @@ __all__ = [
     "OfficialG1Sim",
     "ProtocolError",
     "RobotEndpoints",
+    "SceneWorkspace",
     "SimulatorClient",
     "SimulatorStatus",
     "SimulatorUnavailable",

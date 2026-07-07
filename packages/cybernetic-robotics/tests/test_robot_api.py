@@ -10,7 +10,16 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from cybernetic_robotics import G1Robot, OfficialG1Sim, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
+from cybernetic_robotics import (
+    G1Robot,
+    OfficialG1Sim,
+    ProtocolError,
+    RobotEndpoints,
+    SceneWorkspace,
+    SimulatorClient,
+    UnitreeSession,
+    UnitreeTransportConfig,
+)
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
@@ -706,6 +715,56 @@ class RobotApiTests(unittest.TestCase):
             self.assertEqual(result["lowcmd"]["source"], "joint_targets")
             self.assertEqual(after["by_name"]["right_shoulder_pitch_joint"]["q"], -1.2)
             self.assertEqual(after["by_name"]["right_elbow_joint"]["q"], 0.8)
+
+    def test_scene_workspace_adds_box_to_generated_scene_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            asset_root = root / ".runtime/unitree-g1-mujoco/unitree_mujoco"
+            model_path = asset_root / "unitree_robots/g1/scene_29dof.xml"
+            model_path.parent.mkdir(parents=True)
+            model_path.write_text(
+                "<mujoco>\n"
+                "  <worldbody>\n"
+                "    <body name=\"g1\"/>\n"
+                "  </worldbody>\n"
+                "</mujoco>\n",
+                encoding="utf-8",
+            )
+            compose_env = root / ".runtime/unitree-g1-mujoco/compose.env"
+            compose_env.parent.mkdir(parents=True, exist_ok=True)
+            compose_env.write_text(
+                "\n".join(
+                    [
+                        "UNITREE_G1_MUJOCO_IMAGE=cyber/unitree-g1-mujoco-protocol:0.1.0",
+                        f"UNITREE_G1_MUJOCO_ASSET_ROOT={asset_root}",
+                        "UNITREE_G1_MODEL_PATH=/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml",
+                        "UNITREE_G1_ROBOT_NAME=g1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            output, container_path = SceneWorkspace(root).add_box(
+                "agent_obstacle",
+                position=(0.8, 0.0, 0.08),
+                size=(0.12, 0.12, 0.08),
+                rgba=(0.9, 0.2, 0.1, 1.0),
+                activate=True,
+            )
+
+            self.assertEqual(
+                container_path,
+                "/opt/unitree_mujoco/cybernetic_scenes/g1_agent_obstacle.xml",
+            )
+            self.assertTrue(output.exists())
+            generated = output.read_text(encoding="utf-8")
+            self.assertIn('body name="agent_obstacle"', generated)
+            self.assertIn('geom name="agent_obstacle_geom" type="box"', generated)
+            self.assertIn(
+                "UNITREE_G1_MODEL_PATH=/opt/unitree_mujoco/cybernetic_scenes/g1_agent_obstacle.xml",
+                compose_env.read_text(encoding="utf-8"),
+            )
 
     def test_unitree_style_audio_client_records_simulator_intent(self):
         with FakeServer() as fake:

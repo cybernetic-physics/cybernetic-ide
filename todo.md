@@ -365,7 +365,8 @@ Tasks:
 - `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern.
 - Done: `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
 - Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.
-- `examples/g1_scene_obstacle.py`: add an object, move camera, snapshot.
+- Done: `examples/g1_scene_obstacle.py`: add an object to a copied MJCF scene,
+  optionally activate it, move camera, snapshot, and write a manifest.
 - Done: `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a
   debugging bundle an AI agent can use.
 - Done: `examples/g1_safety_stop.py`: show stop/pause/damp behavior clearly.
