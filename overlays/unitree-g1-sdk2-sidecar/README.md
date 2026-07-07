@@ -166,11 +166,27 @@ docker compose \
 
 The MCP lifecycle is `unitree_start_rpc_bridge`,
 `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
-`unitree_verify_rpc_bridge`, then `unitree_stop_rpc_bridge`. Python users can call
+`unitree_verify_rpc_bridge`, plus the per-action `unitree_command_rpc_bridge`,
+then `unitree_stop_rpc_bridge`. Python users can call
 `OfficialG1Sim.start_rpc_bridge()`, `rpc_bridge_status()`,
-`rpc_bridge_client()`, `verify_rpc_bridge()`, and `stop_rpc_bridge()`. The
+`rpc_bridge_client()`, `verify_rpc_bridge()`, `rpc_bridge_command()`, and
+`stop_rpc_bridge()`. The
 verifier is the best agent-facing sanity check because it summarizes `RPC_OK`,
 simulator readback, simulator forwarding, and bridge-state-only fallback counts.
+For one command, use:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=command_unitree_rpc_bridge \
+  -e CYBER_UNITREE_RPC_BRIDGE_SERVICE=sport \
+  -e CYBER_UNITREE_RPC_BRIDGE_METHOD=move \
+  -e 'CYBER_UNITREE_RPC_BRIDGE_PARAMS={"vx":0.05,"duration":0.5}' \
+  unitree-g1-sdk2-sidecar
+```
+
 This first managed bridge keeps
 `sport` and `agv` SDK2 servers alive and uses Cybernetic's simulator provider
 at `CYBER_SIMULATOR_GAME_CONTROL_URL` for safe read/write calls. Getter RPCs

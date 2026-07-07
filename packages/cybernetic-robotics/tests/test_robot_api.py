@@ -2001,6 +2001,94 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(result["summary"]["simulator_forward_count"], 1)
         self.assertEqual(result["summary"]["rpc_status_counts"]["RPC_OK"], 2)
 
+    def test_official_g1_sim_commands_managed_rpc_bridge(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "rpc_bridge_command": {
+                            "ok": True,
+                            "service": "sport",
+                            "method": "move",
+                            "normalized_request": {
+                                "service": "sport",
+                                "method": "move",
+                                "name": "sport.SetVelocity",
+                                "payload": {"velocity": [0.05, 0.0, 0.0], "duration": 0.25},
+                            },
+                            "calls": [
+                                {
+                                    "name": "sport.SetVelocity",
+                                    "ok": True,
+                                    "return": [
+                                        0,
+                                        json.dumps(
+                                            {
+                                                "velocity": [0.05, 0.0, 0.0],
+                                                "simulator_forward": {
+                                                    "ok": True,
+                                                    "provider": "cybernetic_game_control_http",
+                                                },
+                                            }
+                                        ),
+                                    ],
+                                    "rpc_status": {"name": "RPC_OK"},
+                                }
+                            ],
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "inspect unitree-g1-rpc-bridge" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"Running": True, "Status": "running", "ExitCode": 0}),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"action": "serve_unitree_rpc_bridge", "ok": True}),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            result = official.rpc_bridge_command(
+                service="sport",
+                method="move",
+                params={"vx": 0.05, "duration": 0.25},
+                timeout=1.5,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["summary"]["call_count"], 1)
+        self.assertEqual(result["summary"]["simulator_forward_count"], 1)
+        self.assertEqual(result["summary"]["rpc_status_counts"]["RPC_OK"], 1)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=command_unitree_rpc_bridge", command)
+        self.assertIn("CYBER_UNITREE_RPC_BRIDGE_SERVICE=sport", command)
+        self.assertIn("CYBER_UNITREE_RPC_BRIDGE_METHOD=move", command)
+        self.assertIn('"vx": 0.05', command)
+
 
 if __name__ == "__main__":
     unittest.main()

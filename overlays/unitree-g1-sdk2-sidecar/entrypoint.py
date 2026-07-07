@@ -1708,6 +1708,49 @@ def probe_unitree_rpc_bridge_client(domain: int, interface: str | None) -> dict:
     return report
 
 
+def command_unitree_rpc_bridge_client(domain: int, interface: str | None) -> dict:
+    """Call one Unitree-shaped RPC on an already-running managed bridge."""
+
+    service = os.environ.get("CYBER_UNITREE_RPC_BRIDGE_SERVICE", "sport").strip().lower()
+    method = os.environ.get("CYBER_UNITREE_RPC_BRIDGE_METHOD", "get_fsm_id").strip().lower()
+    params = _safe_json_loads(os.environ.get("CYBER_UNITREE_RPC_BRIDGE_PARAMS", "{}"))
+    timeout = float(os.environ.get("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT", "1.0"))
+    if not isinstance(params, dict):
+        params = {"data": params}
+    report = {
+        "action": "command_unitree_rpc_bridge_client",
+        "domain": domain,
+        "interface": interface or None,
+        "service": service,
+        "method": method,
+        "params": params,
+        "timeout_seconds": timeout,
+        "calls": [],
+    }
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+
+        ChannelFactoryInitialize(domain, interface)
+        report["normalized_request"] = _call_unitree_rpc_bridge_command(
+            report["calls"],
+            service,
+            method,
+            params,
+            timeout,
+        )
+    except Exception as exc:
+        report["error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    report["ok"] = bool(report["calls"] and all(call.get("ok") for call in report["calls"]))
+    if report["ok"]:
+        report["next_step"] = "Use this SDK-shaped bridge command from the Python facade or Agent-panel MCP tool for single robot actions."
+    else:
+        report["next_step"] = "Check service/method names, start the managed Unitree RPC bridge, and inspect rpc_status/error fields."
+    return report
+
+
 def _initial_rpc_bridge_state() -> dict:
     return {
         "sport": {
@@ -2148,6 +2191,158 @@ def _record_rpc_call(calls: list[dict], name: str, fn) -> None:
     calls.append(entry)
 
 
+def _call_unitree_rpc_bridge_command(
+    calls: list[dict],
+    service: str,
+    method: str,
+    params: dict,
+    timeout: float,
+) -> dict:
+    from unitree_sdk2py.g1.loco.g1_loco_api import (
+        LOCO_API_VERSION,
+        ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
+        ROBOT_API_ID_LOCO_GET_FSM_ID,
+        ROBOT_API_ID_LOCO_GET_FSM_MODE,
+        ROBOT_API_ID_LOCO_GET_STAND_HEIGHT,
+        ROBOT_API_ID_LOCO_GET_SWING_HEIGHT,
+        ROBOT_API_ID_LOCO_SET_ARM_TASK,
+        ROBOT_API_ID_LOCO_SET_BALANCE_MODE,
+        ROBOT_API_ID_LOCO_SET_FSM_ID,
+        ROBOT_API_ID_LOCO_SET_STAND_HEIGHT,
+        ROBOT_API_ID_LOCO_SET_SWING_HEIGHT,
+        ROBOT_API_ID_LOCO_SET_VELOCITY,
+    )
+    from unitree_sdk2py.rpc.client import Client
+
+    normalized_service = (service or "sport").strip().lower()
+    normalized_method = (method or "").strip().lower().replace("-", "_")
+
+    sport_methods = {
+        "get_fsm_id": ("sport.GetFsmId", ROBOT_API_ID_LOCO_GET_FSM_ID, lambda: {}),
+        "get_fsm_mode": ("sport.GetFsmMode", ROBOT_API_ID_LOCO_GET_FSM_MODE, lambda: {}),
+        "get_balance_mode": ("sport.GetBalanceMode", ROBOT_API_ID_LOCO_GET_BALANCE_MODE, lambda: {}),
+        "get_swing_height": ("sport.GetSwingHeight", ROBOT_API_ID_LOCO_GET_SWING_HEIGHT, lambda: {}),
+        "get_stand_height": ("sport.GetStandHeight", ROBOT_API_ID_LOCO_GET_STAND_HEIGHT, lambda: {}),
+        "set_fsm_id": (
+            "sport.SetFsmId",
+            ROBOT_API_ID_LOCO_SET_FSM_ID,
+            lambda: {"data": int(_first_param(params, "fsm_id", "data", default=500))},
+        ),
+        "damp": ("sport.Damp", ROBOT_API_ID_LOCO_SET_FSM_ID, lambda: {"data": 1}),
+        "start": ("sport.Start", ROBOT_API_ID_LOCO_SET_FSM_ID, lambda: {"data": 500}),
+        "zero_torque": ("sport.ZeroTorque", ROBOT_API_ID_LOCO_SET_FSM_ID, lambda: {"data": 0}),
+        "sit": ("sport.Sit", ROBOT_API_ID_LOCO_SET_FSM_ID, lambda: {"data": 3}),
+        "stand_up": ("sport.StandUp", ROBOT_API_ID_LOCO_SET_FSM_ID, lambda: {"data": 4}),
+        "set_balance_mode": (
+            "sport.SetBalanceMode",
+            ROBOT_API_ID_LOCO_SET_BALANCE_MODE,
+            lambda: {"data": int(_first_param(params, "balance_mode", "data", default=0))},
+        ),
+        "set_swing_height": (
+            "sport.SetSwingHeight",
+            ROBOT_API_ID_LOCO_SET_SWING_HEIGHT,
+            lambda: {"data": float(_first_param(params, "swing_height", "data", default=0.08))},
+        ),
+        "set_stand_height": (
+            "sport.SetStandHeight",
+            ROBOT_API_ID_LOCO_SET_STAND_HEIGHT,
+            lambda: {"data": float(_first_param(params, "stand_height", "data", default=0.72))},
+        ),
+        "set_velocity": (
+            "sport.SetVelocity",
+            ROBOT_API_ID_LOCO_SET_VELOCITY,
+            lambda: _velocity_payload(params),
+        ),
+        "move": (
+            "sport.SetVelocity",
+            ROBOT_API_ID_LOCO_SET_VELOCITY,
+            lambda: _velocity_payload(params),
+        ),
+        "stop_move": (
+            "sport.StopMove",
+            ROBOT_API_ID_LOCO_SET_VELOCITY,
+            lambda: {"velocity": [0.0, 0.0, 0.0], "duration": 0.0},
+        ),
+        "set_arm_task": (
+            "sport.SetArmTask",
+            ROBOT_API_ID_LOCO_SET_ARM_TASK,
+            lambda: {"data": int(_first_param(params, "task_id", "data", default=0))},
+        ),
+        "wave_hand": ("sport.WaveHand", ROBOT_API_ID_LOCO_SET_ARM_TASK, lambda: {"data": 0}),
+        "shake_hand": ("sport.ShakeHand", ROBOT_API_ID_LOCO_SET_ARM_TASK, lambda: {"data": 1}),
+    }
+    agv_methods = {
+        "move": (
+            "agv.Move",
+            1001,
+            lambda: {
+                "vx": float(_first_param(params, "vx", "x", default=0.0)),
+                "vy": float(_first_param(params, "vy", "y", default=0.0)),
+                "vyaw": float(_first_param(params, "vyaw", "omega", "yaw", default=0.0)),
+            },
+        ),
+        "height_adjust": (
+            "agv.HeightAdjust",
+            1002,
+            lambda: {"data": float(_first_param(params, "vz", "z", "data", default=0.0))},
+        ),
+    }
+
+    if normalized_service == "sport":
+        methods = sport_methods
+        api_version = LOCO_API_VERSION
+    elif normalized_service == "agv":
+        methods = agv_methods
+        api_version = "1.0.0.1"
+    else:
+        raise ValueError("unsupported Unitree RPC bridge service; expected sport or agv")
+    if normalized_method not in methods:
+        raise ValueError(
+            f"unsupported {normalized_service} bridge method {method!r}; "
+            f"known methods: {', '.join(sorted(methods))}"
+        )
+
+    name, api_id, make_payload = methods[normalized_method]
+    payload = make_payload()
+    client = Client(normalized_service, False)
+    client.SetTimeout(timeout)
+    client._SetApiVerson(api_version)
+    client._RegistApi(api_id, 0)
+    _record_rpc_call(calls, name, lambda: client._Call(api_id, json.dumps(payload)))
+    return {
+        "service": normalized_service,
+        "method": normalized_method,
+        "name": name,
+        "api_id": api_id,
+        "api_version": api_version,
+        "payload": payload,
+    }
+
+
+def _first_param(params: dict, *names: str, default=None):
+    for name in names:
+        if name in params and params[name] is not None:
+            return params[name]
+    return default
+
+
+def _velocity_payload(params: dict) -> dict:
+    if isinstance(params.get("velocity"), list):
+        velocity = [float(value) for value in params["velocity"][:3]]
+    else:
+        velocity = [
+            float(_first_param(params, "vx", "x", default=0.0)),
+            float(_first_param(params, "vy", "y", default=0.0)),
+            float(_first_param(params, "omega", "vyaw", "yaw", default=0.0)),
+        ]
+    while len(velocity) < 3:
+        velocity.append(0.0)
+    return {
+        "velocity": velocity[:3],
+        "duration": float(_first_param(params, "duration", "timeout", default=0.0)),
+    }
+
+
 def _channel_publication_matched_count(channel) -> int:
     try:
         writer = getattr(channel, "_Channel__writer")
@@ -2425,6 +2620,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_unitree_rpc_bridge_client":
         report["rpc_bridge_client"] = probe_unitree_rpc_bridge_client(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "command_unitree_rpc_bridge":
+        report["rpc_bridge_command"] = command_unitree_rpc_bridge_client(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "read_official_mujoco_lowstate":
         report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)

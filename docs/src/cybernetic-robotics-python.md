@@ -185,6 +185,26 @@ managed bridge: it can start the bridge if needed, call the official SDK
 clients, and return a compact summary with call counts, `RPC_OK` counts,
 simulator forward evidence, simulator readback evidence, and any
 `bridge_state_only` fallbacks.
+Use `official.rpc_bridge_command()` when an agent or script wants one explicit
+SDK-shaped action instead of the full verifier sequence:
+
+```python
+official = OfficialG1Sim.discover()
+print(official.rpc_bridge_command(
+    service="sport",
+    method="move",
+    params={"vx": 0.05, "vy": 0.0, "omega": 0.0, "duration": 0.5},
+    start_if_needed=True,
+)["summary"])
+print(official.rpc_bridge_command(service="sport", method="get_fsm_id")["summary"])
+print(official.rpc_bridge_command(service="agv", method="height_adjust", params={"vz": 0.0})["summary"])
+```
+
+The Agent-panel MCP mirror is `unitree_command_rpc_bridge`; it accepts the same
+`service`, `method`, `params`, `timeout_seconds`, `start_if_needed`, and
+`stop_after` fields. Supported aliases include `get_fsm_id`, `move`,
+`stop_move`, `damp`, `stand_up`, `set_stand_height`, `set_swing_height`,
+`set_balance_mode`, `wave_hand`, `shake_hand`, and `agv.height_adjust`.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion

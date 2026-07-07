@@ -647,8 +647,9 @@ The current repo has the first narrow version of that API boundary:
   and `agv.HeightAdjust` all returning `RPC_OK`.
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
   `unitree_probe_rpc_bridge_client` / `unitree_verify_rpc_bridge` /
-  `unitree_stop_rpc_bridge` turn that smoke into a named managed bridge
-  container (`unitree-g1-rpc-bridge`). The bridge is now the first live
+  `unitree_command_rpc_bridge` / `unitree_stop_rpc_bridge` turn that smoke into
+  a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is now
+  the first live
   SDK-to-simulator adapter: it keeps `sport`/`agv` state and routes safe
   read/write RPCs to Cybernetic's simulator HTTP provider when
   `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
@@ -674,6 +675,12 @@ The current repo has the first narrow version of that API boundary:
   bridge if needed, run the client probe, and summarize total calls, `RPC_OK`
   counts, simulator forward evidence, simulator readback evidence, and
   `bridge_state_only` fallbacks.
+  `unitree_command_rpc_bridge` is the per-action path: it starts the bridge
+  when requested, sends one raw official SDK2 RPC such as `sport.move`,
+  `sport.get_fsm_id`, `sport.wave_hand`, or `agv.height_adjust`, then returns
+  the raw call body plus the same evidence summary. This is the preferred agent
+  tool when the user asks for one small locomotion or high-level intent command
+  rather than a whole diagnostic sequence.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, with HeightAdjust

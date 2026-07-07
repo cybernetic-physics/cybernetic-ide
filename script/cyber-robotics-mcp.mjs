@@ -306,6 +306,48 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
+  tool(
+    "unitree_command_rpc_bridge",
+    "Send one SDK-shaped Unitree sport/agv RPC through the managed bridge and summarize simulator forwarding/readback evidence.",
+    {
+      service: {
+        type: "string",
+        enum: ["sport", "agv"],
+        default: "sport",
+        description: "Unitree RPC service to call.",
+      },
+      method: {
+        type: "string",
+        default: "get_fsm_id",
+        description:
+          "Method alias such as get_fsm_id, move, stop_move, damp, wave_hand, shake_hand, set_stand_height, or height_adjust.",
+      },
+      params: {
+        type: "object",
+        default: {},
+        description: "JSON parameters for the selected method, for example {\"vx\":0.05,\"omega\":0,\"duration\":0.5}.",
+      },
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.2,
+        maximum: 10,
+        default: 1,
+        description: "Per-RPC timeout used by the bridge client.",
+      },
+      start_if_needed: {
+        type: "boolean",
+        default: true,
+        description: "Start the managed bridge if it is not already running and ready.",
+      },
+      stop_after: {
+        type: "boolean",
+        default: false,
+        description: "Stop the managed bridge after the command.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: false, openWorldHint: true },
+  ),
   tool("unitree_stop_rpc_bridge", "Stop and remove the managed Unitree sport/agv RPC bridge container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1213,6 +1255,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeRpcBridgeClient(args));
     case "unitree_verify_rpc_bridge":
       return textResult(sdk2VerifyRpcBridge(args));
+    case "unitree_command_rpc_bridge":
+      return textResult(sdk2CommandRpcBridge(args));
     case "unitree_stop_rpc_bridge":
       return textResult(sdk2StopRpcBridge());
     case "unitree_stop_official_mujoco_session":
@@ -2549,6 +2593,12 @@ function roboticsToolReference() {
         "Starts if needed, calls the managed bridge, and summarizes simulator readback/forwarding evidence.",
         "Official SDK2 sidecar prepared; simulator HTTP endpoint recommended for strong evidence.",
       ),
+      toolReference(
+        "unitree_command_rpc_bridge",
+        "robot-motion",
+        "Sends one SDK-shaped sport/agv RPC through the managed bridge.",
+        "Managed Unitree RPC bridge running or start_if_needed enabled.",
+      ),
       toolReference("unitree_stop_rpc_bridge", "service-stop", "Stops and removes the named sport/agv RPC bridge container.", "Bridge container exists."),
       toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
@@ -3257,6 +3307,89 @@ function sdk2VerifyRpcBridge(options = {}) {
     status_before: statusBefore,
     status,
     client,
+    summary,
+  };
+  if (stopAfter) {
+    stopped = sdk2StopRpcBridge();
+    result.stopped = stopped;
+  }
+  return result;
+}
+
+function sdk2CommandRpcBridge(options = {}) {
+  const startIfNeeded = options.start_if_needed !== false;
+  const stopAfter = options.stop_after === true;
+  let started = null;
+  let stopped = null;
+  const statusBefore = sdk2RpcBridgeStatus();
+  if ((!statusBefore.running || !statusBefore.ready) && startIfNeeded) {
+    started = sdk2StartRpcBridge();
+  }
+  const status = sdk2RpcBridgeStatus();
+  if (!status.running || !status.ready) {
+    const result = {
+      ok: false,
+      source: "managed_unitree_sdk2_rpc_bridge",
+      started,
+      status_before: statusBefore,
+      status,
+      error: "managed Unitree RPC bridge is not running and ready",
+      next_step: "Run unitree_start_rpc_bridge or inspect unitree_rpc_bridge_status before sending a command.",
+    };
+    if (stopAfter && started) {
+      stopped = sdk2StopRpcBridge();
+      result.stopped = stopped;
+    }
+    return result;
+  }
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const service = typeof options.service === "string" ? options.service : "sport";
+  const method = typeof options.method === "string" ? options.method : "get_fsm_id";
+  const params = options.params && typeof options.params === "object" && !Array.isArray(options.params) ? options.params : {};
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.2, 10, 1);
+  const env = [
+    "CYBER_UNITREE_ACTION=command_unitree_rpc_bridge",
+    `CYBER_UNITREE_RPC_BRIDGE_SERVICE=${service}`,
+    `CYBER_UNITREE_RPC_BRIDGE_METHOD=${method}`,
+    `CYBER_UNITREE_RPC_BRIDGE_PARAMS=${JSON.stringify(params)}`,
+    `CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm"];
+  for (const entry of env) {
+    args.push("-e", entry);
+  }
+  args.push("unitree-g1-sdk2-sidecar");
+  const runResult = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = runResult.stdout.indexOf("{");
+  const jsonEnd = runResult.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(runResult.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  const commandReport = report?.rpc_bridge_command ?? null;
+  const calls = commandReport?.calls ?? [];
+  const summary = summarizeRpcBridgeCalls(calls);
+  const result = {
+    ok: commandReport?.ok === true && summary.all_calls_ok,
+    source: "managed_unitree_sdk2_rpc_bridge",
+    started,
+    status_before: statusBefore,
+    status,
+    service,
+    method,
+    params,
+    command: `docker ${args.join(" ")}`,
+    stdout: runResult.stdout,
+    stderr: runResult.stderr,
+    report,
+    command_report: commandReport,
     summary,
   };
   if (stopAfter) {

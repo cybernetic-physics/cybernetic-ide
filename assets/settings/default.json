@@ -1181,6 +1181,7 @@
               "unitree_rpc_bridge_status": true,
               "unitree_probe_rpc_bridge_client": true,
               "unitree_verify_rpc_bridge": true,
+              "unitree_command_rpc_bridge": true,
               "unitree_stop_rpc_bridge": true,
               "unitree_stop_official_mujoco_session": true,
               "unitree_probe_official_mujoco_dds": true,

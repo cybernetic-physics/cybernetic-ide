@@ -376,14 +376,16 @@ ad hoc scripts first. The default tool surface includes:
   temporary `sport` and `agv` Unitree RPC servers and verifies SDK clients can
   call them before we promote the bridge into a long-running simulator service;
 - managed SDK2 bridge lifecycle: `unitree_start_rpc_bridge`,
-  `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
-  `unitree_verify_rpc_bridge`, plus `unitree_stop_rpc_bridge`, which keep the
-  first `sport`/`agv` RPC service alive as a named container for external SDK
-  clients, read simulator-backed sport state, forward supported setter/shortcut
-  calls like `SetVelocity`, `Damp`, `StopMove`, `WaveHand`, `ShakeHand`, and
-  AGV move commands to the simulator HTTP provider when it is reachable, record
-  AGV height intent as bridge-state-only until a height actuator exists, and
-  summarize that evidence for agents;
+  `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`,
+  `unitree_verify_rpc_bridge`, and `unitree_command_rpc_bridge`, plus
+  `unitree_stop_rpc_bridge`, which keep the first `sport`/`agv` RPC service
+  alive as a named container for external SDK clients, read simulator-backed
+  sport state, forward supported setter/shortcut calls like `SetVelocity`,
+  `Damp`, `StopMove`, `WaveHand`, `ShakeHand`, and AGV move commands to the
+  simulator HTTP provider when it is reachable, record AGV height intent as
+  bridge-state-only until a height actuator exists, summarize that evidence for
+  agents, and let agents send one explicit SDK-shaped command such as
+  `service=sport method=move params={"vx":0.05,"duration":0.5}`;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;

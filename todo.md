@@ -344,6 +344,18 @@ Tasks:
   start the managed bridge if needed, run official SDK clients, and summarize
   call count, `RPC_OK` count, simulator forwarding evidence, simulator readback
   evidence, and bridge-state-only fallbacks.
+- Done: add the per-action SDK-shaped bridge command path:
+  `OfficialG1Sim.rpc_bridge_command()` and MCP `unitree_command_rpc_bridge`.
+  Agents can now send one explicit `sport` or `agv` command through the managed
+  `unitree-g1-rpc-bridge` instead of running the full verifier sequence. The
+  command accepts method aliases such as `get_fsm_id`, `move`, `stop_move`,
+  `damp`, `stand_up`, `wave_hand`, `shake_hand`, `set_stand_height`,
+  `set_swing_height`, `set_balance_mode`, and `height_adjust`, then returns the
+  raw official SDK2 RPC body plus the same simulator-forward/readback summary.
+  This matters because it is the first general control primitive an Agent-panel
+  assistant can use to act on the G1 through a Unitree-shaped service boundary
+  while still exposing whether MuJoCo actually changed or the bridge only
+  recorded intent.
 - Current managed-bridge evidence: live validation started
   `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,

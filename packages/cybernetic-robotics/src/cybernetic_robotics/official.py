@@ -293,6 +293,77 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def rpc_bridge_command(
+        self,
+        *,
+        service: str = "sport",
+        method: str = "get_fsm_id",
+        params: dict[str, Any] | None = None,
+        timeout: float = 1.0,
+        start_if_needed: bool = False,
+        stop_after: bool = False,
+    ) -> dict[str, Any]:
+        """Call one SDK-shaped sport/agv RPC through the managed bridge."""
+
+        started = None
+        stopped = None
+        status_before = self.rpc_bridge_status()
+        ready_before = bool(status_before.get("running") and status_before.get("ready"))
+        if not ready_before and start_if_needed:
+            started = self.start_rpc_bridge(wait=True)
+        status_for_command = self.rpc_bridge_status()
+        if not status_for_command.get("running") or not status_for_command.get("ready"):
+            result = {
+                "ok": False,
+                "source": "managed_unitree_sdk2_rpc_bridge",
+                "started": started,
+                "status_before": status_before,
+                "status": status_for_command,
+                "service": service,
+                "method": method,
+                "params": params or {},
+                "error": "managed Unitree RPC bridge is not running and ready",
+                "next_step": "Call start_rpc_bridge() or pass start_if_needed=True before sending a bridge command.",
+            }
+            if stop_after and started is not None:
+                stopped = self.stop_rpc_bridge()
+                result["stopped"] = stopped
+            return result
+
+        env = {
+            "CYBER_UNITREE_ACTION": "command_unitree_rpc_bridge",
+            "CYBER_UNITREE_RPC_BRIDGE_SERVICE": service,
+            "CYBER_UNITREE_RPC_BRIDGE_METHOD": method,
+            "CYBER_UNITREE_RPC_BRIDGE_PARAMS": json.dumps(params or {}),
+            "CYBER_UNITREE_RPC_BRIDGE_TIMEOUT": str(_clamp_float(timeout, 0.2, 10.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        command_report = report.get("rpc_bridge_command") if isinstance(report, dict) else None
+        calls = command_report.get("calls", []) if isinstance(command_report, dict) else []
+        summary = _summarize_rpc_bridge_calls(calls)
+        result = {
+            "ok": bool(isinstance(command_report, dict) and command_report.get("ok") and summary["all_calls_ok"]),
+            "source": "managed_unitree_sdk2_rpc_bridge",
+            "started": started,
+            "status_before": status_before,
+            "status": status_for_command,
+            "service": service,
+            "method": method,
+            "params": params or {},
+            "calls": calls,
+            "summary": summary,
+            "command_report": command_report,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+        if stop_after:
+            stopped = self.stop_rpc_bridge()
+            result["stopped"] = stopped
+        return result
+
     def verify_rpc_bridge(
         self,
         *,
@@ -674,6 +745,25 @@ class OfficialG1ManagedSession:
 
     def rpc_bridge_client(self, *, timeout: float = 1.0) -> dict[str, Any]:
         return self.sim.rpc_bridge_client(timeout=timeout)
+
+    def rpc_bridge_command(
+        self,
+        *,
+        service: str = "sport",
+        method: str = "get_fsm_id",
+        params: dict[str, Any] | None = None,
+        timeout: float = 1.0,
+        start_if_needed: bool = False,
+        stop_after: bool = False,
+    ) -> dict[str, Any]:
+        return self.sim.rpc_bridge_command(
+            service=service,
+            method=method,
+            params=params,
+            timeout=timeout,
+            start_if_needed=start_if_needed,
+            stop_after=stop_after,
+        )
 
     def verify_rpc_bridge(
         self,

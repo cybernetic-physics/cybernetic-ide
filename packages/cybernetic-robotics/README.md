@@ -135,6 +135,11 @@ with official.session() as sim:
     print(sim.rpc_bridge_smoke()["services_started"])
     print(sim.start_rpc_bridge()["status"]["ready"])
     print(sim.verify_rpc_bridge()["summary"])
+    print(sim.rpc_bridge_command(
+        service="sport",
+        method="move",
+        params={"vx": 0.05, "duration": 0.5},
+    )["summary"])
     sim.stop_rpc_bridge()
     print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
@@ -158,6 +163,10 @@ forward into the local simulator HTTP provider when reachable. Use
 `verify_rpc_bridge()` when an agent or user needs the compact evidence summary:
 call count, `RPC_OK` count, simulator readbacks, simulator forwards, and
 bridge-state-only fallbacks.
+Use `rpc_bridge_command()` for a single SDK-shaped action through the same
+managed bridge. It supports `sport` and `agv` methods such as `get_fsm_id`,
+`move`, `stop_move`, `damp`, `wave_hand`, `shake_hand`, `set_stand_height`, and
+`height_adjust`, and returns the raw RPC body plus the same evidence summary.
 
 `cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
 Python examples with the local `unitree_sdk2py` shim. It reports import, class,
