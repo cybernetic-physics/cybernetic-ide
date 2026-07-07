@@ -26,6 +26,12 @@ def main() -> None:
     parser.add_argument("--policy", type=Path, required=True, help="exported policy npz")
     parser.add_argument("--traj", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--settle", type=float, default=1.0,
+                        help="Settle seconds before the first pose (must match the trajectory).")
+    parser.add_argument("--glide", type=float, default=1.5,
+                        help="Glide seconds per pose (must match the trajectory).")
+    parser.add_argument("--hold", type=float, default=3.0,
+                        help="Hold seconds per pose (must match the trajectory).")
     args = parser.parse_args()
 
     import mujoco
@@ -36,6 +42,7 @@ def main() -> None:
     from loco_mujoco.trajectory import Trajectory
 
     from .cyber_env import make_cyber_env
+    from .yoga_traj import FULL_FLOW
 
     policy = dict(np.load(args.policy, allow_pickle=True))
     trajectory = Trajectory.load(str(args.traj))
@@ -97,6 +104,11 @@ def main() -> None:
         "site_quat": site_quat,
         "act_joint_names": np.array(act_joint_names),
         "frequency": np.asarray(trajectory.info.frequency),
+        # flow schedule so the sim can label the current pose without
+        # hardcoding the trajectory's timing
+        "flow_poses": np.array(FULL_FLOW),
+        "flow_settle_seconds": np.asarray(args.settle),
+        "flow_segment_seconds": np.asarray(args.glide + args.hold),
     }
     for key in ("obs_mean", "obs_var", "n_layers", "w0", "b0", "w1", "b1", "w2", "b2",
                 "act_mean", "act_delta", "actuator_names", "obs_joint_names", "control_dt"):
