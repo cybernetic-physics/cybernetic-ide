@@ -647,6 +647,29 @@ const tools = [
     ["command"],
     { readOnlyHint: false },
   ),
+  tool(
+    "g1_motion_switcher",
+    "Execute a Unitree MotionSwitcherClient-shaped simulator command such as CheckMode, SelectMode, or ReleaseMode.",
+    {
+      command: {
+        type: "string",
+        enum: ["check_mode", "select_mode", "release_mode", "set_silent", "get_silent"],
+        default: "check_mode",
+      },
+      name: {
+        type: "string",
+        default: "ai",
+        description: "Motion mode name or alias for select_mode.",
+      },
+      silent: {
+        type: "boolean",
+        default: false,
+        description: "Silent flag for set_silent.",
+      },
+    },
+    ["command"],
+    { readOnlyHint: false },
+  ),
   tool("g1_lowstate", "Read simulator-backed Unitree rt/lowstate motor and IMU telemetry.", {}, [], {
     readOnlyHint: true,
   }),
@@ -973,6 +996,8 @@ async function callTool(name, args) {
       return textResult(await executeG1Action(args.action));
     case "g1_loco_command":
       return textResult(await executeG1LocoCommand(args));
+    case "g1_motion_switcher":
+      return textResult(await executeG1MotionSwitcher(args));
     case "g1_lowstate":
       return textResult(await getJson("/lowstate"));
     case "g1_joint_state":
@@ -1563,6 +1588,26 @@ async function executeG1LocoCommand(args) {
     throw new Error(`Unsupported G1 loco command: ${commandName}`);
   }
   return command({ command: "loco", ...payload });
+}
+
+async function executeG1MotionSwitcher(args) {
+  const commandName = args.command || "check_mode";
+  if (commandName === "check_mode") {
+    return command({ command: "motion_switcher", action: "check_mode" });
+  }
+  if (commandName === "select_mode") {
+    return command({ command: "motion_switcher", action: "select_mode", name: String(args.name || "ai") });
+  }
+  if (commandName === "release_mode") {
+    return command({ command: "motion_switcher", action: "release_mode" });
+  }
+  if (commandName === "set_silent") {
+    return command({ command: "motion_switcher", action: "set_silent", silent: args.silent === true });
+  }
+  if (commandName === "get_silent") {
+    return command({ command: "motion_switcher", action: "get_silent" });
+  }
+  throw new Error(`Unsupported G1 motion switcher command: ${commandName}`);
 }
 
 async function executeG1Lowcmd(args) {

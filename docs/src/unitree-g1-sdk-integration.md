@@ -508,7 +508,10 @@ The current repo has the first narrow version of that API boundary:
   SDK2/DDS provider.
 - `examples/g1_lowcmd_sdk.py` uses Unitree-shaped `ChannelPublisher`,
   `ChannelSubscriber`, `LowCmd_`, `LowState_`, `CRC`, and
-  `MotionSwitcherClient` imports.
+  `MotionSwitcherClient` imports. The motion switcher shim now supports
+  `CheckMode`, `SelectMode`, `ReleaseMode`, `SetSilent`, and `GetSilent`;
+  `ReleaseMode` clears the selected mode and puts the simulator into damp so
+  official-style low-level setup scripts have a meaningful local equivalent.
 - The channel shim also supports read-only `rt/sportmodestate` and
   `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
   synthesized from local simulator status and lowstate.
@@ -517,7 +520,7 @@ The current repo has the first narrow version of that API boundary:
   lowcmd slots.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the current transport boundary:
-  `local_http` versus planned `dds`, sim/real mode, DDS domain/interface,
+  `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
   simulator reachability, and topic freshness. With
   `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both Python diagnostics and
   the MCP tool now call the official sidecar status probe and report SDK2

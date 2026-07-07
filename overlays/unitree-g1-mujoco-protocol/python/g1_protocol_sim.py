@@ -355,6 +355,12 @@ class G1MujocoState:
             "velocity_until": None,
             "arm_task_id": None,
         }
+        self.motion_switcher_state = {
+            "name": "",
+            "selected_at": None,
+            "released_at": None,
+            "silent": False,
+        }
         self.lowcmd_state = {
             "topic": None,
             "received_at": None,
@@ -1137,6 +1143,39 @@ class G1MujocoState:
                 return response
             return {"ok": False, "error": f"unsupported loco action: {action}"}
 
+    def handle_motion_switcher_command(self, payload):
+        action = payload.get("action", "check_mode")
+        with self.lock:
+            if action in ("state", "check_mode"):
+                return {"ok": True, "mode": dict(self.motion_switcher_state)}
+            if action == "select_mode":
+                name = str(payload.get("name", payload.get("nameOrAlias", ""))).strip()
+                if not name:
+                    return {"ok": False, "error": "motion mode name must not be empty"}
+                self.motion_switcher_state["name"] = name
+                self.motion_switcher_state["selected_at"] = time.time()
+                self.motion_switcher_state["released_at"] = None
+                return {"ok": True, "mode": dict(self.motion_switcher_state)}
+            if action == "release_mode":
+                self.motion_switcher_state["name"] = ""
+                self.motion_switcher_state["released_at"] = time.time()
+                self.loco_state["fsm_id"] = 1
+                self.loco_state["fsm_mode"] = "damp"
+                self.loco_state["velocity"] = [0.0, 0.0, 0.0]
+                self.loco_state["velocity_until"] = None
+                self.control_mode = None
+                self.lowcmd_state["received_at"] = None
+                self.refresh_lowcmd_watchdog_locked()
+                self.paused = True
+                self.active_pose = "damp"
+                return {"ok": True, "mode": dict(self.motion_switcher_state), "loco": dict(self.loco_state)}
+            if action == "set_silent":
+                self.motion_switcher_state["silent"] = bool(payload.get("silent", True))
+                return {"ok": True, "mode": dict(self.motion_switcher_state)}
+            if action == "get_silent":
+                return {"ok": True, "silent": bool(self.motion_switcher_state["silent"])}
+            return {"ok": False, "error": f"unsupported motion_switcher action: {action}"}
+
     def set_hold_pose(self, pose_name, teleport=True):
         """Drive the motors to hold a pose while physics runs.
 
@@ -1349,6 +1388,7 @@ class G1MujocoState:
                 },
                 "pose": self.active_pose,
                 "loco": dict(self.loco_state),
+                "motion_switcher": dict(self.motion_switcher_state),
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
                 "all_robot_names": [self.robot_name],
@@ -1623,6 +1663,8 @@ class G1MujocoState:
             return {"ok": False, "error": f"unsupported yoga_policy action: {action}"}
         if command == "loco":
             return self.handle_loco_command(payload)
+        if command == "motion_switcher":
+            return self.handle_motion_switcher_command(payload)
         if command == "lowcmd":
             return self.handle_lowcmd_command(payload)
         if command == "joint_targets":

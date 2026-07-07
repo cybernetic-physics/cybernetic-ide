@@ -154,6 +154,22 @@ loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
 ```
 
+Low-level examples that follow Unitree's official pattern can also use the
+motion switcher before publishing `rt/lowcmd`:
+
+```python
+from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
+
+switcher = MotionSwitcherClient()
+switcher.Init()
+print(switcher.CheckMode())
+switcher.ReleaseMode()
+```
+
+In simulator mode this state is exposed through the local GameControl bridge.
+`ReleaseMode()` clears the selected mode and moves the simulator into damp,
+which mirrors the setup step in Unitree's low-level examples.
+
 G1 audio examples can use Unitree's `AudioClient` import shape. In the local
 MuJoCo simulator this records intent only; real speakers, microphone, and LEDs
 are still a future SDK2/DDS backend concern:

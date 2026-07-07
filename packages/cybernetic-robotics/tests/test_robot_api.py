@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from cybernetic_robotics import G1Robot, OfficialG1Sim, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
+from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
@@ -30,6 +31,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "velocity": [0.0, 0.0, 0.0],
         "balance_mode": 0,
         "stand_height": None,
+    }
+    motion_switcher = {
+        "name": "",
+        "silent": False,
     }
     audio = {
         "volume": 50,
@@ -182,6 +187,19 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                 elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
                     type(self).pose = "raise_right_hand"
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
+            elif command == "motion_switcher":
+                action = payload.get("action", "check_mode")
+                if action == "select_mode":
+                    type(self).motion_switcher["name"] = payload["name"]
+                elif action == "release_mode":
+                    type(self).motion_switcher["name"] = ""
+                    type(self).loco["fsm_id"] = 1
+                    type(self).loco["fsm_mode"] = "damp"
+                elif action == "set_silent":
+                    type(self).motion_switcher["silent"] = bool(payload.get("silent"))
+                elif action == "get_silent":
+                    return self._json({"ok": True, "silent": type(self).motion_switcher["silent"]})
+                return self._json({"ok": True, "command": command, "action": action, "mode": type(self).motion_switcher})
             elif command == "lowcmd":
                 if not isinstance(payload.get("motor_cmd"), list):
                     return self._json({"ok": False, "error": "motor_cmd must be a list"})
@@ -275,6 +293,10 @@ class FakeServer:
             "velocity": [0.0, 0.0, 0.0],
             "balance_mode": 0,
             "stand_height": None,
+        }
+        FakeG1Handler.motion_switcher = {
+            "name": "",
+            "silent": False,
         }
         FakeG1Handler.lowcmd_count = 0
         FakeG1Handler.last_lowcmd = {}
@@ -433,6 +455,39 @@ class RobotApiTests(unittest.TestCase):
                 self.assertAlmostEqual(stand_height, 0.18)
                 self.assertEqual(FakeG1Handler.loco["velocity"], [0.25, 0.0, 0.1])
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_motion_switcher_client_uses_simulator_state(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                switcher = MotionSwitcherClient()
+                switcher.SetTimeout(2.0)
+                switcher.Init()
+
+                select_code, _ = switcher.SelectMode("ai")
+                check_code, mode = switcher.CheckMode()
+                silent_code, _ = switcher.SetSilent(True)
+                get_silent_code, silent = switcher.GetSilent()
+                release_code, _ = switcher.ReleaseMode()
+                final_code, final_mode = switcher.CheckMode()
+
+                self.assertEqual(select_code, 0)
+                self.assertEqual(check_code, 0)
+                self.assertEqual(mode, {"name": "ai"})
+                self.assertEqual(silent_code, 0)
+                self.assertEqual(get_silent_code, 0)
+                self.assertTrue(silent)
+                self.assertEqual(release_code, 0)
+                self.assertEqual(final_code, 0)
+                self.assertEqual(final_mode, {"name": ""})
+                self.assertEqual(switcher.last_response["mode"]["name"], "")
+                self.assertEqual(FakeG1Handler.loco["fsm_mode"], "damp")
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

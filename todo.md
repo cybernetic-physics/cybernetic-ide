@@ -303,6 +303,9 @@ Tasks:
   agent runs a behavior or scene edit.
 - Done: add camera bookmark tools so agents can restore the exact same camera
   before capturing before/after evidence.
+- Done: add `g1_motion_switcher` and a simulator-backed
+  `MotionSwitcherClient` state path for official-style `CheckMode`,
+  `SelectMode`, `ReleaseMode`, `SetSilent`, and `GetSilent` workflows.
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.

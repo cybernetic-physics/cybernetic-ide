@@ -1206,6 +1206,7 @@
               "g1_list_actions": true,
               "g1_execute_action": true,
               "g1_loco_command": true,
+              "g1_motion_switcher": true,
               "g1_lowstate": true,
               "g1_joint_state": true,
               "g1_apply_joint_targets": true,
