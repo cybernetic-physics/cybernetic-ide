@@ -388,11 +388,15 @@ Tasks:
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
   bridge cleanly.
+- Done: map simulator `sport.SetTaskId` beyond wave/shake. The local MuJoCo
+  protocol server now recognizes official G1 arm action IDs from
+  `G1ArmActionClient.action_map` (`high five`, `hug`, `heart`, `face wave`,
+  `right hand up`, release, and the other listed gestures), and unknown task
+  IDs are recorded as state-only intent instead of silently moving to neutral.
 - Remaining: expand the bridge beyond this first safe locomotion/arm-task
-  subset. Prioritize `SetArmTask` IDs beyond wave/shake, lease-aware service
-  behavior if official examples depend on it, and finally route the same API
-  surface to the official Unitree MuJoCo DDS actuator path rather than only the
-  local HTTP compatibility provider.
+  subset. Prioritize lease-aware service behavior if official examples depend
+  on it, and finally route the same API surface to the official Unitree MuJoCo
+  DDS actuator path rather than only the local HTTP compatibility provider.
 - Remaining: connect generic lowcmd streaming to a long-lived real
   SDK2/CycloneDDS sidecar session instead of only local HTTP compatibility. The
   arm-action path crosses the official managed session boundary, and high-level

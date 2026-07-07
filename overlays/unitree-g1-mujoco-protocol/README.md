@@ -46,6 +46,11 @@ Simulator commands:
 - WebSocket `{ "type": "command", "command": "pose", "pose": "raise_right_hand" }`
   applies a deterministic G1 arm pose directly in MuJoCo. This is an interim
   simulator command, not the official SDK2/DDS arm-control path.
+- `loco` commands with `action=set_arm_task` accept Unitree wave/shake task IDs
+  plus the official G1 `G1ArmActionClient.action_map` IDs and map recognized
+  values onto named poses such as `high_five`, `hug`, `heart`, and
+  `raise_right_hand`. Unknown task IDs are recorded in locomotion state without
+  applying an unexpected pose.
 - `lowcmd` commands record `received_at`, `age_seconds`, `expires_at`,
   `active`, `stale`, and `watchdog_seconds` metadata. The watchdog timeout is
   controlled by `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS` and defaults to `2.0`.

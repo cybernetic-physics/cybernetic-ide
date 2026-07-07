@@ -178,8 +178,12 @@ currently forwarded include `sport.SetFsmId`, `sport.SetBalanceMode`,
 accepted for SDK compatibility but reported as `bridge_state_only` until the
 local simulator has a modeled height-column actuator. That covers common
 `LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and
-`ShakeHand`, continuous move mode (`SwitchMoveMode`), speed/control ownership
-flags (`SetSpeedMode`, `SwitchToUserCtrl`, `SwitchToInternalCtrl`), plus normal
+`ShakeHand`; `SetTaskId` also accepts the official G1 arm action IDs from
+`G1ArmActionClient.action_map` and maps recognized IDs such as `high five`,
+`hug`, `heart`, `face wave`, and `right hand up` onto simulator poses.
+Unknown task IDs are recorded without applying a surprise pose. Continuous move
+mode (`SwitchMoveMode`), speed/control ownership flags (`SetSpeedMode`,
+`SwitchToUserCtrl`, `SwitchToInternalCtrl`), plus normal
 `G1ArmActionClient.ExecuteAction(...)`; unreachable or unsupported simulator
 calls are reported as `bridge_state_only` in the RPC JSON response instead of
 being hidden.
@@ -209,8 +213,9 @@ The Agent-panel MCP mirror is `unitree_command_rpc_bridge`; it accepts the same
 `stop_after` fields. Supported aliases include `get_fsm_id`, `move`,
 `stop_move`, `damp`, `stand_up`, `set_stand_height`, `set_swing_height`,
 `set_balance_mode`, `get_phase`, `switch_move_mode`, `set_speed_mode`,
-`switch_to_user_ctrl`, `switch_to_internal_ctrl`, `wave_hand`, `shake_hand`,
-`agv.height_adjust`, `arm.execute_action`, and `arm.get_action_list`.
+`switch_to_user_ctrl`, `switch_to_internal_ctrl`, `set_arm_task`, `wave_hand`,
+`shake_hand`, `agv.height_adjust`, `arm.execute_action`, and
+`arm.get_action_list`.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion

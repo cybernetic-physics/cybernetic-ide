@@ -201,10 +201,14 @@ forward:
 `sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`,
 `arm.ExecuteAction`, `agv.Move`, and `agv.HeightAdjust`. `HeightAdjust` is
 accepted for SDK compatibility but is reported as `bridge_state_only` until the
-local simulator has a modeled height-column actuator. This also covers common
-`LocoClient` shortcuts including `Damp`, `StopMove`, `WaveHand`, and
-`ShakeHand`, plus Cybernetic's simulator bridge extensions for `GetPhase`,
-`SwitchMoveMode`, `SetSpeedMode`, `SwitchToUserCtrl`, and
+local simulator has a modeled height-column actuator. `sport.SetTaskId` keeps
+Unitree's wave/shake task IDs and also accepts official G1 arm action IDs from
+`G1ArmActionClient.action_map` as a Cybernetic simulator convenience; recognized
+IDs are forwarded with a pose hint, and unknown IDs are recorded as state-only
+intent. This also covers common `LocoClient` shortcuts including `Damp`,
+`StopMove`, `WaveHand`, and `ShakeHand`, plus Cybernetic's simulator bridge
+extensions for `GetPhase`, `SwitchMoveMode`, `SetSpeedMode`,
+`SwitchToUserCtrl`, and
 `SwitchToInternalCtrl`. If the simulator
 HTTP bridge is unavailable or the operation is unsupported, the RPC still
 returns `RPC_OK` for SDK compatibility, but the JSON response marks

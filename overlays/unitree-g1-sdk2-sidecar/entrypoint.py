@@ -2019,9 +2019,13 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
         task_id = int(payload.get("data", 0))
         sport_state["arm_task_id"] = task_id
         action = _sport_arm_task_action(task_id)
-        simulator_forward = _forward_simulator_command({"command": "loco", "action": action, "task_id": task_id})
+        simulator_payload = {"command": "loco", "action": action, "task_id": task_id}
+        pose = _sport_arm_task_pose(task_id)
+        if pose:
+            simulator_payload["pose"] = pose
+        simulator_forward = _forward_simulator_command(simulator_payload)
         sport_state["last_simulator_forward"] = simulator_forward
-        return 0, json.dumps({"data": task_id, "action": action, "simulator_forward": simulator_forward})
+        return 0, json.dumps({"data": task_id, "action": action, "pose": pose, "simulator_forward": simulator_forward})
 
     def sport_set_speed_mode(parameter: str):
         payload = _safe_json_loads(parameter)
@@ -2336,6 +2340,15 @@ def _sport_arm_task_action(task_id: int) -> str:
         2: "shake_hand",
         3: "shake_hand",
     }.get(int(task_id), "set_arm_task")
+
+
+def _sport_arm_task_pose(task_id: int) -> str | None:
+    return G1_ARM_POSES_BY_ACTION_ID.get(int(task_id)) or {
+        0: "raise_right_hand",
+        1: "raise_right_hand",
+        2: "shake_hand",
+        3: "shake_hand",
+    }.get(int(task_id))
 
 
 def _simulator_game_control_url() -> str:

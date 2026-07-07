@@ -38,6 +38,29 @@ from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+G1_ARM_TASK_POSES = {
+    0: "raise_right_hand",
+    1: "raise_right_hand",
+    2: "shake_hand",
+    3: "shake_hand",
+    99: "neutral",
+    11: "two_hand_kiss",
+    12: "left_kiss",
+    13: "right_kiss",
+    15: "hands_up",
+    17: "clap",
+    18: "high_five",
+    19: "hug",
+    20: "heart",
+    21: "right_heart",
+    22: "reject",
+    23: "raise_right_hand",
+    24: "x_ray",
+    25: "face_wave",
+    26: "high_wave",
+    27: "shake_hand",
+}
+
 
 def load_sidecar_entrypoint_module():
     path = REPO_ROOT / "overlays/unitree-g1-sdk2-sidecar/entrypoint.py"
@@ -229,7 +252,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     type(self).loco["control_owner"] = "internal"
                     type(self).loco["internal_mode"] = payload["internal_mode"]
                 elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
-                    type(self).pose = "raise_right_hand"
+                    type(self).pose = payload.get("pose") or G1_ARM_TASK_POSES.get(int(payload.get("task_id", 0)), type(self).pose)
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
             elif command == "motion_switcher":
                 action = payload.get("action", "check_mode")
@@ -595,6 +618,7 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(loco.SetSpeedMode(2), 0)
                 self.assertEqual(loco.SwitchToUserCtrl(), 0)
                 self.assertEqual(loco.SwitchToInternalCtrl(2), 0)
+                high_five_code = loco.SetTaskId(action_map["high five"])
 
                 self.assertEqual(move_code, 0)
                 self.assertEqual(fsm_code, 0)
@@ -616,6 +640,8 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(FakeG1Handler.loco["speed_mode"], 2)
                 self.assertEqual(FakeG1Handler.loco["control_owner"], "internal")
                 self.assertEqual(FakeG1Handler.loco["internal_mode"], 2)
+                self.assertEqual(high_five_code, 0)
+                self.assertEqual(FakeG1Handler.pose, "high_five")
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
                 self.assertEqual(loco.last_response["transport"], "local_http")
                 self.assertEqual(loco.last_response["provider"], "local_http_simulator")
@@ -965,6 +991,10 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(sidecar._sport_arm_task_action(0), "wave_hand")
         self.assertEqual(sidecar._sport_arm_task_action(2), "shake_hand")
         self.assertEqual(sidecar._sport_arm_task_action(99), "set_arm_task")
+        self.assertEqual(sidecar._sport_arm_task_pose(0), "raise_right_hand")
+        self.assertEqual(sidecar._sport_arm_task_pose(18), "high_five")
+        self.assertEqual(sidecar._sport_arm_task_pose(99), "neutral")
+        self.assertIsNone(sidecar._sport_arm_task_pose(12345))
 
     def test_motion_switcher_client_uses_simulator_state(self):
         with FakeServer() as fake:

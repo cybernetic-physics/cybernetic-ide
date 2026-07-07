@@ -278,6 +278,29 @@ NAMED_POSES = {
     },
 }
 
+G1_ARM_TASK_POSES = {
+    0: "raise_right_hand",
+    1: "raise_right_hand",
+    2: "shake_hand",
+    3: "shake_hand",
+    99: "neutral",
+    11: "two_hand_kiss",
+    12: "left_kiss",
+    13: "right_kiss",
+    15: "hands_up",
+    17: "clap",
+    18: "high_five",
+    19: "hug",
+    20: "heart",
+    21: "right_heart",
+    22: "reject",
+    23: "raise_right_hand",
+    24: "x_ray",
+    25: "face_wave",
+    26: "high_wave",
+    27: "shake_hand",
+}
+
 
 def env_float(name, default):
     raw = os.environ.get(name)
@@ -1143,8 +1166,17 @@ class G1MujocoState:
             if action == "set_arm_task":
                 task_id = int(payload.get("task_id", 0))
                 self.loco_state["arm_task_id"] = task_id
-                pose_name = "raise_right_hand" if task_id in (0, 1, 2, 3) else "neutral"
+                pose_name = payload.get("pose") or G1_ARM_TASK_POSES.get(task_id)
+                if not pose_name:
+                    return {
+                        "ok": True,
+                        "loco": dict(self.loco_state),
+                        "simulator_forward": "state_only",
+                        "task_id": task_id,
+                        "note": "Unknown Unitree arm task recorded without applying a visible pose.",
+                    }
                 response = self.apply_named_pose(pose_name)
+                response["task_id"] = task_id
                 response["loco"] = dict(self.loco_state)
                 return response
             if action == "high_stand":
