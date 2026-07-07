@@ -12,6 +12,66 @@ def exists(path: str) -> bool:
     return Path(path).exists()
 
 
+def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -> dict:
+    root = Path(mujoco_root)
+    robot = os.environ.get("CYBER_UNITREE_ROBOT", "g1")
+    scene = os.environ.get("CYBER_UNITREE_SCENE", "scene_29dof.xml" if robot == "g1" else "scene.xml")
+    simulate_root = root / "simulate"
+    executable = simulate_root / "build" / "unitree_mujoco"
+    scene_path = root / "unitree_robots" / robot / scene
+    command = [
+        str(executable),
+        "-r",
+        robot,
+        "-s",
+        scene,
+        "-i",
+        str(domain),
+        "-n",
+        interface or "",
+    ]
+    return {
+        "robot": robot,
+        "scene": scene,
+        "scene_path": str(scene_path),
+        "scene_exists": scene_path.exists(),
+        "recommended_runtime": "official C++ simulator",
+        "why_cpp": "Unitree documents simulate/ as the recommended simulator and it starts the SDK2 bridge thread with G1Bridge when the model has more than 20 actuators.",
+        "viewer_required": True,
+        "headless_supported_by_upstream": False,
+        "simulate_root": str(simulate_root),
+        "config_path": str(simulate_root / "config.yaml"),
+        "config_exists": (simulate_root / "config.yaml").exists(),
+        "cmake_path": str(simulate_root / "CMakeLists.txt"),
+        "cmake_exists": (simulate_root / "CMakeLists.txt").exists(),
+        "binary_path": str(executable),
+        "binary_exists": executable.exists(),
+        "unitree_sdk2_install_prefix": "/opt/unitree_robotics",
+        "mujoco_symlink_path": str(simulate_root / "mujoco"),
+        "mujoco_symlink_exists": (simulate_root / "mujoco").exists(),
+        "native_dependencies": [
+            "libyaml-cpp-dev",
+            "libspdlog-dev",
+            "libboost-all-dev",
+            "libglfw3-dev",
+            "unitree_sdk2 installed to /opt/unitree_robotics",
+            "MuJoCo release symlinked to simulate/mujoco",
+        ],
+        "build_commands": [
+            "cd /opt/unitree_sdk2 && cmake -S . -B build -DCMAKE_INSTALL_PREFIX=/opt/unitree_robotics && cmake --build build --target install",
+            "cd /opt/unitree_mujoco/simulate && ln -s /path/to/mujoco-3.3.6 mujoco",
+            "cd /opt/unitree_mujoco/simulate && cmake -S . -B build && cmake --build build -j4",
+        ],
+        "launch_command": " ".join(part for part in command if part),
+        "dds_topics_to_probe_after_launch": [
+            "rt/lowstate",
+            "rt/lowcmd",
+            "rt/sportmodestate",
+            "rt/secondary_imu",
+        ],
+    }
+
+
 def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
     report = {
         "python_path_inserted": False,
@@ -134,6 +194,7 @@ def main() -> int:
         "next_step": f"Install/build CycloneDDS and unitree_sdk2_python here, then run SDK2 probes against official unitree_mujoco on domain {domain} interface {interface or 'auto'}.",
     }
     report["sdk2_probe"] = probe_official_sdk2(sdk2_python_root, domain, interface or None)
+    report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     if report["sdk2_probe"]["domain_initialized"]:
         report["next_step"] = f"Launch official unitree_mujoco with -r g1 on DDS domain {domain} interface {interface or 'auto'}, then run lowstate/lowcmd pub-sub probes."
     print(json.dumps(report, indent=2), flush=True)

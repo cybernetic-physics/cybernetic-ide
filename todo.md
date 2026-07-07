@@ -165,6 +165,9 @@ Tasks:
   domain and creates `rt/lowcmd`/`rt/lowstate` SDK2 channel objects.
 - Remaining: launch official `unitree_mujoco`, run official G1 SDK2 examples,
   and prove DDS pub/sub against that simulator peer.
+- Done: add `unitree_official_mujoco_plan` so agents can see the missing
+  upstream native binary/MuJoCo symlink/build gate and the exact G1 launch
+  command before attempting the peer pub/sub proof.
 - Launch official `unitree_mujoco` in sim mode with a known DDS domain and
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.
@@ -242,6 +245,8 @@ Tasks:
 - Done: expose `unitree_prepare_sdk2_sidecar` and
   `unitree_sdk2_sidecar_status` in the default Robotics Agent profile so
   agents can inspect the official SDK2 bridge scaffold.
+- Done: expose `unitree_official_mujoco_plan` in the default Robotics Agent
+  profile so agents can inspect the native official simulator launch gate.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command

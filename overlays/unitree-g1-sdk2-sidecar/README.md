@@ -16,7 +16,10 @@ The sidecar currently:
   `CYBER_UNITREE_NETWORK_INTERFACE`;
 - prints a structured diagnostic report with source revisions, expected Unitree
   topics/services, official SDK2 import status, DDS domain initialization, and
-  probe channel creation for `rt/lowcmd` and `rt/lowstate`.
+  probe channel creation for `rt/lowcmd` and `rt/lowstate`;
+- reports the official C++ `unitree_mujoco` peer launch plan, including the G1
+  scene, native binary path, MuJoCo symlink, native dependencies, and DDS topics
+  to probe after launch.
 
 It does **not** yet launch official `unitree_mujoco` or prove data exchange
 with a simulator peer. That pub/sub probe is the next provider milestone.

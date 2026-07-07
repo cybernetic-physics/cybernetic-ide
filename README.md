@@ -305,6 +305,9 @@ ad hoc scripts first. The default tool surface includes:
   run the opt-in diagnostic container, initialize CycloneDDS, and create
   official SDK2 `rt/lowcmd`/`rt/lowstate` channel objects before the DDS bridge
   is promoted to the default runtime;
+- official MuJoCo peer planning: `unitree_official_mujoco_plan`, which reports
+  whether the upstream C++ `unitree_mujoco` binary, G1 scene, MuJoCo symlink,
+  and native build inputs are present and gives the exact G1 launch command;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

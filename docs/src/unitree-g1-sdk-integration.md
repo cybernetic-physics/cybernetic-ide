@@ -159,6 +159,21 @@ imports, CycloneDDS domain initialization, Unitree HG IDL imports, and
 `unitree_mujoco` or prove samples moving between two DDS peers; that is the
 next integration step before it becomes the default transport.
 
+`unitree_official_mujoco_plan` exposes the next native gate directly to agents.
+It reports whether the upstream C++ `simulate/build/unitree_mujoco` binary is
+present, whether the G1 MJCF scene exists, whether the `simulate/mujoco`
+symlink exists, and the launch command for the intended peer:
+
+```sh
+/opt/unitree_mujoco/simulate/build/unitree_mujoco -r g1 -s scene_29dof.xml -i 1 -n lo
+```
+
+The official C++ simulator is viewer-bound upstream. It starts the SDK2 bridge
+thread internally and selects `G1Bridge` when the MuJoCo model has more than 20
+actuators. A true headless Cybernetic runtime will need either an upstream patch
+or a separate bridge process, so the current milestone is to first prove the
+unmodified upstream peer can exchange `rt/lowstate` and `rt/lowcmd` samples.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.

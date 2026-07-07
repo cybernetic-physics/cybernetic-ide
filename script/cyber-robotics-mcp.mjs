@@ -114,6 +114,11 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
+  tool("unitree_official_mujoco_plan", "Report the official Unitree MuJoCo G1 peer build, launch, and DDS probe plan from the SDK2 sidecar.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -581,6 +586,8 @@ async function callTool(name, args) {
       return textResult(runChecked("node", ["script/prepare-unitree-g1-sdk2-sidecar.mjs"], { timeoutMs: 240000 }));
     case "unitree_sdk2_sidecar_status":
       return textResult(sdk2SidecarStatus());
+    case "unitree_official_mujoco_plan":
+      return textResult(sdk2OfficialMujocoPlan());
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -1443,6 +1450,17 @@ function sdk2SidecarStatus() {
     stdout: result.stdout,
     stderr: result.stderr,
     report,
+  };
+}
+
+function sdk2OfficialMujocoPlan() {
+  const status = sdk2SidecarStatus();
+  return {
+    command: status.command,
+    stderr: status.stderr,
+    report: status.report?.official_mujoco_peer ?? null,
+    sdk2_probe: status.report?.sdk2_probe ?? null,
+    next_step: status.report?.next_step ?? null,
   };
 }
 
