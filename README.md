@@ -43,6 +43,7 @@ making the user think about the transport layer.
 | `overlays/unitree-g1-mujoco-container/` | Docker Compose wrapper that mounts the Unitree G1 MuJoCo assets and exposes `8788`/`38383`. |
 | `overlays/unitree-g1-sdk-shim/` | Bootstrap `unitree_sdk2py` compatibility package for simulator-backed Unitree-shaped code. |
 | `packages/cybernetic-robotics/` | Installable Python package for beginner-friendly G1 control, power-user protocol access, MJCF scene helpers, and Unitree SDK2-shaped imports. |
+| `packages/g1-yoga-rl/` | LocoMuJoCo research utilities for projecting Cybernetic G1 yoga poses into training trajectories. |
 | `script/prepare-unitree-g1-mujoco-container.mjs` | Fetches the pinned public `unitreerobotics/unitree_mujoco` G1 assets into `.runtime/` and writes `compose.env`. |
 | `script/probe-unitree-g1-mujoco-protocol.mjs` | CLI probe for the reversed Booster-like simulator envelope. |
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
@@ -307,6 +308,7 @@ robotics work should stay behind narrow product boundaries:
 - Unitree-shaped Python APIs live in `overlays/unitree-g1-sdk-shim`.
 - Beginner-friendly and power-user Python APIs live in
   `packages/cybernetic-robotics`.
+- LocoMuJoCo policy-training research utilities live in `packages/g1-yoga-rl`.
 - End-user demos live in `examples/`.
 - Long-form architecture and safety notes live in
   `docs/src/unitree-g1-sdk-integration.md`.

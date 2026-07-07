@@ -288,8 +288,11 @@ pose/kinematic demos.
 
 Open questions:
 
+- Partially answered: `packages/g1-yoga-rl/` now scaffolds the LocoMuJoCo path
+  by projecting Cybernetic's yoga pose registry into LocoMuJoCo's Unitree G1
+  joint set and providing trajectory/speed benchmark scripts.
 - Should the next balance controller use official Unitree examples first, or a
-  learned policy path from Unitree RL Gym / Locomujoco?
+  learned policy path from Unitree RL Gym / LocoMuJoCo?
 - What is the smallest controller that can hold a yoga pose without toppling?
 - How do we expose policy execution safely inside the IDE?
 

@@ -96,7 +96,9 @@ tracking reward, or the PPO harness:
    verify `UnitreeG1` env steps on CPU.
 2. Write a trajectory generator: `NAMED_POSES` (projected to the env's joint set) →
    smooth glide + hold sequence → `Trajectory` (tutorial 10 shape) → save as npz.
-   Replay it in the env to visually verify before training.
+   This is now scaffolded in `packages/g1-yoga-rl/` via `g1-yoga-project-poses`
+   and `g1-yoga-make-trajectory`; replay it in the env to visually verify
+   before training.
 3. Train mimic PPO on the trajectory (start from `jax_rl_mimic/conf.yaml`; wandb
    optional — can disable). Start with the statically-stable poses as a sanity
    curriculum, then the full flow. Watch: does it hold chair/goddess/tree?
@@ -111,9 +113,9 @@ tracking reward, or the PPO harness:
    once, test it against recorded states from both sides.
 6. Validate end-to-end with `yoga_teacher.py --policy`: count held vs fallen poses vs
    the PD baseline (3/9 held). Snapshot each pose via the MCP viewer tools.
-7. Commit in slices (repo guidelines: no `mod.rs`-style noise, imperative titles,
-   `Release Notes:` section). New training code lives in `packages/g1-yoga-rl/` (or
-   similar); document in `docs/research/`.
+7. Commit in slices (repo guidelines: no `mod.rs`-style noise, imperative
+   titles). New training code lives in `packages/g1-yoga-rl/`; document in
+   `docs/research/`.
 
 ## Honest expectations
 

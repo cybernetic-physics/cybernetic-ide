@@ -109,3 +109,21 @@ They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
 `LocoClient`-shaped locomotion, low-level `rt/lowcmd`/`rt/lowstate` control,
 named-joint target control, a behavior gallery with snapshots, and a
 higher-level scripted motion flow.
+
+## LocoMuJoCo Policy-Training Package
+
+`packages/g1-yoga-rl/` is the first committed bridge from this audit into a
+training workflow. It does not train a policy yet; it makes the prerequisites
+explicit and reproducible:
+
+- `g1-yoga-project-poses`: reads Cybernetic's `NAMED_POSES` registry and
+  projects those 29-DOF G1 targets onto LocoMuJoCo's reduced Unitree G1 joint
+  set.
+- `g1-yoga-make-trajectory`: creates a LocoMuJoCo `Trajectory` NPZ from that
+  projected yoga sequence when LocoMuJoCo is installed.
+- `g1-yoga-bench-env`: benchmarks local CPU/MJX stepping speed to decide
+  whether to use JAX mimic training or a simpler CPU fallback.
+
+This package is intentionally dependency-light at import time. Scripts import
+LocoMuJoCo, JAX, NumPy, and MuJoCo only when the relevant command is run inside
+the dedicated training environment.

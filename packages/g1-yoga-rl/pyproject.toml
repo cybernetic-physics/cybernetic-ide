@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "g1-yoga-rl"
+version = "0.1.0"
+description = "Research utilities for training Unitree G1 yoga/balance policies for Cybernetic IDE."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+locomujoco = [
+  "jax",
+  "numpy",
+]
+
+[project.scripts]
+g1-yoga-project-poses = "g1_yoga_rl.project_yoga_poses:main"
+g1-yoga-bench-env = "g1_yoga_rl.bench_env_speed:main"
+g1-yoga-make-trajectory = "g1_yoga_rl.make_locomujoco_trajectory:main"
+g1-yoga-check-imitation = "g1_yoga_rl.check_imitation_env:main"
+g1-yoga-render-frames = "g1_yoga_rl.render_traj_frames:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["g1_yoga_rl"]
