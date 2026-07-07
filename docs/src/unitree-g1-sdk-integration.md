@@ -263,9 +263,11 @@ The MCP server now also exposes the first managed official peer lifecycle:
 `unitree_stop_official_mujoco_session`. These tools run
 `CYBER_UNITREE_ACTION=serve_official_mujoco` in a named Docker container
 (`unitree-g1-sdk2-session`), parse its ready report from logs, and stop/remove
-it cleanly. Agents can then call `unitree_command_official_mujoco_arm_pose` to
-send a bounded `raise_right_hand` or custom arm pose to that live peer. In
-Python, setting `CYBER_UNITREE_TRANSPORT=dds` routes
+it cleanly. Agents can then call `unitree_read_official_mujoco_lowstate` to
+read one official `rt/lowstate` sample from that sustained peer, or call
+`unitree_command_official_mujoco_arm_pose` to send a bounded `raise_right_hand`
+or custom arm pose to the live peer. In Python, setting
+`CYBER_UNITREE_TRANSPORT=dds` routes
 `G1ArmActionClient.ExecuteAction(action_map["right hand up"])` through the same
 managed official session.
 
@@ -581,6 +583,8 @@ The current repo has the first narrow version of that API boundary:
 - MCP now has managed official peer lifecycle tools for starting, inspecting,
   and stopping the `unitree-g1-sdk2-session` container that runs upstream
   `unitree_mujoco` under Xvfb as a sustained DDS peer.
+- MCP now has `unitree_read_official_mujoco_lowstate` for reading one official
+  `rt/lowstate` sample from that sustained peer without commanding motion.
 - MCP now has `unitree_command_official_mujoco_arm_pose` for commanding that
   managed session, and the Python `G1ArmActionClient` routes `right hand up`
   through it when `CYBER_UNITREE_TRANSPORT=dds` is set in simulator mode.

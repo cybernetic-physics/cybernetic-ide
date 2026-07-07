@@ -161,6 +161,11 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
+  tool("unitree_read_official_mujoco_lowstate", "Read one official rt/lowstate sample from the managed Unitree MuJoCo G1 DDS peer session.", {}, [], {
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -993,6 +998,8 @@ async function callTool(name, args) {
       return textResult(sdk2StartOfficialMujocoSession());
     case "unitree_official_mujoco_session_status":
       return textResult(sdk2OfficialMujocoSessionStatus());
+    case "unitree_read_official_mujoco_lowstate":
+      return textResult(sdk2ReadOfficialMujocoLowstate());
     case "unitree_stop_official_mujoco_session":
       return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
@@ -2596,6 +2603,37 @@ function sdk2StopOfficialMujocoSession() {
     stdout: result.stdout,
     stderr: result.stderr,
     status: sdk2OfficialMujocoSessionStatus(),
+  };
+}
+
+function sdk2ReadOfficialMujocoLowstate() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+  const actionEnv = "CYBER_UNITREE_ACTION=read_official_mujoco_lowstate";
+  const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
   };
 }
 

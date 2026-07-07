@@ -344,6 +344,44 @@ def summarize_lowstate(sample) -> dict:
     return summary
 
 
+def read_official_mujoco_lowstate(domain: int, interface: str | None) -> dict:
+    report = {
+        "action": "read_official_mujoco_lowstate",
+        "topic": "rt/lowstate",
+        "domain": domain,
+        "interface": interface or None,
+        "lowstate_sample_received": False,
+        "read_attempts": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_LOWSTATE_READ_TIMEOUT", "6")),
+    }
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelSubscriber
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            report["read_attempts"] += 1
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary"] = summarize_lowstate(sample)
+                break
+        subscriber.Close()
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    report["ok"] = report["lowstate_sample_received"]
+    if report["ok"]:
+        report["next_step"] = "Use this managed-session lowstate read as the telemetry side of the long-lived DDS provider."
+    else:
+        report["next_step"] = "Start unitree-g1-sdk2-session and confirm DDS domain/interface discovery before reading official lowstate."
+    return report
+
+
 def make_hold_lowcmd(low_state, lowcmd_factory, crc_factory, kp: float = 0.0, kd: float = 0.0):
     low_cmd = lowcmd_factory()
     low_cmd.mode_pr = getattr(low_state, "mode_pr", 0)
@@ -1407,6 +1445,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "command_official_mujoco_arm_pose":
         report["arm_pose_command"] = command_official_mujoco_arm_pose(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "read_official_mujoco_lowstate":
+        report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "serve_official_mujoco":
         return serve_official_mujoco_peer(mujoco_root, domain, interface or None)

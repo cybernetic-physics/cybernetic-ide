@@ -80,6 +80,24 @@ class OfficialG1Sim:
     def raise_left_hand_session(self, **kwargs: Any) -> dict[str, Any]:
         return self.arm_pose_session("raise_left_hand", **kwargs)
 
+    def lowstate_session(self) -> dict[str, Any]:
+        """Read one official rt/lowstate sample from a managed MuJoCo DDS session."""
+
+        env = {"CYBER_UNITREE_ACTION": "read_official_mujoco_lowstate"}
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        lowstate_read = report.get("lowstate_read") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(lowstate_read, dict) and lowstate_read.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "lowstate": lowstate_read,
+            "lowstate_summary": lowstate_read.get("lowstate_summary") if isinstance(lowstate_read, dict) else None,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def status(self) -> dict[str, Any]:
         """Inspect the official SDK2 sidecar without commanding motion."""
 

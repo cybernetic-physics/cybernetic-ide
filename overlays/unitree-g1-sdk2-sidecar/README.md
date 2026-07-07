@@ -42,6 +42,9 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose`, connects to an
   already-running managed official peer, sends a bounded multi-joint arm pose
   over `rt/lowcmd`, and verifies movement from `rt/lowstate`.
+- when `CYBER_UNITREE_ACTION=read_official_mujoco_lowstate`, connects to an
+  already-running managed official peer and reads one `rt/lowstate` sample
+  without commanding motion.
 
 It still does **not** replace the local HTTP viewer/control bridge as the
 default transport. The sidecar has now proven official `rt/lowstate` sample
@@ -99,6 +102,19 @@ The MCP wrappers `unitree_start_official_mujoco_session`,
 `unitree_stop_official_mujoco_session` manage that container and parse the
 initial ready report from Docker logs. This is the durable official G1 DDS peer
 lifecycle used by the managed arm-pose command path.
+
+Read one official lowstate sample from the managed session:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm -e CYBER_UNITREE_ACTION=read_official_mujoco_lowstate \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper is `unitree_read_official_mujoco_lowstate`. Python users can
+call `OfficialG1Sim.lowstate_session()`.
 
 Command the managed official session with a bounded arm pose:
 

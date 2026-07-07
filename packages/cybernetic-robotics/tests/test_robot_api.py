@@ -1060,6 +1060,50 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ARM_POSE_PRESET=raise_left_hand", command)
         self.assertIn("CYBER_UNITREE_ARM_POSE_FRAMES=120", command)
 
+    def test_official_g1_sim_can_read_managed_session_lowstate(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "lowstate_read": {
+                            "ok": True,
+                            "lowstate_sample_received": True,
+                            "lowstate_summary": {
+                                "mode_machine": 5,
+                                "motor_count": 35,
+                                "first_motors": [{"index": 0, "q": 0.01, "dq": 0.0}],
+                            },
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.lowstate_session()
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["lowstate_summary"]["mode_machine"], 5)
+        self.assertEqual(result["lowstate_summary"]["motor_count"], 35)
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=read_official_mujoco_lowstate", command)
+
 
 if __name__ == "__main__":
     unittest.main()

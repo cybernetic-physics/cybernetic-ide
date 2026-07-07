@@ -1172,6 +1172,7 @@
               "unitree_probe_official_mujoco_launch": true,
               "unitree_start_official_mujoco_session": true,
               "unitree_official_mujoco_session_status": true,
+              "unitree_read_official_mujoco_lowstate": true,
               "unitree_stop_official_mujoco_session": true,
               "unitree_probe_official_mujoco_dds": true,
               "unitree_probe_official_mujoco_lowcmd": true,

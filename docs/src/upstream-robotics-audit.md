@@ -114,6 +114,10 @@ or writing newer G1 AGV-style examples.
 checks orientation, joint velocity, angular velocity, motor temperatures,
 lowcmd staleness, and simulator fall state before an agent issues more motion.
 
+`unitree_read_official_mujoco_lowstate` reads one real SDK2/CycloneDDS
+`rt/lowstate` sample from the managed official `unitree-g1-sdk2-session`, which
+is the first sustained-peer telemetry surface beyond short-lived probes.
+
 For lower-level inspection and control, agents can use:
 
 - `g1_lowstate`: read synthesized `rt/lowstate` telemetry.

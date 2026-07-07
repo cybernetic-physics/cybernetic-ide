@@ -383,6 +383,7 @@ viewer_snapshot_series
 sim_validate_behavior
 unitree_provider_status
 unitree_session_status
+unitree_read_official_mujoco_lowstate
 robotics_tool_reference
 unitree_sdk_scaffold_python
 scene_add_object

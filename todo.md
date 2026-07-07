@@ -219,6 +219,10 @@ Tasks:
   default profile, and route
   `G1ArmActionClient.ExecuteAction(action_map["right hand up"])` through the
   managed official MuJoCo DDS session when `CYBER_UNITREE_TRANSPORT=dds`.
+- Done: add `CYBER_UNITREE_ACTION=read_official_mujoco_lowstate`, Python
+  `OfficialG1Sim.lowstate_session()`, and MCP
+  `unitree_read_official_mujoco_lowstate` so agents can read official
+  `rt/lowstate` telemetry from the sustained managed DDS peer.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
