@@ -648,8 +648,17 @@ The current repo has the first narrow version of that API boundary:
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
   `unitree_probe_rpc_bridge_client` / `unitree_stop_rpc_bridge` turn that smoke
   into a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is
-  still a shell with in-memory `sport`/`agv` state, but it proves external SDK
-  clients can discover and call a long-running Cybernetic-owned RPC service.
+  now the first live SDK-to-simulator adapter: it keeps `sport`/`agv` state and
+  forwards safe setter RPCs to Cybernetic's simulator HTTP provider when
+  `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. The currently forwarded
+  calls are `sport.SetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`,
+  `agv.Move`, and `agv.HeightAdjust`. If the simulator is not reachable, the
+  SDK call still returns `RPC_OK`, but the JSON response marks
+  `simulator_forward.provider` as `bridge_state_only`.
+  `unitree_probe_rpc_bridge_client` also includes a
+  `sport.RawSetVelocityDebug` call because upstream `LocoClient` setter methods
+  return only the status code and hide the response body; the raw SDK client
+  call exposes `simulator_forward` for agent diagnostics.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the

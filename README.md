@@ -378,7 +378,8 @@ ad hoc scripts first. The default tool surface includes:
 - managed SDK2 bridge lifecycle: `unitree_start_rpc_bridge`,
   `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
   `unitree_stop_rpc_bridge`, which keep the first `sport`/`agv` RPC service
-  shell alive as a named container for external SDK clients;
+  alive as a named container for external SDK clients and forward supported
+  setter calls to the simulator HTTP provider when it is reachable;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;

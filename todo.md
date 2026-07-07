@@ -323,15 +323,24 @@ Tasks:
   `unitree_start_rpc_bridge`, `unitree_rpc_bridge_status`,
   `unitree_probe_rpc_bridge_client`, and `unitree_stop_rpc_bridge`, plus Python
   mirrors on `OfficialG1Sim`. This starts `unitree-g1-rpc-bridge` as a
-  long-running `sport`/`agv` SDK2 service shell for external clients.
+  long-running `sport`/`agv` SDK2 service for external clients.
+- Done: map the first safe managed bridge handlers onto the simulator provider
+  boundary. `sport.SetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`,
+  `agv.Move`, and `agv.HeightAdjust` now forward to
+  `CYBER_SIMULATOR_GAME_CONTROL_URL` when the local MuJoCo/GameControl harness
+  is reachable. The JSON RPC response includes `simulator_forward`; if the
+  simulator is unavailable, the official SDK call remains `RPC_OK` but is
+  marked `bridge_state_only` so agents do not hallucinate visible motion.
 - Current managed-bridge evidence: live validation started
   `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
   bridge cleanly.
-- Remaining: replace the bridge's in-memory state handlers with calls into the
-  Cybernetic simulator provider boundary so official SDK `LocoClient` /
-  `AgvClient` calls actually move the MuJoCo G1.
+- Remaining: expand the bridge beyond this first safe setter subset. Prioritize
+  official SDK methods users naturally try next (`StopMove`, `Damp`,
+  `WaveHand`, `ShakeHand`, mode switching, and readback consistency), then
+  route the same API surface to the official Unitree MuJoCo DDS actuator path
+  rather than only the local HTTP compatibility provider.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

@@ -9,6 +9,11 @@ import sys
 import time
 import traceback
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+
+DEFAULT_SIMULATOR_GAME_CONTROL_URL = "http://127.0.0.1:38383"
 
 
 def exists(path: str) -> bool:
@@ -1622,10 +1627,12 @@ def probe_unitree_rpc_bridge_smoke(domain: int, interface: str | None) -> dict:
 def serve_unitree_rpc_bridge(domain: int, interface: str | None) -> int:
     """Serve Unitree-shaped sport/agv RPC endpoints until the container stops."""
 
+    simulator_url = _simulator_game_control_url()
     report = {
         "action": "serve_unitree_rpc_bridge",
         "domain": domain,
         "interface": interface or None,
+        "simulator_game_control_url": simulator_url,
         "services_started": [],
         "bridge_state": _initial_rpc_bridge_state(),
         "ok": False,
@@ -1634,7 +1641,7 @@ def serve_unitree_rpc_bridge(domain: int, interface: str | None) -> int:
         services = _start_unitree_rpc_bridge_services(domain, interface, report["bridge_state"])
         report["services_started"] = services
         report["ok"] = True
-        report["next_step"] = "Keep this container running as the Unitree sport/agv RPC bridge, then call it with official SDK clients on the same DDS domain/interface."
+        report["next_step"] = "Keep this container running as the Unitree sport/agv RPC bridge; supported setter RPCs now forward to Cybernetic's simulator HTTP provider when it is reachable."
     except Exception as exc:
         report["error"] = str(exc)
         report["traceback"] = traceback.format_exc()
@@ -1759,19 +1766,42 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
     def sport_set_fsm_id(parameter: str):
         payload = _safe_json_loads(parameter)
         sport_state["fsm_id"] = int(payload.get("data", sport_state["fsm_id"]))
-        return 0, json.dumps({"data": sport_state["fsm_id"]})
+        simulator_forward = _forward_simulator_command(
+            {"command": "loco", "action": "set_fsm_id", "fsm_id": sport_state["fsm_id"]}
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["fsm_id"], "simulator_forward": simulator_forward})
 
     def sport_set_stand_height(parameter: str):
         payload = _safe_json_loads(parameter)
         sport_state["stand_height"] = float(payload.get("data", sport_state["stand_height"]))
-        return 0, json.dumps({"data": sport_state["stand_height"]})
+        simulator_forward = _forward_simulator_command(
+            {"command": "loco", "action": "set_stand_height", "stand_height": sport_state["stand_height"]}
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["stand_height"], "simulator_forward": simulator_forward})
 
     def sport_set_velocity(parameter: str):
         payload = _safe_json_loads(parameter)
         velocity = payload.get("velocity", sport_state["velocity"])
         sport_state["velocity"] = [float(value) for value in velocity[:3]]
         sport_state["duration"] = float(payload.get("duration", 0.0))
-        return 0, json.dumps({"velocity": sport_state["velocity"], "duration": sport_state["duration"]})
+        simulator_forward = _forward_simulator_command(
+            {
+                "command": "loco",
+                "action": "set_velocity",
+                "velocity": sport_state["velocity"],
+                "duration": sport_state["duration"],
+            }
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps(
+            {
+                "velocity": sport_state["velocity"],
+                "duration": sport_state["duration"],
+                "simulator_forward": simulator_forward,
+            }
+        )
 
     for api_id, handler in [
         (ROBOT_API_ID_LOCO_GET_FSM_ID, sport_get_fsm_id),
@@ -1798,12 +1828,37 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
             float(payload.get("vy", 0.0)),
             float(payload.get("vyaw", 0.0)),
         ]
-        return 0, json.dumps({"velocity": agv_state["velocity"]})
+        simulator_forward = _forward_simulator_command(
+            {
+                "command": "loco",
+                "action": "set_velocity",
+                "velocity": [agv_state["velocity"][0], 0.0, agv_state["velocity"][2]],
+                "duration": float(payload.get("duration", 1.0)),
+                "agv": {
+                    "service": "agv",
+                    "simulated": True,
+                    "requested_velocity": agv_state["velocity"],
+                    "ignored_lateral_velocity": agv_state["velocity"][1],
+                },
+            }
+        )
+        agv_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"velocity": agv_state["velocity"], "simulator_forward": simulator_forward})
 
     def agv_height_adjust(parameter: str):
         payload = _safe_json_loads(parameter)
         agv_state["height_velocity"] = float(payload.get("data", 0.0))
-        return 0, json.dumps({"data": agv_state["height_velocity"]})
+        simulator_forward = _forward_simulator_command(
+            {
+                "command": "agv",
+                "action": "height_adjust",
+                "service": "agv",
+                "simulated": True,
+                "height_velocity": agv_state["height_velocity"],
+            }
+        )
+        agv_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": agv_state["height_velocity"], "simulator_forward": simulator_forward})
 
     agv._RegistHandler(1001, agv_move, False)
     agv._RegistHandler(1002, agv_height_adjust, False)
@@ -1814,6 +1869,7 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
 
 
 def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
+    from unitree_sdk2py.g1.loco.g1_loco_api import LOCO_API_VERSION, ROBOT_API_ID_LOCO_SET_VELOCITY
     from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
     from unitree_sdk2py.rpc.client import Client
 
@@ -1823,6 +1879,19 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
     _record_rpc_call(calls, "sport.GetFsmId", loco.GetFsmId)
     _record_rpc_call(calls, "sport.SetStandHeight", lambda: loco.SetStandHeight(0.73))
     _record_rpc_call(calls, "sport.SetVelocity", lambda: loco.SetVelocity(0.0, 0.0, 0.0, 0.1))
+
+    sport_client = Client("sport", False)
+    sport_client.SetTimeout(timeout)
+    sport_client._SetApiVerson(LOCO_API_VERSION)
+    sport_client._RegistApi(ROBOT_API_ID_LOCO_SET_VELOCITY, 0)
+    _record_rpc_call(
+        calls,
+        "sport.RawSetVelocityDebug",
+        lambda: sport_client._Call(
+            ROBOT_API_ID_LOCO_SET_VELOCITY,
+            json.dumps({"velocity": [0.0, 0.0, 0.0], "duration": 0.1}),
+        ),
+    )
 
     agv_client = Client("agv", False)
     agv_client.SetTimeout(timeout)
@@ -1839,6 +1908,50 @@ def _safe_json_loads(text: str) -> dict:
         return value if isinstance(value, dict) else {}
     except Exception:
         return {}
+
+
+def _simulator_game_control_url() -> str:
+    return (
+        os.environ.get("CYBER_SIMULATOR_GAME_CONTROL_URL")
+        or os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+        or DEFAULT_SIMULATOR_GAME_CONTROL_URL
+    ).rstrip("/")
+
+
+def _forward_simulator_command(payload: dict) -> dict:
+    """Best-effort adapter from official SDK RPC handlers to GameControl HTTP."""
+
+    simulator_url = _simulator_game_control_url()
+    timeout = float(os.environ.get("CYBER_UNITREE_RPC_BRIDGE_SIM_TIMEOUT", "0.35"))
+    request = Request(
+        f"{simulator_url}/command",
+        data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            body = response.read()
+        try:
+            value = json.loads(body.decode("utf-8"))
+        except Exception:
+            value = {"raw": body.decode("utf-8", errors="replace")[-2000:]}
+        return {
+            "ok": True,
+            "provider": "cybernetic_game_control_http",
+            "url": simulator_url,
+            "payload": payload,
+            "response": value,
+        }
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        return {
+            "ok": False,
+            "provider": "bridge_state_only",
+            "url": simulator_url,
+            "payload": payload,
+            "error": str(exc),
+            "note": "SDK RPC returned RPC_OK, but the local simulator HTTP bridge was not updated.",
+        }
 
 
 def _record_rpc_call(calls: list[dict], name: str, fn) -> None:

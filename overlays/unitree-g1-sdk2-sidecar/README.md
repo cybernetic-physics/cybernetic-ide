@@ -169,8 +169,16 @@ The MCP lifecycle is `unitree_start_rpc_bridge`,
 `unitree_stop_rpc_bridge`. Python users can call
 `OfficialG1Sim.start_rpc_bridge()`, `rpc_bridge_status()`,
 `rpc_bridge_client()`, and `stop_rpc_bridge()`. This first managed bridge keeps
-`sport` and `agv` SDK2 servers alive with in-memory state; the next step is to
-map those handlers onto Cybernetic's simulator provider boundary.
+`sport` and `agv` SDK2 servers alive and forwards safe setter calls to
+Cybernetic's simulator provider at `CYBER_SIMULATOR_GAME_CONTROL_URL`:
+`sport.SetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`, and
+`agv.HeightAdjust`. If the simulator HTTP bridge is unavailable, the RPC still
+returns `RPC_OK` for SDK compatibility, but the JSON response marks
+`simulator_forward.provider` as `bridge_state_only` so agents know the MuJoCo
+state was not updated. The managed client probe includes
+`sport.RawSetVelocityDebug` because Unitree's high-level `LocoClient` setter
+methods return only the status code; the raw SDK call exposes the handler JSON
+body for diagnostics.
 
 Probe whether the managed official peer answers G1 sport/LocoClient RPCs:
 

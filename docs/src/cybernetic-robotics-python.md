@@ -166,8 +166,12 @@ needed for a future long-running service bridge.
 `official.start_rpc_bridge()` promotes that shape into a named
 `unitree-g1-rpc-bridge` container, while `official.rpc_bridge_client()` calls
 the running bridge with official SDK clients and `official.stop_rpc_bridge()`
-removes it. The first managed bridge keeps in-memory `sport`/`agv` state; it is
-the service shell that future work maps onto simulator providers.
+removes it. The managed bridge keeps `sport`/`agv` state and now forwards safe
+setter RPCs to the local simulator provider when
+`CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. The currently forwarded calls
+are `sport.SetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
+and `agv.HeightAdjust`; unreachable simulator calls are reported as
+`bridge_state_only` in the RPC JSON response instead of being hidden.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion

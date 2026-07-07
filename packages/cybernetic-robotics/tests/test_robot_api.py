@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,19 @@ from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_, unit
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def load_sidecar_entrypoint_module():
+    path = REPO_ROOT / "overlays/unitree-g1-sdk2-sidecar/entrypoint.py"
+    spec = importlib.util.spec_from_file_location("cyber_unitree_sidecar_entrypoint", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load sidecar entrypoint from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class FakeG1Handler(BaseHTTPRequestHandler):
@@ -663,6 +677,46 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_sidecar_rpc_bridge_forwards_to_simulator_http(self):
+        sidecar = load_sidecar_entrypoint_module()
+        with FakeServer() as fake, patch.dict(
+            os.environ,
+            {
+                "CYBER_SIMULATOR_GAME_CONTROL_URL": fake.url,
+                "CYBER_UNITREE_RPC_BRIDGE_SIM_TIMEOUT": "1.0",
+            },
+            clear=False,
+        ):
+            result = sidecar._forward_simulator_command(
+                {
+                    "command": "loco",
+                    "action": "set_velocity",
+                    "velocity": [0.3, 0.0, 0.1],
+                    "duration": 0.25,
+                }
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["provider"], "cybernetic_game_control_http")
+        self.assertEqual(result["payload"]["velocity"], [0.3, 0.0, 0.1])
+        self.assertEqual(FakeG1Handler.loco["velocity"], [0.3, 0.0, 0.1])
+
+    def test_sidecar_rpc_bridge_reports_state_only_when_simulator_unreachable(self):
+        sidecar = load_sidecar_entrypoint_module()
+        with patch.dict(
+            os.environ,
+            {
+                "CYBER_SIMULATOR_GAME_CONTROL_URL": "http://127.0.0.1:1",
+                "CYBER_UNITREE_RPC_BRIDGE_SIM_TIMEOUT": "0.05",
+            },
+            clear=False,
+        ):
+            result = sidecar._forward_simulator_command({"command": "loco", "action": "set_fsm_id", "fsm_id": 1})
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["provider"], "bridge_state_only")
+        self.assertIn("SDK RPC returned RPC_OK", result["note"])
 
     def test_motion_switcher_client_uses_simulator_state(self):
         with FakeServer() as fake:
