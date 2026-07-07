@@ -366,7 +366,7 @@ Tasks:
 - `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
 - Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.
 - `examples/g1_scene_obstacle.py`: add an object, move camera, snapshot.
-- `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a
+- Done: `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a
   debugging bundle an AI agent can use.
 - Done: `examples/g1_safety_stop.py`: show stop/pause/damp behavior clearly.
 

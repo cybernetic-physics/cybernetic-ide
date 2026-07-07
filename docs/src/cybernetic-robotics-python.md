@@ -70,6 +70,7 @@ python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_joint_targets.py
 python3 examples/g1_safety_stop.py
+python3 examples/g1_agent_debug_loop.py --behavior raise_hand
 ```
 
 ## CLI

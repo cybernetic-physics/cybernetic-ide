@@ -507,6 +507,9 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_safety_stop.py` demonstrates the shared simulator stop path:
   release motion-switcher mode, damp locomotion, neutralize the arm pose, pause
   the simulator, and save an after-stop snapshot.
+- `examples/g1_agent_debug_loop.py` runs one behavior, captures before/after
+  screenshots, status, `rt/lowstate`, named joint state, and the safety-stop
+  result into `.runtime/g1-agent-debug-loop/debug_bundle.json` for agent review.
 - The shim exposes `unitree_sdk2py.g1.audio.g1_audio_client.AudioClient` for
   TTS, volume, LED, and stream method-shape compatibility. In MuJoCo this
   records intent only; real audio hardware still belongs to the future official

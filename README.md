@@ -55,6 +55,7 @@ making the user think about the transport layer.
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
 | `examples/g1_safety_stop.py` | Simulator safety-stop demo: release motion mode, damp, neutralize, pause, and snapshot. |
+| `examples/g1_agent_debug_loop.py` | Runs a behavior and writes screenshots, status, lowstate, and joint-state JSON for agent debugging. |
 | `examples/g1_behavior_gallery.py` | Behavior gallery that runs arm action, locomotion, wave, stand-height, safe-neutral, and saves snapshots. |
 | `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
 | `examples/use_cybernetic_robotics_lib.py` | Polished package demo that exercises both `G1Robot` and the Unitree SDK2-shaped shim. |
@@ -139,6 +140,7 @@ python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_joint_targets.py
 python3 examples/g1_safety_stop.py
+python3 examples/g1_agent_debug_loop.py --behavior raise_hand
 python3 examples/g1_behavior_gallery.py
 python3 examples/easy_g1_playground.py
 ```
