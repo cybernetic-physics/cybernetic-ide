@@ -14,6 +14,7 @@ const DEFAULT_CONTAINER = "unitree-g1-mujoco";
 const OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session";
 const DEFAULT_POSE = "raise_right_hand";
 const MAX_LOG_BYTES = 256_000;
+const CAMERA_BOOKMARKS_PATH = ".runtime/robot-viewer-camera-bookmarks.json";
 const G1_ACTION_POSES = {
   release_arm: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
   neutral: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
@@ -430,13 +431,54 @@ const tools = [
     "viewer_camera_control",
     "Control the MuJoCo free camera through the simulator protocol.",
     {
-      action: { type: "string", enum: ["state", "reset", "orbit", "pan", "zoom"] },
+      action: { type: "string", enum: ["state", "reset", "orbit", "pan", "zoom", "set"] },
       dx: { type: "number", default: 0 },
       dy: { type: "number", default: 0 },
       delta: { type: "number", default: 0 },
+      lookat: {
+        type: "array",
+        items: { type: "number" },
+        minItems: 3,
+        maxItems: 3,
+        description: "Free-camera look-at point for action=set.",
+      },
+      distance: { type: "number", minimum: 0.45, maximum: 12.0, description: "Free-camera distance for action=set." },
+      azimuth: { type: "number", description: "Free-camera azimuth in degrees for action=set." },
+      elevation: { type: "number", minimum: -89.0, maximum: 20.0, description: "Free-camera elevation in degrees for action=set." },
     },
     ["action"],
     { readOnlyHint: false },
+  ),
+  tool(
+    "viewer_camera_bookmark_save",
+    "Save the current Robot Viewer free-camera state as a named workspace bookmark.",
+    {
+      name: { type: "string", default: "default", description: "Bookmark name, e.g. front_debug or hand_closeup." },
+      description: { type: "string", default: "", description: "Optional note explaining what this view is useful for." },
+    },
+    ["name"],
+    { readOnlyHint: false },
+  ),
+  tool("viewer_camera_bookmark_list", "List saved Robot Viewer camera bookmarks.", {}, [], {
+    readOnlyHint: true,
+  }),
+  tool(
+    "viewer_camera_bookmark_apply",
+    "Restore a saved Robot Viewer free-camera bookmark.",
+    {
+      name: { type: "string", default: "default" },
+    },
+    ["name"],
+    { readOnlyHint: false },
+  ),
+  tool(
+    "viewer_camera_bookmark_delete",
+    "Delete a saved Robot Viewer free-camera bookmark.",
+    {
+      name: { type: "string", default: "default" },
+    },
+    ["name"],
+    { readOnlyHint: false, destructiveHint: true },
   ),
   tool(
     "viewer_snapshot",
@@ -893,6 +935,14 @@ async function callTool(name, args) {
       return textResult(await command({ command: "yoga_policy", action: "stop" }));
     case "viewer_camera_control":
       return textResult(await camera(args));
+    case "viewer_camera_bookmark_save":
+      return textResult(await saveCameraBookmark(args));
+    case "viewer_camera_bookmark_list":
+      return textResult(await listCameraBookmarks());
+    case "viewer_camera_bookmark_apply":
+      return textResult(await applyCameraBookmark(args));
+    case "viewer_camera_bookmark_delete":
+      return textResult(await deleteCameraBookmark(args));
     case "viewer_snapshot":
       return imageResult(await snapshot(args.format || "jpeg"));
     case "viewer_snapshot_file":
@@ -1258,12 +1308,132 @@ async function command(body) {
 }
 
 async function camera(args) {
-  return postJson("/camera", {
+  const payload = {
     action: args.action || "state",
     dx: Number(args.dx || 0),
     dy: Number(args.dy || 0),
     delta: Number(args.delta || 0),
-  });
+  };
+  if (payload.action === "set") {
+    const cameraState = normalizeCameraState(args);
+    Object.assign(payload, cameraState);
+  }
+  return postJson("/camera", payload);
+}
+
+async function saveCameraBookmark(args) {
+  const name = safeBookmarkName(args.name || "default");
+  const response = await camera({ action: "state" });
+  const state = normalizeCameraState(response.camera || response);
+  const bookmarks = await readCameraBookmarks();
+  bookmarks[name] = {
+    name,
+    description: String(args.description || ""),
+    camera: state,
+    saved_at: new Date().toISOString(),
+  };
+  await writeCameraBookmarks(bookmarks);
+  return {
+    path: cameraBookmarksPath(),
+    workspace_relative_path: CAMERA_BOOKMARKS_PATH,
+    bookmark: bookmarks[name],
+  };
+}
+
+async function listCameraBookmarks() {
+  const bookmarks = await readCameraBookmarks();
+  return {
+    path: cameraBookmarksPath(),
+    workspace_relative_path: CAMERA_BOOKMARKS_PATH,
+    count: Object.keys(bookmarks).length,
+    bookmarks,
+  };
+}
+
+async function applyCameraBookmark(args) {
+  const name = safeBookmarkName(args.name || "default");
+  const bookmarks = await readCameraBookmarks();
+  const bookmark = bookmarks[name];
+  if (!bookmark) {
+    throw new Error(`Unknown camera bookmark: ${name}`);
+  }
+  const result = await camera({ action: "set", ...bookmark.camera });
+  return {
+    bookmark,
+    applied: result,
+  };
+}
+
+async function deleteCameraBookmark(args) {
+  const name = safeBookmarkName(args.name || "default");
+  const bookmarks = await readCameraBookmarks();
+  const existed = Object.hasOwn(bookmarks, name);
+  if (existed) {
+    delete bookmarks[name];
+    await writeCameraBookmarks(bookmarks);
+  }
+  return {
+    name,
+    deleted: existed,
+    remaining: Object.keys(bookmarks).length,
+    path: cameraBookmarksPath(),
+    workspace_relative_path: CAMERA_BOOKMARKS_PATH,
+  };
+}
+
+function cameraBookmarksPath() {
+  return safeWorkspacePath(CAMERA_BOOKMARKS_PATH);
+}
+
+async function readCameraBookmarks() {
+  const filePath = cameraBookmarksPath();
+  try {
+    const parsed = JSON.parse(await fsp.readFile(filePath, "utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed.bookmarks)) {
+      return parsed.bookmarks && typeof parsed.bookmarks === "object" ? parsed.bookmarks : {};
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  return {};
+}
+
+async function writeCameraBookmarks(bookmarks) {
+  const filePath = cameraBookmarksPath();
+  await fsp.mkdir(path.dirname(filePath), { recursive: true });
+  await fsp.writeFile(filePath, `${JSON.stringify({ version: 1, bookmarks }, null, 2)}\n`);
+}
+
+function normalizeCameraState(value) {
+  if (!value || typeof value !== "object") {
+    throw new Error("Camera state must be an object");
+  }
+  const lookat = Array.isArray(value.lookat) ? value.lookat.map(Number) : [];
+  if (lookat.length !== 3 || lookat.some((number) => !Number.isFinite(number))) {
+    throw new Error("Camera lookat must contain three finite numbers");
+  }
+  const distance = clampNumber(value.distance, 0.45, 12.0, 2.7);
+  const azimuth = Number(value.azimuth ?? -90.0);
+  const elevation = clampNumber(value.elevation, -89.0, 20.0, -8.0);
+  if (!Number.isFinite(azimuth)) {
+    throw new Error("Camera azimuth must be finite");
+  }
+  return {
+    lookat,
+    distance,
+    azimuth,
+    elevation,
+  };
+}
+
+function safeBookmarkName(value) {
+  const name = safeSegment(String(value || "default"));
+  if (!name) {
+    throw new Error("Bookmark name must not be empty");
+  }
+  return name;
 }
 
 async function snapshot(format) {

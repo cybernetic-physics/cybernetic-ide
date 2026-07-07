@@ -277,7 +277,10 @@ Tasks:
 - Add a low-state panel with joint table and IMU summary.
 - Add command state showing last high-level action, last lowcmd, and watchdog.
 - Add scene/object inventory from `/visual_scene`.
-- Add camera bookmark controls.
+- Done: add MCP camera bookmark controls
+  (`viewer_camera_bookmark_save/list/apply/delete`) backed by
+  `.runtime/robot-viewer-camera-bookmarks.json`, plus exact camera restore via
+  the simulator `camera` action `set`.
 - Add a screenshot/history strip for before/after comparison.
 - Ensure viewer interactions never steal mouse input from the normal editor UI.
 
@@ -298,6 +301,8 @@ Tasks:
   indices.
 - Done: add `viewer_snapshot_series` for multi-angle visual evidence after an
   agent runs a behavior or scene edit.
+- Done: add camera bookmark tools so agents can restore the exact same camera
+  before capturing before/after evidence.
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.

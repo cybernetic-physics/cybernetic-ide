@@ -350,7 +350,8 @@ ad hoc scripts first. The default tool surface includes:
 - managed official SDK2 pose command: `unitree_command_official_mujoco_arm_pose`,
   which sends the same bounded multi-joint pose to an already-running
   `unitree-g1-sdk2-session` instead of launching a second MuJoCo peer;
-- viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
+- viewer evidence: `viewer_camera_control`,
+  `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
   `scene_add_box`;
@@ -365,6 +366,10 @@ small visual packet for debugging. It writes a timestamped directory under
 `.runtime/robot-viewer-snapshots/` with `current`, `front`, `right`, and
 `three_quarter` views by default, plus a `manifest.json` containing simulator
 status and file paths.
+Use `viewer_camera_bookmark_save` before a behavior run when you want exact
+before/after evidence from the same free-camera angle; bookmarks are stored in
+`.runtime/robot-viewer-camera-bookmarks.json` and can be restored with
+`viewer_camera_bookmark_apply`.
 
 Useful environment variables:
 

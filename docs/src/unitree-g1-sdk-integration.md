@@ -150,6 +150,12 @@ frame inline, `viewer_snapshot_file` writes one frame to the workspace, and
 as `current`, `front`, `right`, and `three_quarter` into
 `.runtime/robot-viewer-snapshots/`. This is the preferred way for agents to
 show what changed after a Python control script or scene edit.
+Agents can also persist exact camera angles with
+`viewer_camera_bookmark_save`, inspect them with `viewer_camera_bookmark_list`,
+restore them with `viewer_camera_bookmark_apply`, and clean them up with
+`viewer_camera_bookmark_delete`. The bookmarks live at
+`.runtime/robot-viewer-camera-bookmarks.json`, which makes repeatable
+before/after screenshots possible without re-deriving orbit/pan/zoom deltas.
 
 The same MCP server also exposes `unitree_prepare_sdk2_sidecar` and
 `unitree_sdk2_sidecar_status`. These tools prepare pinned official Unitree SDK2
