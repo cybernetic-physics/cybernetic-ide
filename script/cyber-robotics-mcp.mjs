@@ -2780,18 +2780,26 @@ function sdk2OfficialMujocoSessionStatus() {
       state = null;
     }
   }
-  const readyReport = parseFirstJsonObject(logs.stdout);
+  const reports = logs.status === 0 ? parseJsonObjects(logs.stdout) : [];
+  const readyReport = reports.find((report) => report?.action === "serve_official_mujoco") ?? reports[0] ?? null;
+  const exitReport =
+    [...reports].reverse().find((report) => report?.action === "serve_official_mujoco_exit") ?? null;
+  const lastReport = reports.length > 0 ? reports[reports.length - 1] : null;
+  const running = state?.Running === true;
   return {
     container: OFFICIAL_MUJOCO_SESSION_CONTAINER,
     exists: inspect.status === 0,
-    running: state?.Running === true,
+    running,
     status: state?.Status ?? null,
     exit_code: state?.ExitCode ?? null,
     started_at: state?.StartedAt ?? null,
     finished_at: state?.FinishedAt ?? null,
     inspect_error: inspect.status === 0 ? null : inspect.stderr.trim(),
     ready_report: readyReport,
-    ready: readyReport?.ok === true,
+    last_report: lastReport,
+    exit_report: exitReport,
+    lifecycle_reports_seen: reports.length,
+    ready: running && readyReport?.ok === true && !exitReport,
     logs_tail: logs.status === 0 ? logs.stdout : null,
     logs_error: logs.status === 0 ? null : logs.stderr.trim(),
   };
@@ -2815,7 +2823,12 @@ function sdk2ReadOfficialMujocoLowstate() {
   }
   const session = sdk2OfficialMujocoSessionStatus();
   if (!session.running || !session.ready) {
-    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+    return {
+      ok: false,
+      error: "managed official MuJoCo session is not running and ready",
+      next_step: "Run unitree_start_official_mujoco_session, then inspect ready_report, exit_report, and logs_tail if readiness does not hold.",
+      session,
+    };
   }
   const actionEnv = "CYBER_UNITREE_ACTION=read_official_mujoco_lowstate";
   const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
@@ -2846,7 +2859,12 @@ function sdk2ProbeOfficialMujocoLocoRpc(options = {}) {
   }
   const session = sdk2OfficialMujocoSessionStatus();
   if (!session.running || !session.ready) {
-    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+    return {
+      ok: false,
+      error: "managed official MuJoCo session is not running and ready",
+      next_step: "Run unitree_start_official_mujoco_session, then inspect ready_report, exit_report, and logs_tail if readiness does not hold.",
+      session,
+    };
   }
   const includeStop = options.include_stop === true;
   const timeoutSeconds = clampNumber(options.timeout_seconds, 0.2, 10, 2);
@@ -2916,6 +2934,58 @@ function parseFirstJsonObject(text) {
     }
   }
   return null;
+}
+
+function parseJsonObjects(text) {
+  const reports = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const start = text.indexOf("{", cursor);
+    if (start === -1) {
+      break;
+    }
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let consumed = false;
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === "\"") {
+          inString = false;
+        }
+        continue;
+      }
+      if (char === "\"") {
+        inString = true;
+      } else if (char === "{") {
+        depth += 1;
+      } else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            const report = JSON.parse(text.slice(start, index + 1));
+            if (report && typeof report === "object" && !Array.isArray(report)) {
+              reports.push(report);
+            }
+          } catch {
+            // Keep scanning; CycloneDDS and MuJoCo logs can contain brace-like noise.
+          }
+          cursor = index + 1;
+          consumed = true;
+          break;
+        }
+      }
+    }
+    if (!consumed) {
+      break;
+    }
+  }
+  return reports;
 }
 
 function sdk2ProbeOfficialMujocoDds() {

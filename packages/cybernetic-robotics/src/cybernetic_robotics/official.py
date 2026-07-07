@@ -217,18 +217,30 @@ class OfficialG1Sim:
             min(self.timeout, 30),
         )
         state = _parse_json_report(inspect.stdout.strip()) if inspect.returncode == 0 else {}
-        ready_report = _parse_first_json_object(logs.stdout) if logs.returncode == 0 else None
+        reports = _parse_json_objects(logs.stdout) if logs.returncode == 0 else []
+        ready_report = next((report for report in reports if report.get("action") == "serve_official_mujoco"), None)
+        if ready_report is None and reports:
+            ready_report = reports[0]
+        exit_report = next(
+            (report for report in reversed(reports) if report.get("action") == "serve_official_mujoco_exit"),
+            None,
+        )
+        last_report = reports[-1] if reports else None
+        running = state.get("Running") is True
         return {
             "container": OFFICIAL_MUJOCO_SESSION_CONTAINER,
             "exists": inspect.returncode == 0,
-            "running": state.get("Running") is True,
+            "running": running,
             "status": state.get("Status"),
             "exit_code": state.get("ExitCode"),
             "started_at": state.get("StartedAt"),
             "finished_at": state.get("FinishedAt"),
             "inspect_error": None if inspect.returncode == 0 else inspect.stderr.strip(),
             "ready_report": ready_report,
-            "ready": isinstance(ready_report, dict) and ready_report.get("ok") is True,
+            "last_report": last_report,
+            "exit_report": exit_report,
+            "lifecycle_reports_seen": len(reports),
+            "ready": running and isinstance(ready_report, dict) and ready_report.get("ok") is True and exit_report is None,
             "logs_tail": logs.stdout if logs.returncode == 0 else None,
             "logs_error": None if logs.returncode == 0 else logs.stderr.strip(),
         }
@@ -505,6 +517,23 @@ def _parse_first_json_object(text: str) -> dict[str, Any] | None:
             continue
         return value if isinstance(value, dict) else None
     return None
+
+
+def _parse_json_objects(text: str) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    reports: list[dict[str, Any]] = []
+    index = text.find("{")
+    while index != -1:
+        try:
+            value, end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        if isinstance(value, dict):
+            reports.append(value)
+        next_index = text.find("{", index + max(end, 1))
+        index = next_index
+    return reports
 
 
 def _normalize_joint_deltas(joint_deltas: dict[str, float] | None) -> dict[str, float]:

@@ -281,6 +281,17 @@ Tasks:
   `unitree_probe_official_mujoco_loco_rpc` so agents can test whether the
   managed official Unitree MuJoCo peer actually serves G1 sport RPC topics
   before routing `LocoClient` there.
+- Done: tighten managed official MuJoCo session readiness reporting in both
+  Python and MCP. Status now reports `ready_report`, `last_report`,
+  `exit_report`, and `lifecycle_reports_seen`, and `ready=true` requires the
+  named container to still be running.
+- Current evidence: with the managed official session running on this machine,
+  `OfficialG1Sim.loco_rpc_session(timeout=1.0)` initializes the official
+  `LocoClient` request/response topics but `GetFsmId` returns `[3102, null]`
+  after about 1.1s while CycloneDDS reports loopback UDP write failures. Treat
+  official sport RPC as not proven; keep the normal `LocoClient` facade on the
+  explicit local compatibility route until the upstream peer is shown to answer
+  `rt/api/sport/request`.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

@@ -1270,6 +1270,57 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ACTION=serve_official_mujoco", start_command)
         self.assertTrue(any("rm -f unitree-g1-sdk2-session" in " ".join(call) for call in unchecked_calls))
 
+    def test_official_g1_sim_session_status_reports_exit_lifecycle(self):
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "inspect unitree-g1-sdk2-session" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "Running": False,
+                            "Status": "exited",
+                            "ExitCode": 1,
+                            "StartedAt": "2026-07-07T00:00:00Z",
+                            "FinishedAt": "2026-07-07T00:00:05Z",
+                        }
+                    ),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                ready = {
+                    "action": "serve_official_mujoco",
+                    "ok": True,
+                    "read_topics": ["rt/lowstate"],
+                    "write_topics": ["rt/lowcmd"],
+                }
+                exited = {
+                    "action": "serve_official_mujoco_exit",
+                    "ok": False,
+                    "returncode": 1,
+                }
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=f"noise before\n{json.dumps(ready)}\nCycloneDDS noisy line\n{json.dumps(exited)}\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="unexpected")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            official = OfficialG1Sim(Path(tmp), _unchecked_runner=fake_unchecked_runner)
+
+            status = official.session_status()
+
+        self.assertFalse(status["running"])
+        self.assertFalse(status["ready"])
+        self.assertEqual(status["status"], "exited")
+        self.assertEqual(status["ready_report"]["action"], "serve_official_mujoco")
+        self.assertEqual(status["exit_report"]["action"], "serve_official_mujoco_exit")
+        self.assertEqual(status["last_report"]["returncode"], 1)
+        self.assertEqual(status["lifecycle_reports_seen"], 2)
+
     def test_official_g1_sim_stop_session_removes_named_container(self):
         unchecked_calls = []
 

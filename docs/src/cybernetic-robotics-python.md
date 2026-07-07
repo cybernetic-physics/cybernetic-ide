@@ -157,7 +157,14 @@ manual control instead of the context manager, use `official.start_session()`,
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
-facade calls to official DDS routing. With
+facade calls to official DDS routing. Session status includes
+`ready_report`, `last_report`, `exit_report`, and
+`lifecycle_reports_seen`, so scripts and agents can distinguish a live ready
+peer from a peer that printed a startup report and later exited. Current live
+evidence is conservative: the official `LocoClient` initializes, but
+`GetFsmId` can return `[3102, null]` after the configured timeout while
+CycloneDDS reports loopback UDP write failures, so locomotion remains on the
+explicit local compatibility route until the sport RPC peer is proven. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
 
