@@ -683,7 +683,10 @@ The current repo has the first narrow version of that API boundary:
   LowCmd loop against the managed official MuJoCo DDS peer. It keeps the same
   lowstate precheck, hold-fill, clamp, and CRC behavior as the bounded one-shot
   command, but adds frame-rate, lease, and max-duration caps so agents can test
-  stream semantics without starting an unbounded control loop.
+  stream semantics without starting an unbounded control loop. The Python shim
+  exposes this as `ChannelPublisher.WriteStream(...)` for Cybernetic scripts
+  that want Unitree-shaped publisher code without paying one sidecar launch per
+  frame.
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
   `unitree_probe_rpc_bridge_client` / `unitree_verify_rpc_bridge` /
   `unitree_command_rpc_bridge` / `unitree_stop_rpc_bridge` turn that smoke into

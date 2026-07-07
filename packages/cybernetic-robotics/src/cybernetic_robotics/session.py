@@ -549,6 +549,89 @@ class UnitreeSession:
             "compatibility_fallback": False,
         }
 
+    def stream_lowcmd(
+        self,
+        topic: str,
+        motor_cmd: list[dict[str, Any]],
+        *,
+        mode_pr: int = 0,
+        mode_machine: int = 0,
+        crc: int = 0,
+        frames: int = 200,
+        hz: float = 100.0,
+        lease_seconds: float = 2.0,
+        max_duration_seconds: float = 5.0,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Publish a lease-limited lowcmd stream through the active provider."""
+
+        if topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
+            raise NotImplementedError(f"Cybernetic Unitree session streamer does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree lowcmd streaming is locked until the real-hardware provider and safety gates are implemented",
+                "next_step": "Implement reviewed real-mode lowcmd watchdogs and stop semantics before enabling physical command streaming.",
+            }
+
+        if self.config.transport == DDS and self.config.mode == SIM:
+            official = self._official(timeout=timeout)
+            response = official.lowcmd_stream_session(
+                motor_cmd=motor_cmd,
+                topic=topic,
+                mode_pr=int(mode_pr),
+                mode_machine=int(mode_machine),
+                crc=int(crc),
+                frames=int(frames),
+                hz=float(hz),
+                lease_seconds=float(lease_seconds),
+                max_duration_seconds=float(max_duration_seconds),
+                timeout_seconds=float(timeout or 6.0),
+            )
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "topic": topic,
+                "official_dds_supported": True,
+                "compatibility_fallback": False,
+                "streaming": True,
+            }
+
+        # Local HTTP has no real DDS stream loop. Preserve developer ergonomics
+        # by publishing a bounded sequence through the existing simulator path.
+        attempts = max(1, min(2000, int(frames)))
+        successes = 0
+        last_response: dict[str, Any] | None = None
+        for _ in range(attempts):
+            last_response = self.publish_lowcmd(
+                topic,
+                motor_cmd,
+                mode_pr=mode_pr,
+                mode_machine=mode_machine,
+                crc=crc,
+                timeout=timeout,
+            )
+            if last_response.get("ok"):
+                successes += 1
+        return {
+            "ok": successes == attempts,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "streaming": True,
+            "compatibility_fallback": False,
+            "lowcmd_write_attempts": attempts,
+            "lowcmd_write_successes": successes,
+            "effective_frames": attempts,
+            "stream_hz": float(hz),
+            "lease_seconds": float(lease_seconds),
+            "last_response": last_response,
+        }
+
     def publish_hand_sdk(
         self,
         topic: str,

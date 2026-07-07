@@ -475,9 +475,12 @@ arm SDK examples, including slot 29 as the arm-sdk enable slot; the
 `rt/user_lowcmd` path mirrors Unitree's user-control topic.
 `OfficialG1Sim.lowcmd_stream_session()` and MCP
 `unitree_stream_official_mujoco_lowcmd` now provide a simulator-only sustained
-stream with explicit frame-rate, lease, and max-duration caps. DDS-mode
-locomotion remains clearly marked as a local simulator compatibility fallback
-instead of being presented as official CycloneDDS control.
+stream with explicit frame-rate, lease, and max-duration caps. SDK-shaped code
+can use the Cybernetic extension `ChannelPublisher.WriteStream(...)` to run that
+stream as one lease-limited sidecar operation instead of looping over
+`Write(...)` and spawning one sidecar call per frame. DDS-mode locomotion
+remains clearly marked as a local simulator compatibility fallback instead of
+being presented as official CycloneDDS control.
 
 Run the full example:
 

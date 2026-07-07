@@ -434,8 +434,12 @@ Tasks:
   `OfficialG1Sim.lowcmd_stream_session()`, and MCP
   `unitree_stream_official_mujoco_lowcmd`. The stream has lowstate precheck,
   hold-fill, clamp, CRC recompute, frame-rate cap, lease cap, and max-duration
-  cap. Remaining: promote this into a long-lived provider with explicit
-  watchdog renewal, stop semantics, and behavior-level tests.
+  cap.
+- Done: add Cybernetic SDK-shaped `ChannelPublisher.WriteStream(...)` so
+  official-style Python scripts can opt into the lease-limited DDS stream
+  without looping over one sidecar call per frame. Remaining: promote this into
+  a long-lived provider with explicit watchdog renewal, stop semantics, and
+  behavior-level tests.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

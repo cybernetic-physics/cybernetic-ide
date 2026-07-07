@@ -78,6 +78,44 @@ class ChannelPublisher:
         self.last_response = response
         return bool(response.get("ok"))
 
+    def WriteStream(
+        self,
+        message,
+        *,
+        frames: int = 200,
+        hz: float = 100.0,
+        lease_seconds: float = 2.0,
+        max_duration_seconds: float = 5.0,
+        timeout: float | None = None,
+    ):
+        """Publish a bounded Cybernetic LowCmd stream.
+
+        Unitree's SDK exposes repeated `Write()` calls. Cybernetic adds this
+        explicit helper so DDS simulator users can run those frames inside one
+        lease-limited sidecar operation instead of spawning a sidecar per
+        Python loop iteration.
+        """
+
+        if not self.inited:
+            raise RuntimeError(f"ChannelPublisher {self.name} is not initialized")
+        if self.name not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
+            raise NotImplementedError(f"Cybernetic simulator channel streaming does not support {self.name}")
+        motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
+        response = _session_from_env(timeout or 5.0).stream_lowcmd(
+            self.name,
+            motor_cmd,
+            mode_pr=int(getattr(message, "mode_pr", 0)),
+            mode_machine=int(getattr(message, "mode_machine", 0)),
+            crc=int(getattr(message, "crc", 0)),
+            frames=frames,
+            hz=hz,
+            lease_seconds=lease_seconds,
+            max_duration_seconds=max_duration_seconds,
+            timeout=timeout or 5.0,
+        )
+        self.last_response = response
+        return bool(response.get("ok"))
+
     def Close(self):
         self.inited = False
 

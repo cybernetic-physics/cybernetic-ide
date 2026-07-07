@@ -391,7 +391,8 @@ ad hoc scripts first. The default tool surface includes:
 - managed official SDK2 lowcmd stream:
   `unitree_stream_official_mujoco_lowcmd`, which uses the same lowstate
   precheck and sanitization but publishes a lease-limited frame-rate-capped
-  stream to the managed official peer;
+  stream to the managed official peer. Python SDK-shaped code can reach the
+  same path with `ChannelPublisher.WriteStream(...)`;
 - official SDK2 RPC discovery: `unitree_probe_official_mujoco_rpc_discovery`,
   which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
   matched service-side DDS readers before an agent tries a request/response

@@ -1215,6 +1215,49 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
+    def test_unitree_channel_publisher_write_stream_uses_session_stream_lowcmd(self):
+        class FakeSession:
+            def __init__(self):
+                self.calls: list[dict[str, object]] = []
+                self.simulator = type("FakeSimulator", (), {"timeout": 0.0})()
+
+            def stream_lowcmd(self, topic, motor_cmd, **kwargs):
+                self.calls.append({"topic": topic, "motor_cmd": motor_cmd, **kwargs})
+                return {
+                    "ok": True,
+                    "provider": "official_mujoco_dds_simulator",
+                    "topic": topic,
+                    "lowcmd_write_attempts": kwargs["frames"],
+                    "lowcmd_write_successes": kwargs["frames"],
+                    "effective_frames": kwargs["frames"],
+                    "stream_hz": kwargs["hz"],
+                }
+
+        fake = FakeSession()
+        lowcmd = unitree_hg_msg_dds__LowCmd_()
+        lowcmd.mode_pr = 1
+        lowcmd.mode_machine = 5
+        lowcmd.crc = 12345
+        lowcmd.motor_cmd[0].mode = 1
+        lowcmd.motor_cmd[0].q = -0.2
+        lowcmd.motor_cmd[0].kp = 12.0
+        lowcmd.motor_cmd[0].kd = 0.5
+
+        with patch("unitree_sdk2py.core.channel.UnitreeSession.from_env", return_value=fake):
+            publisher = ChannelPublisher("rt/user_lowcmd", LowCmd_)
+            publisher.Init()
+            ok = publisher.WriteStream(lowcmd, frames=90, hz=45.0, lease_seconds=2.0, timeout=7.0)
+
+        self.assertTrue(ok)
+        self.assertEqual(publisher.last_response["provider"], "official_mujoco_dds_simulator")
+        self.assertEqual(fake.calls[0]["topic"], "rt/user_lowcmd")
+        self.assertEqual(fake.calls[0]["frames"], 90)
+        self.assertEqual(fake.calls[0]["hz"], 45.0)
+        self.assertEqual(fake.calls[0]["lease_seconds"], 2.0)
+        self.assertEqual(fake.calls[0]["timeout"], 7.0)
+        self.assertEqual(fake.calls[0]["mode_machine"], 5)
+        self.assertEqual(fake.calls[0]["motor_cmd"][0]["q"], -0.2)
+
     def test_unitree_style_hand_sdk_channel_records_open_close_intent(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
@@ -1346,6 +1389,50 @@ class RobotApiTests(unittest.TestCase):
         self.assertTrue(response["official_dds_supported"])
         self.assertEqual(official.calls[0]["topic"], "rt/arm_sdk")
         self.assertEqual(official.calls[0]["motor_cmd"][29]["q"], 1.0)
+
+    def test_unitree_session_routes_dds_lowcmd_stream_to_managed_official_session(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls: list[dict[str, object]] = []
+
+            def lowcmd_stream_session(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "topic": kwargs["topic"],
+                    "lowcmd_write_attempts": kwargs["frames"],
+                    "lowcmd_write_successes": kwargs["frames"],
+                    "effective_frames": kwargs["frames"],
+                    "stream_hz": kwargs["hz"],
+                    "lease_seconds": kwargs["lease_seconds"],
+                    "lowcmd_summary": {"motor_count": 35},
+                }
+
+        official = FakeOfficial()
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=official)
+        motor_cmd = [{"mode": 1, "q": -0.2, "kp": 12.0, "kd": 0.5}]
+
+        response = session.stream_lowcmd(
+            "rt/user_lowcmd",
+            motor_cmd,
+            mode_pr=1,
+            mode_machine=5,
+            crc=123,
+            frames=120,
+            hz=60.0,
+            lease_seconds=2.0,
+        )
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["provider"], "official_mujoco_dds_simulator")
+        self.assertTrue(response["official_dds_supported"])
+        self.assertTrue(response["streaming"])
+        self.assertEqual(response["lowcmd_write_successes"], 120)
+        self.assertEqual(official.calls[0]["topic"], "rt/user_lowcmd")
+        self.assertEqual(official.calls[0]["frames"], 120)
+        self.assertEqual(official.calls[0]["hz"], 60.0)
+        self.assertEqual(official.calls[0]["mode_machine"], 5)
 
     def test_unitree_lowstate_channel_can_read_official_dds_summary(self):
         class FakeOfficial:
