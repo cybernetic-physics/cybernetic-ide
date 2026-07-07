@@ -66,6 +66,7 @@ API and the Unitree SDK-shaped shim:
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
 python3 examples/g1_official_raise_hand.py
+python3 examples/g1_official_managed_session.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_wave_hand_sdk.py
 python3 examples/g1_walk_square_loco.py
@@ -123,9 +124,30 @@ revisions, and the official MuJoCo peer plan. `raise_right_hand()` and
 `cyber-g1 official raise-hand` launch the official peer, publish a bounded
 multi-joint HG `LowCmd_` pose over `rt/lowcmd`, and verify moved joints through
 official `rt/lowstate`. These calls are simulator-only and short-lived by
-design. If the MCP has started the managed `unitree-g1-sdk2-session`,
-`official.raise_right_hand_session()` sends the same bounded pose to that
-already-running peer instead of launching another one. With
+design.
+
+For the long-running official simulator peer, Python can now manage the same
+named session as the Agent-panel MCP:
+
+```python
+official = OfficialG1Sim.discover()
+official.start_session()
+print(official.lowstate_session()["lowstate_summary"])
+print(official.raise_right_hand_session()["moved_joints"])
+official.stop_session()
+```
+
+The matching CLI flow is:
+
+```sh
+cyber-g1 official start-session
+cyber-g1 official lowstate-session
+cyber-g1 official raise-hand --session
+cyber-g1 official stop-session
+```
+
+`examples/g1_official_managed_session.py` wraps that whole lifecycle and leaves
+the session running only when `--keep-running` is passed. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
 

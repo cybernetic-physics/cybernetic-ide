@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Drive the official Unitree MuJoCo G1 peer as a managed DDS session.
+
+This is the Python package version of the Agent-panel MCP lifecycle:
+
+1. Start the named `unitree-g1-sdk2-session` Docker container.
+2. Read one official SDK2/CycloneDDS `rt/lowstate` sample.
+3. Send a bounded G1 arm pose through official `rt/lowcmd`.
+4. Read another `rt/lowstate` sample from the same sustained peer.
+
+The example is simulator-only. It uses Unitree's official MuJoCo peer and SDK2
+topics, but it does not target physical hardware.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+
+from cybernetic_robotics import OfficialG1Sim
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--preset", choices=["raise_right_hand", "raise_left_hand"], default="raise_right_hand")
+    parser.add_argument("--frames", type=int, default=180)
+    parser.add_argument("--keep-running", action="store_true")
+    args = parser.parse_args()
+
+    official = OfficialG1Sim.discover()
+    started = official.start_session()
+    before = official.lowstate_session() if started["ok"] else {"ok": False}
+    command = official.arm_pose_session(args.preset, frames=args.frames) if started["ok"] else {"ok": False}
+    after = official.lowstate_session() if started["ok"] else {"ok": False}
+    stopped = None if args.keep_running else official.stop_session()
+
+    report = {
+        "ok": bool(started["ok"] and before["ok"] and command["ok"] and after["ok"]),
+        "session_ready": started["status"].get("ready"),
+        "preset": args.preset,
+        "before": before.get("lowstate_summary"),
+        "moved_joints": command.get("moved_joints", []),
+        "lowcmd_write_successes": command.get("lowcmd_write_successes"),
+        "after": after.get("lowstate_summary"),
+        "kept_running": args.keep_running,
+        "stopped": stopped,
+    }
+    print(json.dumps(report, indent=2, default=str))
+    return 0 if report["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

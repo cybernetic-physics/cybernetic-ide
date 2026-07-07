@@ -102,7 +102,12 @@ Or from the CLI:
 ```sh
 cyber-g1 official status
 cyber-g1 official raise-hand
+cyber-g1 official start-session
+cyber-g1 official lowstate-session
+cyber-g1 official raise-hand --session
+cyber-g1 official stop-session
 python3 examples/g1_official_raise_hand.py
+python3 examples/g1_official_managed_session.py
 ```
 
 `official status` is read-only: it checks the sidecar setup, SDK2 imports,
@@ -111,9 +116,12 @@ official MuJoCo peer plan. `official raise-hand` launches the official
 `unitree_mujoco` G1 peer in the sidecar, publishes a bounded multi-joint HG
 `LowCmd_` pose over `rt/lowcmd`, and verifies moved joints through official
 `rt/lowstate`. Both are deliberately short-lived and simulator-only.
-After the MCP starts the managed `unitree-g1-sdk2-session`,
-`official.raise_right_hand_session()` sends the same pose to that already
-running official peer instead of launching another one.
+For sustained simulator sessions, `official.start_session()` starts the same
+managed `unitree-g1-sdk2-session` container used by the MCP, `session_status()`
+parses the ready report from Docker logs, `lowstate_session()` reads one
+official `rt/lowstate` sample, and `raise_right_hand_session()` sends a bounded
+pose to that already-running peer instead of launching another one. Use
+`official.stop_session()` when the session should be removed.
 
 ## Unitree SDK2-Shaped API
 

@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import subprocess
+import time
 from typing import Any, Callable
 
 from .config import find_robotics_root
 
 
 ARM_POSE_PRESETS = {"raise_right_hand", "raise_left_hand"}
+OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session"
 ARM_JOINTS = {
     "left_shoulder_pitch",
     "left_shoulder_roll",
@@ -42,6 +44,18 @@ def _subprocess_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.C
     )
 
 
+def _subprocess_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=timeout,
+        check=False,
+    )
+
+
 @dataclass
 class OfficialG1Sim:
     """Opt-in bridge to the official Unitree MuJoCo + SDK2/CycloneDDS sidecar.
@@ -55,6 +69,7 @@ class OfficialG1Sim:
     root: Path
     timeout: int = 300
     _runner: Runner = field(default=_subprocess_runner, repr=False)
+    _unchecked_runner: Runner = field(default=_subprocess_unchecked_runner, repr=False)
 
     @classmethod
     def discover(cls, start: str | Path | None = None, *, timeout: int = 300) -> "OfficialG1Sim":
@@ -96,6 +111,115 @@ class OfficialG1Sim:
             "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
             "stdout_tail": completed.stdout[-12000:],
             "stderr_tail": completed.stderr[-12000:],
+        }
+
+    def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
+        """Start the managed official Unitree MuJoCo DDS peer session.
+
+        The session is the same named Docker container used by the robotics MCP:
+        `unitree-g1-sdk2-session`. Once ready, `lowstate_session()` and
+        `arm_pose_session()` connect SDK2 Python clients to this sustained peer
+        instead of launching a second short-lived simulator.
+        """
+
+        if not self.compose_env.exists():
+            raise FileNotFoundError(
+                f"missing {self.compose_env}; run `node script/prepare-unitree-g1-sdk2-sidecar.mjs` first"
+            )
+        removed = self._unchecked_runner(
+            ["docker", "rm", "-f", OFFICIAL_MUJOCO_SESSION_CONTAINER],
+            self.root,
+            min(self.timeout, 60),
+        )
+        env = {"CYBER_UNITREE_ACTION": "serve_official_mujoco"}
+        args = [
+            "docker",
+            "compose",
+            "--env-file",
+            str(self.compose_env),
+            "-f",
+            str(self.compose_file),
+            "run",
+            "-d",
+            "--name",
+            OFFICIAL_MUJOCO_SESSION_CONTAINER,
+        ]
+        for name, value in env.items():
+            args.extend(["-e", f"{name}={value}"])
+        args.append("unitree-g1-sdk2-sidecar")
+        started = self._runner(args, self.root, self.timeout)
+        status = self.wait_for_session_ready(wait_timeout) if wait else self.session_status()
+        return {
+            "ok": bool(status.get("running") and status.get("ready")),
+            "container": OFFICIAL_MUJOCO_SESSION_CONTAINER,
+            "command": " ".join(args),
+            "removed_existing": {
+                "attempted": True,
+                "status": removed.returncode,
+                "stdout": removed.stdout,
+                "stderr": removed.stderr,
+            },
+            "started": {
+                "returncode": started.returncode,
+                "stdout": started.stdout,
+                "stderr": started.stderr,
+            },
+            "status": status,
+        }
+
+    def wait_for_session_ready(self, timeout_seconds: float = 12.0) -> dict[str, Any]:
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        status = self.session_status()
+        while status.get("running") and not status.get("ready") and time.monotonic() < deadline:
+            time.sleep(0.5)
+            status = self.session_status()
+        return status
+
+    def session_status(self, *, log_tail: int = 120) -> dict[str, Any]:
+        """Inspect the managed official MuJoCo session container."""
+
+        inspect = self._unchecked_runner(
+            ["docker", "inspect", OFFICIAL_MUJOCO_SESSION_CONTAINER, "--format", "{{json .State}}"],
+            self.root,
+            min(self.timeout, 30),
+        )
+        logs = self._unchecked_runner(
+            ["docker", "logs", "--tail", str(_clamp_int(log_tail, 1, 1000)), OFFICIAL_MUJOCO_SESSION_CONTAINER],
+            self.root,
+            min(self.timeout, 30),
+        )
+        state = _parse_json_report(inspect.stdout.strip()) if inspect.returncode == 0 else {}
+        ready_report = _parse_first_json_object(logs.stdout) if logs.returncode == 0 else None
+        return {
+            "container": OFFICIAL_MUJOCO_SESSION_CONTAINER,
+            "exists": inspect.returncode == 0,
+            "running": state.get("Running") is True,
+            "status": state.get("Status"),
+            "exit_code": state.get("ExitCode"),
+            "started_at": state.get("StartedAt"),
+            "finished_at": state.get("FinishedAt"),
+            "inspect_error": None if inspect.returncode == 0 else inspect.stderr.strip(),
+            "ready_report": ready_report,
+            "ready": isinstance(ready_report, dict) and ready_report.get("ok") is True,
+            "logs_tail": logs.stdout if logs.returncode == 0 else None,
+            "logs_error": None if logs.returncode == 0 else logs.stderr.strip(),
+        }
+
+    def stop_session(self) -> dict[str, Any]:
+        """Stop and remove the managed official Unitree MuJoCo DDS peer."""
+
+        result = self._unchecked_runner(
+            ["docker", "rm", "-f", OFFICIAL_MUJOCO_SESSION_CONTAINER],
+            self.root,
+            min(self.timeout, 60),
+        )
+        return {
+            "ok": result.returncode == 0,
+            "container": OFFICIAL_MUJOCO_SESSION_CONTAINER,
+            "removed": result.returncode == 0,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "status": self.session_status(),
         }
 
     def status(self) -> dict[str, Any]:
@@ -257,6 +381,19 @@ def _parse_json_report(stdout: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _parse_first_json_object(text: str) -> dict[str, Any] | None:
+    decoder = json.JSONDecoder()
+    index = text.find("{")
+    while index != -1:
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        return value if isinstance(value, dict) else None
+    return None
 
 
 def _normalize_joint_deltas(joint_deltas: dict[str, float] | None) -> dict[str, float]:

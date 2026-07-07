@@ -252,10 +252,22 @@ print(official.raise_right_hand()["moved_joints"])
 ```
 
 `OfficialG1Sim.raise_right_hand()` still runs the short-lived sidecar probe.
-`OfficialG1Sim.raise_right_hand_session()` targets the managed
-`unitree-g1-sdk2-session` container after the MCP starts it, so Python code can
-command the already-running official peer over SDK2/CycloneDDS without spawning
-a second MuJoCo process.
+For sustained sessions, `OfficialG1Sim.start_session()` starts the managed
+`unitree-g1-sdk2-session` container, `session_status()` reads the Docker
+inspect/log readiness state, `lowstate_session()` reads one official
+`rt/lowstate` sample from the live peer, and
+`raise_right_hand_session()` / `arm_pose_session()` command that already-running
+official peer over SDK2/CycloneDDS without spawning a second MuJoCo process.
+`OfficialG1Sim.stop_session()` removes the peer when the workflow is done.
+
+```sh
+cyber-g1 official start-session
+cyber-g1 official session-status
+cyber-g1 official lowstate-session
+cyber-g1 official pose raise_right_hand --session
+cyber-g1 official stop-session
+python3 examples/g1_official_managed_session.py
+```
 
 The MCP server now also exposes the first managed official peer lifecycle:
 `unitree_start_official_mujoco_session`,
@@ -508,6 +520,10 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_official_raise_hand.py` uses `OfficialG1Sim.raise_right_hand()`
   to run the official sidecar peer and verify the bounded multi-joint hand
   raise through real SDK2/CycloneDDS `rt/lowcmd` and `rt/lowstate`.
+- `examples/g1_official_managed_session.py` starts the named official MuJoCo
+  session, reads official `rt/lowstate`, commands an arm pose through the
+  sustained `rt/lowcmd` peer, reads lowstate again, and stops the session unless
+  `--keep-running` is passed.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,

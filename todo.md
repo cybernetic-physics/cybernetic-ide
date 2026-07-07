@@ -223,6 +223,11 @@ Tasks:
   `OfficialG1Sim.lowstate_session()`, and MCP
   `unitree_read_official_mujoco_lowstate` so agents can read official
   `rt/lowstate` telemetry from the sustained managed DDS peer.
+- Done: add Python-native managed official session lifecycle through
+  `OfficialG1Sim.start_session()`, `session_status()`, `stop_session()`, CLI
+  `cyber-g1 official start-session/session-status/lowstate-session/stop-session`,
+  and `examples/g1_official_managed_session.py`, so SDK users can start the
+  same sustained official MuJoCo DDS peer that MCP agents control.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose

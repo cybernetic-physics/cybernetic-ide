@@ -61,10 +61,16 @@ def main(argv: list[str] | None = None) -> int:
     official = subcommands.add_parser("official")
     official_subcommands = official.add_subparsers(dest="official_command", required=True)
     official_subcommands.add_parser("status")
+    official_subcommands.add_parser("start-session")
+    official_subcommands.add_parser("session-status")
+    official_subcommands.add_parser("stop-session")
+    official_subcommands.add_parser("lowstate-session")
     official_raise = official_subcommands.add_parser("raise-hand")
+    official_raise.add_argument("--session", action="store_true")
     _add_official_pose_options(official_raise)
     official_pose = official_subcommands.add_parser("pose")
     official_pose.add_argument("preset", choices=["raise_right_hand", "raise_left_hand"])
+    official_pose.add_argument("--session", action="store_true")
     _add_official_pose_options(official_pose)
 
     args = parser.parse_args(argv)
@@ -146,6 +152,14 @@ def _official_command(args: argparse.Namespace) -> int:
     official = OfficialG1Sim.discover()
     if args.official_command == "status":
         return _print(official.status())
+    if args.official_command == "start-session":
+        return _print(official.start_session())
+    if args.official_command == "session-status":
+        return _print(official.session_status())
+    if args.official_command == "stop-session":
+        return _print(official.stop_session())
+    if args.official_command == "lowstate-session":
+        return _print(official.lowstate_session())
     options = {
         "frames": args.frames,
         "kp": args.kp,
@@ -155,8 +169,12 @@ def _official_command(args: argparse.Namespace) -> int:
         "min_moved_joints": args.min_moved_joints,
     }
     if args.official_command == "raise-hand":
+        if args.session:
+            return _print(official.raise_right_hand_session(**options))
         return _print(official.raise_right_hand(**options))
     if args.official_command == "pose":
+        if args.session:
+            return _print(official.arm_pose_session(args.preset, **options))
         return _print(official.arm_pose(args.preset, **options))
     raise AssertionError(args.official_command)
 

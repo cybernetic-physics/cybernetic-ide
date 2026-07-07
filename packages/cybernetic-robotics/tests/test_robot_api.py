@@ -1017,6 +1017,89 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(status["expected_topics"], ["rt/lowcmd", "rt/lowstate"])
         self.assertTrue(status["official_mujoco_peer"]["binary_exists"])
 
+    def test_official_g1_sim_manages_named_session_lifecycle(self):
+        checked_calls = []
+        unchecked_calls = []
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            checked_calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="container-id\n", stderr="")
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            unchecked_calls.append(args)
+            command = " ".join(args)
+            if "inspect unitree-g1-sdk2-session" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "Running": True,
+                            "Status": "running",
+                            "ExitCode": 0,
+                            "StartedAt": "2026-07-07T00:00:00Z",
+                            "FinishedAt": "0001-01-01T00:00:00Z",
+                        }
+                    ),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "action": "serve_official_mujoco",
+                            "ok": True,
+                            "peer_started": True,
+                            "read_topics": ["rt/lowstate"],
+                            "write_topics": ["rt/lowcmd"],
+                        }
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="removed\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=123, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            started = official.start_session(wait=False)
+            status = official.session_status()
+
+        self.assertTrue(started["ok"])
+        self.assertEqual(started["container"], "unitree-g1-sdk2-session")
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["ready_report"]["read_topics"], ["rt/lowstate"])
+        start_command = " ".join(checked_calls[0])
+        self.assertIn("run -d --name unitree-g1-sdk2-session", start_command)
+        self.assertIn("CYBER_UNITREE_ACTION=serve_official_mujoco", start_command)
+        self.assertTrue(any("rm -f unitree-g1-sdk2-session" in " ".join(call) for call in unchecked_calls))
+
+    def test_official_g1_sim_stop_session_removes_named_container(self):
+        unchecked_calls = []
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            unchecked_calls.append(args)
+            if args[:2] == ["docker", "rm"]:
+                return subprocess.CompletedProcess(args, 0, stdout="unitree-g1-sdk2-session\n", stderr="")
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="No such container")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            official = OfficialG1Sim(Path(tmp), _unchecked_runner=fake_unchecked_runner)
+
+            stopped = official.stop_session()
+
+        self.assertTrue(stopped["ok"])
+        self.assertTrue(stopped["removed"])
+        self.assertFalse(stopped["status"]["exists"])
+        self.assertIn("unitree-g1-sdk2-session", stopped["stdout"])
+        self.assertEqual(unchecked_calls[0], ["docker", "rm", "-f", "unitree-g1-sdk2-session"])
+
     def test_official_g1_sim_can_command_managed_session(self):
         captured = {}
 
