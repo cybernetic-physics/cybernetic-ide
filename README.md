@@ -309,7 +309,8 @@ ad hoc scripts first. The default tool surface includes:
   when a deploy bundle is mounted into the simulator;
 - session diagnostics: `unitree_session_status`, which reports the selected
   Unitree transport, sim/real mode, DDS domain/interface, simulator
-  reachability, and topic freshness;
+  reachability, topic freshness, and official sidecar readiness when
+  `CYBER_UNITREE_TRANSPORT=dds` is selected in simulator mode;
 - official SDK2 sidecar prep: `unitree_prepare_sdk2_sidecar` and
   `unitree_sdk2_sidecar_status`, which fetch pinned official Unitree sources,
   run the opt-in diagnostic container, initialize CycloneDDS, and create
@@ -360,8 +361,9 @@ Useful environment variables:
   `cyber/unitree-g1-mujoco-protocol:0.1.0`.
 - `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
   `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
-- `CYBER_UNITREE_TRANSPORT`: `local_http` today, `dds` for planned official
-  SDK2/CycloneDDS diagnostics.
+- `CYBER_UNITREE_TRANSPORT`: `local_http` for the lightweight viewer harness,
+  or `dds` in simulator mode to have Python and MCP diagnostics run the
+  official SDK2/CycloneDDS sidecar status probe.
 - `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
 - `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
 - `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be

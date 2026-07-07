@@ -499,9 +499,10 @@ The current repo has the first narrow version of that API boundary:
   `unitree_session_status` MCP tool expose the current transport boundary:
   `local_http` versus planned `dds`, sim/real mode, DDS domain/interface,
   simulator reachability, and topic freshness. With
-  `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, Python diagnostics now also
-  call the official sidecar status probe and report SDK2 import, CycloneDDS
-  domain, channel creation, and official MuJoCo peer readiness.
+  `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both Python diagnostics and
+  the MCP tool now call the official sidecar status probe and report SDK2
+  import, CycloneDDS domain, channel creation, and official MuJoCo peer
+  readiness.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

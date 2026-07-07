@@ -946,11 +946,26 @@ async function unitreeSessionStatus() {
     },
     warnings,
     simulator: null,
+    official_sidecar: null,
     topics: {},
   };
 
-  if (transport === "dds") {
-    warnings.push("dds transport is selected but Cybernetic IDE currently runs the local_http simulator shim");
+  let officialStatus = null;
+  if (transport === "dds" && mode === "sim") {
+    try {
+      officialStatus = sdk2SidecarStatus();
+      result.official_sidecar = summarizeOfficialSidecarStatus(officialStatus.report);
+      if (result.official_sidecar.ok) {
+        result.implemented = true;
+      } else {
+        warnings.push("official SDK2 sidecar status did not pass");
+      }
+    } catch (error) {
+      warnings.push(`official SDK2 sidecar unavailable: ${error.message}`);
+      result.official_sidecar = { ok: false, error: error.message };
+    }
+  } else if (transport === "dds") {
+    warnings.push("dds transport is selected outside simulator mode; real hardware control still requires a long-lived official provider");
   }
   if (mode === "real") {
     if (!networkInterface) warnings.push("real mode requires CYBER_UNITREE_NETWORK_INTERFACE");
@@ -979,7 +994,9 @@ async function unitreeSessionStatus() {
       message_count: lowcmd.motor_cmd_count ?? null,
     };
   } catch (error) {
-    result.ok = false;
+    if (transport !== "dds") {
+      result.ok = false;
+    }
     result.simulator = { reachable: false, error: error.message };
   }
 
@@ -1000,8 +1017,52 @@ async function unitreeSessionStatus() {
     result.topics["rt/lowstate"] = { available: false, error: error.message };
   }
 
+  if (officialStatus?.report?.sdk2_probe && typeof officialStatus.report.sdk2_probe === "object") {
+    const channels = officialStatus.report.sdk2_probe.channels && typeof officialStatus.report.sdk2_probe.channels === "object"
+      ? officialStatus.report.sdk2_probe.channels
+      : {};
+    const lowcmd = channels["rt/lowcmd"];
+    if (lowcmd && typeof lowcmd === "object") {
+      result.topics["rt/lowcmd"] = {
+        ...(result.topics["rt/lowcmd"] || {}),
+        source: "official_sdk2_sidecar",
+        created: lowcmd.created === true,
+        role: lowcmd.role || null,
+        sample_motor_count: lowcmd.sample_motor_count ?? null,
+      };
+    }
+    const lowstate = channels["rt/lowstate"];
+    if (lowstate && typeof lowstate === "object") {
+      result.topics["rt/lowstate"] = {
+        ...(result.topics["rt/lowstate"] || {}),
+        source: "official_sdk2_sidecar",
+        created: lowstate.created === true,
+        role: lowstate.role || null,
+      };
+    }
+  }
+
   result.ok = Boolean(result.ok && !warnings.some((warning) => warning.includes("requires")));
   return result;
+}
+
+function summarizeOfficialSidecarStatus(report) {
+  const sdk2Probe = report?.sdk2_probe && typeof report.sdk2_probe === "object" ? report.sdk2_probe : {};
+  const peer = report?.official_mujoco_peer && typeof report.official_mujoco_peer === "object" ? report.official_mujoco_peer : {};
+  const channels = sdk2Probe.channels && typeof sdk2Probe.channels === "object" ? sdk2Probe.channels : {};
+  return {
+    ok: sdk2Probe.domain_initialized === true,
+    source: "official_unitree_mujoco_sdk2_sidecar",
+    domain_initialized: sdk2Probe.domain_initialized === true,
+    dds_domain_id: sdk2Probe.domain ?? null,
+    network_interface: sdk2Probe.network_interface ?? null,
+    lowcmd_channel_created: channels["rt/lowcmd"]?.created === true,
+    lowstate_channel_created: channels["rt/lowstate"]?.created === true,
+    official_mujoco_binary_exists: peer.binary_exists === true,
+    official_mujoco_scene_exists: peer.scene_exists === true,
+    expected_topics: Array.isArray(report?.expected_topics) ? report.expected_topics : [],
+    next_step: report?.next_step ?? null,
+  };
 }
 
 async function repeatStep(count) {
