@@ -212,6 +212,45 @@ Tooling written for this loop (all under `packages/g1-yoga-rl/scripts/`):
   from `/status` policy frames, snapshots each hold, tallies falls per pose
   window.
 
+### 7. run2 final + the sim2sim transfer failure (the day's big lesson)
+
+run2 finished cleanly (10 chunks, monotonic improvement, final tail return 729
+/ episode length 767 of 1000). In the training env the exported policy held
+**6/9 poses** (mountain, salute, fold, chair, warrior_one, goddess) — double
+the PD baseline. But in the 29-DOF deploy sim it scored **0/9**, despite obs
+matched to machine precision.
+
+Diagnosis: pure dynamics gap. Foot geometry is actually identical (both
+models use 4 contact spheres per foot, same friction/solref), and matching
+the MJX solver settings (iterations 2/4, EULERDAMP off vs 100/50) helped only
+marginally. The residual is structural — the 23-DOF model welds the wrist
+chain and lumps its mass, waist roll/pitch are absent vs PD-held, torso mass
+differs 0.24 kg, total mass 34.1 vs 35.1 kg. The weak smoke policy transferred
+fine (survival ticks matched 34–79 vs 34–87), but the trained policy
+overfits precise closed-loop dynamics — a ~3% model mismatch was enough to
+destroy it. Lesson recorded: **smoke-policy sim2sim parity does NOT certify
+transfer; only a trained policy exposes the gap.**
+
+### 8. Pivot: train on the deploy model itself (29-DOF spec)
+
+Implemented the handoff's alternative path (`spec=` argument):
+`g1_yoga_rl/cyber_env.py` builds the training env from OUR
+`scene_29dof.xml` — mimic sites injected (site table lifted from the 23-DOF
+model, hand sites remapped), foot contact spheres named, free joint renamed
+"root", obs/actuation specs generated from the model (obs 474, action 29);
+the env's own `_modify_spec_for_mjx` applies the same foot-only contact
+reduction used before. The whole pipeline (trajectory regen, export, pack
+with dynamic goal dims, validate, sim2sim) was re-pointed and re-verified:
+
+- obs parity 29-DOF deploy vs training truth: still machine precision
+- **transfer parity gate with a smoke policy: in-env eval vs sim2sim now
+  agree within 2–3 ticks on every pose** — training and deploy dynamics are
+  the same by construction
+- sim policy mode now applies `reduce_robot_contacts` at model load (bundle
+  present) and toggles the training solver options around policy mode
+
+run3 (20M steps, 10 chunks, lr 1e-4, 29-DOF) is training now.
+
 ## Current state of the working tree (uncommitted)
 
 - `.venv-rl/` — Python 3.12 venv with editable loco-mujoco (untracked, not to

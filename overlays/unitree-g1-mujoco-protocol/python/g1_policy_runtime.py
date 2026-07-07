@@ -224,13 +224,16 @@ class YogaPolicyController:
             self.policy_actuators.append(actuator)
         self.policy_actuators = np.array(self.policy_actuators)
         self.held_actuators = np.array(
-            [i for i in range(model.nu) if i not in set(self.policy_actuators.tolist())]
+            [i for i in range(model.nu) if i not in set(self.policy_actuators.tolist())],
+            dtype=int,
         )
         self.held_qpos_adr = np.array(
-            [int(model.jnt_qposadr[model.actuator_trnid[i, 0]]) for i in self.held_actuators]
+            [int(model.jnt_qposadr[model.actuator_trnid[i, 0]]) for i in self.held_actuators],
+            dtype=int,
         )
         self.held_dof_adr = np.array(
-            [int(model.jnt_dofadr[model.actuator_trnid[i, 0]]) for i in self.held_actuators]
+            [int(model.jnt_dofadr[model.actuator_trnid[i, 0]]) for i in self.held_actuators],
+            dtype=int,
         )
 
         # 23-dof reference qpos/qvel -> 29-dof state maps (for teleport resets)
@@ -308,7 +311,9 @@ class YogaPolicyController:
         self.frame = (self.frame + 1) % self.n_frames
 
     def hold_extra_actuators(self, data, kp=90.0, kd=3.0):
-        """Gravity-compensated PD to zero for the 29-DOF-only actuators."""
+        """Gravity-compensated PD to zero for any actuators the policy does not drive."""
+        if len(self.held_actuators) == 0:
+            return
         q = data.qpos[self.held_qpos_adr]
         qd = data.qvel[self.held_dof_adr]
         bias = data.qfrc_bias[self.held_dof_adr]

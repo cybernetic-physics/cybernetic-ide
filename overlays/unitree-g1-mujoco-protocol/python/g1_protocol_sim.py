@@ -396,6 +396,10 @@ class G1MujocoState:
             policy_bundle = dict(np.load(self.policy_bundle_path, allow_pickle=True))
             model_spec = mujoco.MjSpec.from_file(str(self.model_path))
             g1_policy_runtime.inject_mimic_sites(model_spec, policy_bundle)
+            # match the training contact model (foot<->floor pairs only);
+            # robot self- and object-collisions are disabled so the policy
+            # feels the same dynamics it was trained on
+            g1_policy_runtime.reduce_robot_contacts(model_spec)
             self.model = model_spec.compile()
         else:
             self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
@@ -764,6 +768,12 @@ class G1MujocoState:
                 }
             start_frame = int(payload.get("frame", 0))
             self.model.opt.timestep = self.policy_physics_dt
+            self.saved_solver_options = (
+                int(self.model.opt.iterations),
+                int(self.model.opt.ls_iterations),
+                int(self.model.opt.disableflags),
+            )
+            g1_policy_runtime.apply_training_solver_options(self.model)
             self.policy_controller.reset_to_frame(self.data, start_frame)
             self.policy_substep_counter = 0
             self.policy_state.update(
@@ -788,6 +798,9 @@ class G1MujocoState:
 
     def stop_yoga_policy_locked(self):
         self.model.opt.timestep = self.default_timestep
+        saved = getattr(self, "saved_solver_options", None)
+        if saved is not None:
+            self.model.opt.iterations, self.model.opt.ls_iterations, self.model.opt.disableflags = saved
         self.control_mode = None
         self.active_pose = None
         self.data.ctrl[:] = 0.0
@@ -1281,6 +1294,21 @@ class G1MujocoState:
             )
             return self._camera_payload_locked()
 
+    def set_camera(self, camera):
+        with self.camera_lock:
+            if "lookat" in camera:
+                lookat = camera["lookat"]
+                if not isinstance(lookat, list) or len(lookat) != 3:
+                    raise ValueError("camera.lookat must be a 3-element list")
+                self.desired_camera["lookat"] = [float(value) for value in lookat]
+            if "distance" in camera:
+                self.desired_camera["distance"] = clamp(float(camera["distance"]), 0.45, 12.0)
+            if "azimuth" in camera:
+                self.desired_camera["azimuth"] = float(camera["azimuth"]) % 360.0
+            if "elevation" in camera:
+                self.desired_camera["elevation"] = clamp(float(camera["elevation"]), -89.0, 20.0)
+            return self._camera_payload_locked()
+
     def advance_for_wall_time(self):
         with self.lock:
             now = time.monotonic()
@@ -1618,6 +1646,12 @@ class G1MujocoState:
             return {"ok": True, "camera": camera}
         if action == "zoom":
             camera = self.zoom_camera(command.get("delta", 0.0))
+            return {"ok": True, "camera": camera}
+        if action == "set":
+            try:
+                camera = self.set_camera(command)
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
             return {"ok": True, "camera": camera}
         return {"ok": False, "error": f"unsupported camera action: {action}"}
 
