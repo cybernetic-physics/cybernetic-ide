@@ -41,28 +41,6 @@ FULL_FLOW = [
 ]
 STABLE_FLOW = ["mountain", "upward_salute", "namaste"]
 
-# Training-side reference adjustments for poses that don't survive projection
-# onto the 23-DOF joint set. forward_fold relies on waist_pitch (absent here):
-# with an upright base, hip flexion 1.4 grounds as a seated pose that only-feet
-# contacts can never support. Instead the base itself pitches forward while the
-# hips flex to keep the legs vertical and the ankles keep the feet flat
-# (foot pitch ~= base_pitch - hip_pitch + knee + ankle).
-POSE_OVERRIDES = {
-    "forward_fold": {
-        "base_pitch": 1.15,
-        "joints": {
-            "left_hip_pitch_joint": 1.3,
-            "right_hip_pitch_joint": 1.3,
-            "left_knee_joint": 0.25,
-            "right_knee_joint": 0.25,
-            "left_ankle_pitch_joint": -0.10,
-            "right_ankle_pitch_joint": -0.10,
-            "left_shoulder_pitch_joint": 0.25,
-            "right_shoulder_pitch_joint": 0.25,
-        },
-    },
-}
-
 
 def load_named_poses(sim_script: Path = SIM_SCRIPT) -> dict:
     """Parse NAMED_POSES out of the sim script without importing it.
@@ -95,19 +73,34 @@ def smoothstep(fraction: np.ndarray) -> np.ndarray:
 def project_pose(model, base_qpos: np.ndarray, name: str, targets: dict) -> PoseProjection:
     """Set the pose's joint angles on a copy of base_qpos, clamped to jnt_range.
 
-    Joints missing from the training model (waist pitch/roll, wrist pitch/yaw)
-    are recorded as skipped rather than raising.
+    Handles the registry's "base_pitch" pseudo-key (forward pitch of the
+    floating base). When the model lacks waist_pitch_joint (the 23-DOF training
+    model), its value is folded into the base pitch, with the hip pitch joints
+    reduced to match: the thigh's world pitch is base_pitch + hip_pitch (the
+    joint measures thigh-vs-pelvis), so subtracting the folded-in pitch keeps
+    the legs' world orientation identical and only the torso ends up pitched —
+    the same shape waist_pitch produces on the 29-DOF robot.
+
+    Other joints missing from the training model (waist roll/yaw, wrist
+    pitch/yaw) are recorded as skipped.
     """
     qpos = base_qpos.copy()
     skipped = []
-    override = POSE_OVERRIDES.get(name)
-    if override is not None:
-        targets = {**targets, **override["joints"]}
-        base_pitch = override.get("base_pitch", 0.0)
-        if base_pitch:
-            quat_adr = int(model.jnt_qposadr[0]) + 3
-            half = 0.5 * base_pitch
-            qpos[quat_adr:quat_adr + 4] = [np.cos(half), 0.0, np.sin(half), 0.0]
+    targets = dict(targets)
+    base_pitch = float(targets.pop("base_pitch", 0.0))
+
+    waist_pitch = targets.get("waist_pitch_joint")
+    if waist_pitch is not None and mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "waist_pitch_joint") < 0:
+        del targets["waist_pitch_joint"]
+        base_pitch += float(waist_pitch)
+        for hip in ("left_hip_pitch_joint", "right_hip_pitch_joint"):
+            targets[hip] = targets.get(hip, 0.0) - float(waist_pitch)
+
+    if base_pitch:
+        quat_adr = int(model.jnt_qposadr[0]) + 3
+        half = 0.5 * base_pitch
+        qpos[quat_adr:quat_adr + 4] = [np.cos(half), 0.0, np.sin(half), 0.0]
+
     for joint_name, value in targets.items():
         joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if joint_id < 0:

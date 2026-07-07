@@ -55,38 +55,75 @@ NAMED_POSES = {
         "right_shoulder_roll_joint": -0.12,
         "right_elbow_joint": 0.0,
     },
+    # forward_fold and chair fold the torso forward over planted feet. The
+    # upright-pelvis + joint-targets representation cannot express that (hip
+    # flexion swings the legs forward instead), so these poses pitch the
+    # floating base or waist pitch and keep the legs vertical by matching hip
+    # flexion. Values tuned against
+    # packages/g1-yoga-rl/g1_yoga_rl/analyze_pose_stability.py.
+    # Sign conventions (verified numerically against both MJCFs): forward is
+    # +x; hip_pitch/knee/ankle_pitch all rotate about +y and add, with
+    # positive values swinging the segment backward. Hip flexion (thigh
+    # forward) is therefore NEGATIVE hip_pitch, and a flat foot requires
+    # base_pitch + hip + knee + ankle ~= 0. The original values used positive
+    # hips for forward bends, which swung the legs backward instead — one of
+    # the reasons these poses toppled under PD hold.
     "forward_fold": {
-        "left_hip_pitch_joint": 1.4,
-        "right_hip_pitch_joint": 1.4,
-        "left_knee_joint": 0.15,
-        "right_knee_joint": 0.15,
+        "base_pitch": 0.5,
         "waist_pitch_joint": 0.52,
-        "left_shoulder_pitch_joint": 0.25,
-        "right_shoulder_pitch_joint": 0.25,
+        "left_hip_pitch_joint": -0.42,
+        "right_hip_pitch_joint": -0.42,
+        "left_knee_joint": 0.12,
+        "right_knee_joint": 0.12,
+        "left_ankle_pitch_joint": -0.2,
+        "right_ankle_pitch_joint": -0.2,
+        "left_shoulder_pitch_joint": -1.1,
+        "right_shoulder_pitch_joint": -1.1,
+        "left_elbow_joint": 0.1,
+        "right_elbow_joint": 0.1,
     },
     "chair": {
-        "left_hip_pitch_joint": 0.45,
-        "right_hip_pitch_joint": 0.45,
-        "left_knee_joint": 0.5,
-        "right_knee_joint": 0.5,
-        "left_ankle_pitch_joint": -0.28,
-        "right_ankle_pitch_joint": -0.28,
-        "left_shoulder_pitch_joint": -2.3,
-        "right_shoulder_pitch_joint": -2.3,
+        "waist_pitch_joint": 0.45,
+        "left_hip_pitch_joint": -0.8,
+        "right_hip_pitch_joint": -0.8,
+        "left_knee_joint": 0.9,
+        "right_knee_joint": 0.9,
+        "left_ankle_pitch_joint": -0.1,
+        "right_ankle_pitch_joint": -0.1,
+        "left_shoulder_pitch_joint": -1.7,
+        "right_shoulder_pitch_joint": -1.7,
+        "left_shoulder_roll_joint": 0.15,
+        "right_shoulder_roll_joint": -0.15,
+        "left_elbow_joint": 0.15,
+        "right_elbow_joint": 0.15,
     },
+    # Warrior stances are tuned so both feet reach the floor: front and rear
+    # leg vertical reach match within ~1 cm (the old values left the bent
+    # leg's foot floating mid-air).
     "warrior_one": {
-        "left_hip_pitch_joint": 0.55,
-        "left_knee_joint": 1.2,
-        "right_hip_pitch_joint": -0.4,
+        "left_hip_pitch_joint": -0.6,
+        "left_knee_joint": 0.6,
+        "left_ankle_pitch_joint": 0.0,
+        "right_hip_pitch_joint": 0.35,
         "right_knee_joint": 0.2,
-        "left_shoulder_pitch_joint": -2.6,
-        "right_shoulder_pitch_joint": -2.6,
+        "right_ankle_pitch_joint": -0.55,
+        "waist_pitch_joint": 0.1,
+        "left_shoulder_pitch_joint": -2.4,
+        "right_shoulder_pitch_joint": -2.4,
+        "left_shoulder_roll_joint": 0.12,
+        "right_shoulder_roll_joint": -0.12,
     },
     "warrior_two": {
-        "left_hip_roll_joint": 0.6,
-        "left_knee_joint": 0.95,
-        "right_hip_roll_joint": -0.6,
+        "left_hip_roll_joint": 0.55,
+        "left_hip_pitch_joint": -0.35,
+        "left_knee_joint": 0.35,
+        "left_ankle_pitch_joint": 0.0,
+        "left_ankle_roll_joint": -0.26,
+        "right_hip_roll_joint": -0.55,
+        "right_hip_pitch_joint": 0.05,
         "right_knee_joint": 0.1,
+        "right_ankle_pitch_joint": -0.15,
+        "right_ankle_roll_joint": 0.26,
         "left_shoulder_pitch_joint": 0.0,
         "left_shoulder_roll_joint": 1.4,
         "right_shoulder_pitch_joint": 0.0,
@@ -95,10 +132,14 @@ NAMED_POSES = {
     "goddess": {
         "left_hip_roll_joint": 0.55,
         "right_hip_roll_joint": -0.55,
-        "left_hip_pitch_joint": 0.35,
-        "right_hip_pitch_joint": 0.35,
-        "left_knee_joint": 0.85,
-        "right_knee_joint": 0.85,
+        "left_hip_pitch_joint": -0.5,
+        "right_hip_pitch_joint": -0.5,
+        "left_knee_joint": 0.5,
+        "right_knee_joint": 0.5,
+        "left_ankle_pitch_joint": 0.0,
+        "right_ankle_pitch_joint": 0.0,
+        "left_ankle_roll_joint": -0.26,
+        "right_ankle_roll_joint": 0.26,
         "left_shoulder_pitch_joint": -0.3,
         "left_shoulder_roll_joint": 1.2,
         "left_elbow_joint": 1.5,
@@ -372,12 +413,23 @@ class G1MujocoState:
     def _target_qpos_locked(self, targets):
         """Full qpos vector for a joint-target dict (reset baseline + targets).
 
+        Supports a "base_pitch" pseudo-key that pitches the floating base
+        forward (radians about +y). Poses like a standing forward fold are not
+        expressible with an upright pelvis: hip flexion alone swings the legs
+        forward instead of folding the torso over them.
+
         Leaves self.data.qpos as it found it; the caller decides what to do with
         the returned vector. Must run with self.lock held.
         """
 
         saved = self.data.qpos.copy()
         mujoco.mj_resetData(self.model, self.data)
+        targets = dict(targets)
+        base_pitch = float(targets.pop("base_pitch", 0.0))
+        if base_pitch and self.model.njnt > 0 and self.model.jnt_type[0] == mujoco.mjtJoint.mjJNT_FREE:
+            quat_addr = int(self.model.jnt_qposadr[0]) + 3
+            half = 0.5 * base_pitch
+            self.data.qpos[quat_addr:quat_addr + 4] = [math.cos(half), 0.0, math.sin(half), 0.0]
         for joint_name, value in targets.items():
             joint_id, qpos_addr = self.joint_qpos_addr(joint_name)
             minimum, maximum = self.model.jnt_range[joint_id]

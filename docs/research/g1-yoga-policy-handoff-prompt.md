@@ -64,8 +64,10 @@ tracking reward, or the PPO harness:
 - `loco_mujoco/environments/humanoids/unitreeG1.py` (+ `unitreeG1_mjx.py`): ready
   UnitreeG1 env, same joint naming as our sim. **Caveat: it is the reduced-DOF G1**
   (wrists roll-only, waist yaw-only) vs our 29-DOF sim — poses must be projected onto
-  its joint set (ours barely use the extra DOFs; forward_fold's `waist_pitch_joint`
-  is the main casualty), or pass our 29-DOF MJCF via the env's `spec` argument.
+  its joint set. `forward_fold` now uses a `base_pitch` pseudo-key in the
+  simulator pose registry so the torso can fold over planted feet even when the
+  reduced training model lacks `waist_pitch_joint`; other missing waist/wrist
+  joints are still skipped during projection.
 - **Custom trajectories**: `examples/tutorials/10_creating_custom_traj.py` +
   `CustomDatasetConf` + `ImitationFactory` — build a reference motion programmatically
   from qpos/qvel arrays. **Our yoga flow is exactly this**: synthesize the trajectory
@@ -97,8 +99,9 @@ tracking reward, or the PPO harness:
 2. Write a trajectory generator: `NAMED_POSES` (projected to the env's joint set) →
    smooth glide + hold sequence → `Trajectory` (tutorial 10 shape) → save as npz.
    This is now scaffolded in `packages/g1-yoga-rl/` via `g1-yoga-project-poses`
-   and `g1-yoga-make-trajectory`; replay it in the env to visually verify
-   before training.
+   and `g1-yoga-make-trajectory`; use `g1-yoga-analyze-stability` to quantify
+   static support margins before training, then replay the trajectory in the env
+   to visually verify before training.
 3. Train mimic PPO on the trajectory (start from `jax_rl_mimic/conf.yaml`; wandb
    optional — can disable). Start with the statically-stable poses as a sanity
    curriculum, then the full flow. Watch: does it hold chair/goddess/tree?

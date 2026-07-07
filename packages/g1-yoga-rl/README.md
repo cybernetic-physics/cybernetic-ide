@@ -61,6 +61,13 @@ g1-yoga-render-frames \
   --out-dir .runtime/g1-yoga-rl/frames
 ```
 
+Analyze the static support margin for each source pose before training:
+
+```sh
+g1-yoga-analyze-stability \
+  --render-dir .runtime/g1-yoga-rl/stability-frames
+```
+
 Benchmark local stepping speed:
 
 ```sh
