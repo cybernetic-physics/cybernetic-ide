@@ -168,6 +168,9 @@ Tasks:
 - Done: add `unitree_official_mujoco_plan` so agents can see the missing
   upstream native binary/MuJoCo symlink/build gate and the exact G1 launch
   command before attempting the peer pub/sub proof.
+- Done: add and verify `unitree_build_official_mujoco_peer`; it builds the
+  upstream native C++ `simulate/build/unitree_mujoco` binary from the pinned
+  runtime cache.
 - Launch official `unitree_mujoco` in sim mode with a known DDS domain and
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.
@@ -247,6 +250,8 @@ Tasks:
   agents can inspect the official SDK2 bridge scaffold.
 - Done: expose `unitree_official_mujoco_plan` in the default Robotics Agent
   profile so agents can inspect the native official simulator launch gate.
+- Done: expose `unitree_build_official_mujoco_peer` in the default Robotics
+  Agent profile so agents can build the native official simulator peer.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command

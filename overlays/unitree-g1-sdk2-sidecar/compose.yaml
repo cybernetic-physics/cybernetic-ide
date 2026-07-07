@@ -14,10 +14,14 @@ services:
       UNITREE_SDK2_PYTHON_ROOT: /opt/unitree_sdk2_python
       UNITREE_SDK2_ROOT: /opt/unitree_sdk2
       UNITREE_MUJOCO_ROOT: /opt/unitree_mujoco
+      MUJOCO_ROOT: /opt/mujoco
       UNITREE_SDK2_PYTHON_REVISION: ${UNITREE_SDK2_PYTHON_REVISION}
       UNITREE_SDK2_REVISION: ${UNITREE_SDK2_REVISION}
       UNITREE_MUJOCO_REVISION: ${UNITREE_MUJOCO_REVISION}
+      CYBER_MUJOCO_VERSION: ${CYBER_MUJOCO_VERSION:-3.3.6}
+      CYBER_UNITREE_ACTION: ${CYBER_UNITREE_ACTION:-status}
     volumes:
       - ${UNITREE_SDK2_PYTHON_HOST_ROOT}:/opt/unitree_sdk2_python:ro
-      - ${UNITREE_SDK2_HOST_ROOT}:/opt/unitree_sdk2:ro
-      - ${UNITREE_MUJOCO_HOST_ROOT}:/opt/unitree_mujoco:ro
+      - ${UNITREE_SDK2_HOST_ROOT}:/opt/unitree_sdk2
+      - ${UNITREE_MUJOCO_HOST_ROOT}:/opt/unitree_mujoco
+      - ${MUJOCO_HOST_ROOT}:/opt/mujoco:ro

@@ -308,6 +308,9 @@ ad hoc scripts first. The default tool surface includes:
 - official MuJoCo peer planning: `unitree_official_mujoco_plan`, which reports
   whether the upstream C++ `unitree_mujoco` binary, G1 scene, MuJoCo symlink,
   and native build inputs are present and gives the exact G1 launch command;
+- official MuJoCo peer build: `unitree_build_official_mujoco_peer`, which uses
+  the sidecar to install/build official `unitree_sdk2`, link the pinned MuJoCo
+  release, and build upstream `simulate/build/unitree_mujoco`;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

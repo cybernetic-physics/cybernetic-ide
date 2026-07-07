@@ -3,7 +3,17 @@ FROM python:3.11-slim-bookworm
 WORKDIR /opt/cyber-unitree-g1-sdk2-sidecar
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential cmake cyclonedds-dev \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        cyclonedds-dev \
+        libboost-all-dev \
+        libeigen3-dev \
+        libfmt-dev \
+        libglfw3-dev \
+        libspdlog-dev \
+        libyaml-cpp-dev \
+        pkg-config \
     && mkdir -p /opt/cyclonedds \
     && ln -s /usr/include /opt/cyclonedds/include \
     && ln -s /usr/bin /opt/cyclonedds/bin \

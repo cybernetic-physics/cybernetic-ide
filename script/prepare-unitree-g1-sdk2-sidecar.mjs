@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeRoot = path.join(root, ".runtime/unitree-g1-sdk2");
+const mujocoVersion = process.env.CYBER_MUJOCO_VERSION || "3.3.6";
+const mujocoArchiveName = process.env.CYBER_MUJOCO_ARCHIVE_NAME || `mujoco-${mujocoVersion}-linux-aarch64.tar.gz`;
+const mujocoRemote =
+  process.env.CYBER_MUJOCO_REMOTE ||
+  `https://github.com/google-deepmind/mujoco/releases/download/${mujocoVersion}/${mujocoArchiveName}`;
 
 const repos = [
   {
@@ -63,11 +68,29 @@ async function ensureRepo(repo) {
   return { ...repo, target, remote, revision };
 }
 
+async function ensureMujocoRelease() {
+  const target = path.join(runtimeRoot, `mujoco-${mujocoVersion}`);
+  const header = path.join(target, "include/mujoco/mujoco.h");
+  if (existsSync(header)) {
+    return { target, remote: mujocoRemote, version: mujocoVersion, cached: true };
+  }
+
+  await fs.rm(target, { recursive: true, force: true });
+  const archive = path.join(runtimeRoot, mujocoArchiveName);
+  run("curl", ["-L", "--fail", "-o", archive, mujocoRemote]);
+  run("tar", ["-xzf", archive, "-C", runtimeRoot]);
+  if (!existsSync(header)) {
+    throw new Error(`MuJoCo release did not unpack with expected header: ${header}`);
+  }
+  return { target, remote: mujocoRemote, version: mujocoVersion, cached: false };
+}
+
 await fs.mkdir(runtimeRoot, { recursive: true });
 const prepared = [];
 for (const repo of repos) {
   prepared.push(await ensureRepo(repo));
 }
+const mujocoRelease = await ensureMujocoRelease();
 
 const values = Object.fromEntries(prepared.map((repo) => [repo.name, repo]));
 const mode = process.env.CYBER_UNITREE_MODE || "sim";
@@ -87,9 +110,12 @@ await fs.writeFile(
     `UNITREE_SDK2_PYTHON_HOST_ROOT=${quote(values.unitree_sdk2_python.target)}`,
     `UNITREE_SDK2_HOST_ROOT=${quote(values.unitree_sdk2.target)}`,
     `UNITREE_MUJOCO_HOST_ROOT=${quote(values.unitree_mujoco.target)}`,
+    `MUJOCO_HOST_ROOT=${quote(mujocoRelease.target)}`,
+    `MUJOCO_ROOT=${quote("/opt/mujoco")}`,
     `UNITREE_SDK2_PYTHON_REVISION=${quote(values.unitree_sdk2_python.revision)}`,
     `UNITREE_SDK2_REVISION=${quote(values.unitree_sdk2.revision)}`,
     `UNITREE_MUJOCO_REVISION=${quote(values.unitree_mujoco.revision)}`,
+    `CYBER_MUJOCO_VERSION=${quote(mujocoRelease.version)}`,
     "",
   ].join("\n"),
 );
@@ -98,6 +124,7 @@ console.log(`Prepared Unitree G1 SDK2 sidecar runtime at ${runtimeRoot}`);
 for (const repo of prepared) {
   console.log(`${repo.name}: ${repo.remote} @ ${repo.revision}`);
 }
+console.log(`mujoco: ${mujocoRelease.remote} @ ${mujocoRelease.version}${mujocoRelease.cached ? " (cached)" : ""}`);
 console.log("");
 console.log("Run:");
 console.log(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -10,6 +11,35 @@ from pathlib import Path
 
 def exists(path: str) -> bool:
     return Path(path).exists()
+
+
+def run_command(args: list[str], cwd: Path | None = None, timeout: int = 900) -> dict:
+    result = subprocess.run(
+        args,
+        cwd=str(cwd) if cwd else None,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
+    return {
+        "command": " ".join(args),
+        "cwd": str(cwd) if cwd else None,
+        "returncode": result.returncode,
+        "stdout_tail": result.stdout[-12000:],
+        "stderr_tail": result.stderr[-12000:],
+        "ok": result.returncode == 0,
+    }
+
+
+def ensure_symlink(link_path: Path, target_path: Path) -> None:
+    if link_path.is_symlink() and link_path.resolve() == target_path.resolve():
+        return
+    if link_path.exists() or link_path.is_symlink():
+        if link_path.is_dir() and not link_path.is_symlink():
+            raise RuntimeError(f"Refusing to replace non-symlink directory: {link_path}")
+        link_path.unlink()
+    link_path.symlink_to(target_path, target_is_directory=True)
 
 
 def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -> dict:
@@ -53,6 +83,7 @@ def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -
             "libyaml-cpp-dev",
             "libspdlog-dev",
             "libboost-all-dev",
+            "libeigen3-dev",
             "libglfw3-dev",
             "unitree_sdk2 installed to /opt/unitree_robotics",
             "MuJoCo release symlinked to simulate/mujoco",
@@ -70,6 +101,61 @@ def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -
             "rt/secondary_imu",
         ],
     }
+
+
+def build_official_mujoco_peer(sdk2_root: str, mujoco_root: str) -> dict:
+    sdk2_path = Path(sdk2_root)
+    mujoco_path = Path(mujoco_root)
+    release_path = Path(os.environ.get("MUJOCO_ROOT", "/opt/mujoco"))
+    simulate_root = mujoco_path / "simulate"
+    executable = simulate_root / "build" / "unitree_mujoco"
+    report = {
+        "action": "build_official_mujoco",
+        "sdk2_root": str(sdk2_path),
+        "unitree_mujoco_root": str(mujoco_path),
+        "mujoco_release_root": str(release_path),
+        "steps": [],
+        "binary_path": str(executable),
+        "binary_exists_before": executable.exists(),
+        "binary_exists_after": False,
+    }
+
+    required_paths = [
+        sdk2_path / "CMakeLists.txt",
+        mujoco_path / "simulate" / "CMakeLists.txt",
+        release_path / "include" / "mujoco" / "mujoco.h",
+        release_path / "lib" / "libmujoco.so",
+    ]
+    missing = [str(path) for path in required_paths if not path.exists()]
+    if missing:
+        report["missing"] = missing
+        report["ok"] = False
+        return report
+
+    try:
+        ensure_symlink(simulate_root / "mujoco", release_path)
+    except Exception as exc:
+        report["ok"] = False
+        report["error"] = str(exc)
+        return report
+
+    commands = [
+        ["cmake", "-S", str(sdk2_path), "-B", str(sdk2_path / "build"), "-DCMAKE_INSTALL_PREFIX=/opt/unitree_robotics", "-DBUILD_EXAMPLES=OFF"],
+        ["cmake", "--build", str(sdk2_path / "build"), "--target", "install", "-j4"],
+        ["cmake", "-S", str(simulate_root), "-B", str(simulate_root / "build")],
+        ["cmake", "--build", str(simulate_root / "build"), "-j4"],
+    ]
+    for command in commands:
+        step = run_command(command, timeout=1200)
+        report["steps"].append(step)
+        if not step["ok"]:
+            report["ok"] = False
+            report["binary_exists_after"] = executable.exists()
+            return report
+
+    report["binary_exists_after"] = executable.exists()
+    report["ok"] = executable.exists()
+    return report
 
 
 def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
@@ -154,6 +240,7 @@ def main() -> int:
     transport = os.environ.get("CYBER_UNITREE_TRANSPORT", "dds")
     domain = int(os.environ.get("CYBER_UNITREE_DDS_DOMAIN", "1" if mode == "sim" else "0"))
     interface = os.environ.get("CYBER_UNITREE_NETWORK_INTERFACE", "lo" if mode == "sim" else "")
+    action = os.environ.get("CYBER_UNITREE_ACTION", "status")
 
     report = {
         "status": "ready",
@@ -195,6 +282,12 @@ def main() -> int:
     }
     report["sdk2_probe"] = probe_official_sdk2(sdk2_python_root, domain, interface or None)
     report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    if action == "build_official_mujoco":
+        report["build"] = build_official_mujoco_peer(sdk2_root, mujoco_root)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action != "status":
+        report["status"] = "error"
+        report["error"] = f"Unsupported CYBER_UNITREE_ACTION: {action}"
     if report["sdk2_probe"]["domain_initialized"]:
         report["next_step"] = f"Launch official unitree_mujoco with -r g1 on DDS domain {domain} interface {interface or 'auto'}, then run lowstate/lowcmd pub-sub probes."
     print(json.dumps(report, indent=2), flush=True)

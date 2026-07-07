@@ -174,6 +174,13 @@ actuators. A true headless Cybernetic runtime will need either an upstream patch
 or a separate bridge process, so the current milestone is to first prove the
 unmodified upstream peer can exchange `rt/lowstate` and `rt/lowcmd` samples.
 
+`unitree_build_official_mujoco_peer` attempts the native build inside the
+sidecar. The prep script downloads the pinned MuJoCo `3.3.6` Linux/aarch64
+release into `.runtime/unitree-g1-sdk2/`, the sidecar installs native build
+dependencies including Eigen for the SDK2 bridge headers, installs official
+`unitree_sdk2` to `/opt/unitree_robotics`, links the MuJoCo release into
+`simulate/mujoco`, and builds `simulate/build/unitree_mujoco`.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
