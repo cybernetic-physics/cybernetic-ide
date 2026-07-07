@@ -95,6 +95,11 @@ class OfficialG1Sim:
     def raise_left_hand_session(self, **kwargs: Any) -> dict[str, Any]:
         return self.arm_pose_session("raise_left_hand", **kwargs)
 
+    def session(self, *, keep_running: bool = False, wait_timeout: float = 12.0) -> "OfficialG1ManagedSession":
+        """Create a context-managed official MuJoCo DDS session helper."""
+
+        return OfficialG1ManagedSession(self, keep_running=keep_running, wait_timeout=wait_timeout)
+
     def lowstate_session(self) -> dict[str, Any]:
         """Read one official rt/lowstate sample from a managed MuJoCo DDS session."""
 
@@ -361,6 +366,48 @@ class OfficialG1Sim:
                 f"missing {self.compose_env}; run `node script/prepare-unitree-g1-sdk2-sidecar.mjs` first"
             )
         return self._runner(_sidecar_command(self.compose_env, self.compose_file, env), self.root, self.timeout)
+
+
+@dataclass
+class OfficialG1ManagedSession:
+    """Context manager for the managed official Unitree MuJoCo DDS peer."""
+
+    sim: OfficialG1Sim
+    keep_running: bool = False
+    wait_timeout: float = 12.0
+    started: dict[str, Any] | None = None
+    stopped: dict[str, Any] | None = None
+
+    def __enter__(self) -> "OfficialG1ManagedSession":
+        self.started = self.sim.start_session(wait_timeout=self.wait_timeout)
+        if not self.started.get("ok"):
+            if not self.keep_running:
+                self.stopped = self.sim.stop_session()
+            raise RuntimeError("official Unitree MuJoCo session did not become ready")
+        return self
+
+    def __exit__(self, _exc_type: object, _exc: object, _traceback: object) -> None:
+        if not self.keep_running:
+            self.stopped = self.sim.stop_session()
+
+    def status(self) -> dict[str, Any]:
+        return self.sim.session_status()
+
+    def lowstate(self) -> dict[str, Any]:
+        return self.sim.lowstate_session()
+
+    def arm_pose(self, preset: str = "raise_right_hand", **kwargs: Any) -> dict[str, Any]:
+        return self.sim.arm_pose_session(preset, **kwargs)
+
+    def raise_right_hand(self, **kwargs: Any) -> dict[str, Any]:
+        return self.sim.raise_right_hand_session(**kwargs)
+
+    def raise_left_hand(self, **kwargs: Any) -> dict[str, Any]:
+        return self.sim.raise_left_hand_session(**kwargs)
+
+    def stop(self) -> dict[str, Any]:
+        self.stopped = self.sim.stop_session()
+        return self.stopped
 
 
 def _sidecar_command(compose_env: Path, compose_file: Path, env: dict[str, str]) -> list[str]:

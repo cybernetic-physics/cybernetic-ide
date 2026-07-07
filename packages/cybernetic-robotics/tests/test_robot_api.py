@@ -1100,6 +1100,53 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("unitree-g1-sdk2-session", stopped["stdout"])
         self.assertEqual(unchecked_calls[0], ["docker", "rm", "-f", "unitree-g1-sdk2-session"])
 
+    def test_official_g1_managed_session_context_starts_and_stops_peer(self):
+        checked_calls = []
+        unchecked_calls = []
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            checked_calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="container-id\n", stderr="")
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            unchecked_calls.append(args)
+            command = " ".join(args)
+            if "inspect unitree-g1-sdk2-session" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"Running": True, "Status": "running", "ExitCode": 0}),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"action": "serve_official_mujoco", "ok": True, "peer_started": True}),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="unitree-g1-sdk2-session\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            with official.session() as session:
+                self.assertTrue(session.started["ok"])
+                self.assertTrue(session.status()["ready"])
+
+            self.assertTrue(session.stopped["removed"])
+
+        self.assertTrue(any("run -d --name unitree-g1-sdk2-session" in " ".join(call) for call in checked_calls))
+        self.assertGreaterEqual(
+            sum(1 for call in unchecked_calls if "rm -f unitree-g1-sdk2-session" in " ".join(call)),
+            2,
+        )
+
     def test_official_g1_sim_can_command_managed_session(self):
         captured = {}
 

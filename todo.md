@@ -228,6 +228,9 @@ Tasks:
   `cyber-g1 official start-session/session-status/lowstate-session/stop-session`,
   and `examples/g1_official_managed_session.py`, so SDK users can start the
   same sustained official MuJoCo DDS peer that MCP agents control.
+- Done: add `OfficialG1Sim.session()` as a context-managed SDK helper so Python
+  scripts can start the official MuJoCo DDS peer, read `rt/lowstate`, command
+  bounded arm poses, and clean up the Docker session automatically.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose

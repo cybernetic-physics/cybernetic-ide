@@ -17,7 +17,7 @@ to work directly with the Booster-style simulator protocol.
 from .config import RobotEndpoints
 from .errors import CyberneticRoboticsError, ProtocolError, SimulatorUnavailable
 from .g1 import G1Robot, G1Status, connect
-from .official import OfficialG1Sim
+from .official import OfficialG1ManagedSession, OfficialG1Sim
 from .scene import SceneWorkspace
 from .safety import evaluate_lowstate_safety
 from .session import UnitreeSession, UnitreeTransportConfig
@@ -35,6 +35,7 @@ __all__ = [
     "G1Status",
     "LocoClient",
     "OfficialG1Sim",
+    "OfficialG1ManagedSession",
     "ProtocolError",
     "RobotEndpoints",
     "SceneWorkspace",

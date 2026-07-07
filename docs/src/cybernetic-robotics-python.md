@@ -131,10 +131,10 @@ named session as the Agent-panel MCP:
 
 ```python
 official = OfficialG1Sim.discover()
-official.start_session()
-print(official.lowstate_session()["lowstate_summary"])
-print(official.raise_right_hand_session()["moved_joints"])
-official.stop_session()
+
+with official.session() as sim:
+    print(sim.lowstate()["lowstate_summary"])
+    print(sim.raise_right_hand()["moved_joints"])
 ```
 
 The matching CLI flow is:
@@ -147,7 +147,10 @@ cyber-g1 official stop-session
 ```
 
 `examples/g1_official_managed_session.py` wraps that whole lifecycle and leaves
-the session running only when `--keep-running` is passed. With
+the session running only when `--keep-running` is passed. If a script needs
+manual control instead of the context manager, use `official.start_session()`,
+`official.session_status()`, `official.lowstate_session()`, and
+`official.stop_session()`. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
 

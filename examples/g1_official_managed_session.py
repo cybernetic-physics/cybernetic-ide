@@ -28,14 +28,16 @@ def main() -> int:
     args = parser.parse_args()
 
     official = OfficialG1Sim.discover()
-    started = official.start_session()
-    before = official.lowstate_session() if started["ok"] else {"ok": False}
-    command = official.arm_pose_session(args.preset, frames=args.frames) if started["ok"] else {"ok": False}
-    after = official.lowstate_session() if started["ok"] else {"ok": False}
-    stopped = None if args.keep_running else official.stop_session()
+    stopped = None
+    with official.session(keep_running=args.keep_running) as session:
+        before = session.lowstate()
+        command = session.arm_pose(args.preset, frames=args.frames)
+        after = session.lowstate()
+        started = session.started
+    stopped = session.stopped
 
     report = {
-        "ok": bool(started["ok"] and before["ok"] and command["ok"] and after["ok"]),
+        "ok": bool(started and started["ok"] and before["ok"] and command["ok"] and after["ok"]),
         "session_ready": started["status"].get("ready"),
         "preset": args.preset,
         "before": before.get("lowstate_summary"),

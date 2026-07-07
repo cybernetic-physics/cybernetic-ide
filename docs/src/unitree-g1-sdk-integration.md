@@ -259,6 +259,14 @@ inspect/log readiness state, `lowstate_session()` reads one official
 `raise_right_hand_session()` / `arm_pose_session()` command that already-running
 official peer over SDK2/CycloneDDS without spawning a second MuJoCo process.
 `OfficialG1Sim.stop_session()` removes the peer when the workflow is done.
+Most Python scripts should use the context-managed wrapper so cleanup happens
+automatically:
+
+```python
+with OfficialG1Sim.discover().session() as sim:
+    print(sim.lowstate()["lowstate_summary"])
+    print(sim.arm_pose("raise_right_hand")["moved_joints"])
+```
 
 ```sh
 cyber-g1 official start-session

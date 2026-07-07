@@ -121,7 +121,19 @@ managed `unitree-g1-sdk2-session` container used by the MCP, `session_status()`
 parses the ready report from Docker logs, `lowstate_session()` reads one
 official `rt/lowstate` sample, and `raise_right_hand_session()` sends a bounded
 pose to that already-running peer instead of launching another one. Use
-`official.stop_session()` when the session should be removed.
+`official.stop_session()` when the session should be removed. The friendlier
+form is a context manager:
+
+```python
+official = OfficialG1Sim.discover()
+
+with official.session() as sim:
+    print(sim.lowstate()["lowstate_summary"])
+    print(sim.raise_right_hand()["moved_joints"])
+```
+
+Pass `keep_running=True` to leave the Docker peer up for follow-up MCP or CLI
+commands.
 
 ## Unitree SDK2-Shaped API
 
