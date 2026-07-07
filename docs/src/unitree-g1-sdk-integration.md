@@ -220,6 +220,15 @@ runs include `right_shoulder_roll` from `0.0` to about `-0.289 rad` with a
 `0.18 rad` target over 120 successful `rt/lowcmd` writes, while keeping the
 probe short-lived and explicitly simulator-only.
 
+`unitree_probe_official_mujoco_arm_pose` is the first coordinated pose version
+of that same path. It uses the official peer, publishes one bounded multi-joint
+HG `LowCmd_`, then verifies per-joint movement through `rt/lowstate`. The
+verified `raise_right_hand` preset moved five target joints
+(`right_shoulder_pitch`, `right_shoulder_roll`, `right_shoulder_yaw`,
+`right_elbow`, and `right_wrist_pitch`) with 180 of 180 successful
+`rt/lowcmd` writes. This is still a diagnostic probe, but it is much closer to
+the developer-facing "raise hand" SDK demo than isolated joint pokes.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.

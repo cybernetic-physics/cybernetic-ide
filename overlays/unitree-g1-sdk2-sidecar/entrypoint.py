@@ -296,6 +296,23 @@ G1_JOINT_INDEX = {
     "right_wrist_yaw": 28,
 }
 
+G1_ARM_POSE_PRESETS = {
+    "raise_right_hand": {
+        "right_shoulder_pitch": -0.45,
+        "right_shoulder_roll": -0.35,
+        "right_shoulder_yaw": 0.20,
+        "right_elbow": -0.40,
+        "right_wrist_pitch": 0.15,
+    },
+    "raise_left_hand": {
+        "left_shoulder_pitch": -0.45,
+        "left_shoulder_roll": 0.35,
+        "left_shoulder_yaw": -0.20,
+        "left_elbow": -0.40,
+        "left_wrist_pitch": 0.15,
+    },
+}
+
 
 def motor_position(low_state, joint_index: int) -> float | None:
     motors = list(getattr(low_state, "motor_state", []) or [])
@@ -322,6 +339,28 @@ def make_single_joint_lowcmd(
     low_cmd.motor_cmd[joint_index].dq = 0.0
     low_cmd.motor_cmd[joint_index].kp = float(kp)
     low_cmd.motor_cmd[joint_index].kd = float(kd)
+    low_cmd.crc = crc_factory.Crc(low_cmd)
+    return low_cmd
+
+
+def make_multi_joint_lowcmd(
+    low_state,
+    lowcmd_factory,
+    crc_factory,
+    targets: dict[int, float],
+    kp: float,
+    kd: float,
+    hold_kp: float,
+    hold_kd: float,
+):
+    low_cmd = make_hold_lowcmd(low_state, lowcmd_factory, crc_factory, kp=hold_kp, kd=hold_kd)
+    for joint_index, target_position in targets.items():
+        low_cmd.motor_cmd[joint_index].mode = 1
+        low_cmd.motor_cmd[joint_index].tau = 0.0
+        low_cmd.motor_cmd[joint_index].q = float(target_position)
+        low_cmd.motor_cmd[joint_index].dq = 0.0
+        low_cmd.motor_cmd[joint_index].kp = float(kp)
+        low_cmd.motor_cmd[joint_index].kd = float(kd)
     low_cmd.crc = crc_factory.Crc(low_cmd)
     return low_cmd
 
@@ -765,6 +804,223 @@ def probe_official_mujoco_arm_motion(mujoco_root: str, domain: int, interface: s
     return report
 
 
+def probe_official_mujoco_arm_pose(mujoco_root: str, domain: int, interface: str | None) -> dict:
+    plan = official_mujoco_plan(mujoco_root, domain, interface)
+    simulate_root = Path(plan["simulate_root"])
+    executable = Path(plan["binary_path"])
+    preset = os.environ.get("CYBER_UNITREE_ARM_POSE_PRESET", "raise_right_hand")
+    raw_deltas = os.environ.get("CYBER_UNITREE_ARM_POSE_DELTAS", "")
+    kp = float(os.environ.get("CYBER_UNITREE_ARM_POSE_KP", "30.0"))
+    kd = float(os.environ.get("CYBER_UNITREE_ARM_POSE_KD", "1.0"))
+    hold_kp = float(os.environ.get("CYBER_UNITREE_ARM_POSE_HOLD_KP", "18.0"))
+    hold_kd = float(os.environ.get("CYBER_UNITREE_ARM_POSE_HOLD_KD", "0.8"))
+    threshold = float(os.environ.get("CYBER_UNITREE_ARM_POSE_THRESHOLD", "0.025"))
+    min_moved_joints = int(os.environ.get("CYBER_UNITREE_ARM_POSE_MIN_MOVED_JOINTS", "2"))
+    report = {
+        "action": "probe_official_mujoco_arm_pose",
+        "plan": plan,
+        "binary_exists": executable.exists(),
+        "library_path": runtime_library_path(),
+        "used_xvfb": True,
+        "read_topic": "rt/lowstate",
+        "write_topic": "rt/lowcmd",
+        "domain": domain,
+        "interface": interface or None,
+        "peer_started": False,
+        "lowstate_sample_received": False,
+        "lowcmd_write_attempts": 0,
+        "lowcmd_write_successes": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_ARM_POSE_TIMEOUT", "12")),
+        "motion_frames": int(os.environ.get("CYBER_UNITREE_ARM_POSE_FRAMES", "180")),
+        "preset": preset,
+        "kp": kp,
+        "kd": kd,
+        "hold_kp": hold_kp,
+        "hold_kd": hold_kd,
+        "movement_threshold": threshold,
+        "min_moved_joints": min_moved_joints,
+    }
+    if not executable.exists():
+        report["ok"] = False
+        report["error"] = "missing official unitree_mujoco binary; run build_official_mujoco first"
+        return report
+
+    try:
+        requested_deltas = json.loads(raw_deltas) if raw_deltas else G1_ARM_POSE_PRESETS[preset]
+    except KeyError:
+        report["ok"] = False
+        report["error"] = f"unknown G1 arm pose preset: {preset}"
+        report["known_presets"] = sorted(G1_ARM_POSE_PRESETS)
+        return report
+    except Exception as exc:
+        report["ok"] = False
+        report["error"] = f"invalid CYBER_UNITREE_ARM_POSE_DELTAS JSON: {exc}"
+        return report
+
+    target_deltas: dict[str, float] = {}
+    unknown_joints: list[str] = []
+    for joint_name, raw_delta in dict(requested_deltas).items():
+        if joint_name not in G1_JOINT_INDEX:
+            unknown_joints.append(joint_name)
+            continue
+        try:
+            target_deltas[joint_name] = max(-0.5, min(0.5, float(raw_delta)))
+        except (TypeError, ValueError):
+            report["ok"] = False
+            report["error"] = f"invalid delta for {joint_name}: {raw_delta!r}"
+            return report
+    if unknown_joints:
+        report["ok"] = False
+        report["error"] = "unknown G1 arm joints in pose target"
+        report["unknown_joints"] = unknown_joints
+        report["known_joints"] = sorted(G1_JOINT_INDEX)
+        return report
+    if not target_deltas:
+        report["ok"] = False
+        report["error"] = "arm pose target is empty"
+        return report
+    report["target_deltas"] = target_deltas
+
+    command = [
+        "xvfb-run",
+        "-a",
+        str(executable),
+        "-r",
+        plan["robot"],
+        "-s",
+        plan["scene"],
+        "-i",
+        str(domain),
+    ]
+    if interface:
+        command.extend(["-n", interface])
+
+    process = subprocess.Popen(
+        command,
+        cwd=str(simulate_root),
+        env=runtime_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    report["peer_started"] = True
+    report["peer_pid"] = process.pid
+    report["command"] = " ".join(command)
+
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+        from unitree_sdk2py.utils.crc import CRC
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        sample = None
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                report["peer_exited_before_sample"] = True
+                break
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary_before_motion"] = summarize_lowstate(sample)
+                break
+
+        if sample is not None:
+            joint_reports: dict[str, dict] = {}
+            target_positions: dict[int, float] = {}
+            for joint_name, delta in target_deltas.items():
+                joint_index = G1_JOINT_INDEX[joint_name]
+                initial_q = motor_position(sample, joint_index)
+                if initial_q is None:
+                    raise RuntimeError(f"lowstate does not contain joint index {joint_index}")
+                target_q = initial_q + delta
+                target_positions[joint_index] = target_q
+                joint_reports[joint_name] = {
+                    "joint_index": joint_index,
+                    "initial_q": initial_q,
+                    "target_delta": delta,
+                    "target_q": target_q,
+                }
+
+            publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+            publisher.Init()
+            crc = CRC()
+            low_cmd = make_multi_joint_lowcmd(
+                sample,
+                unitree_hg_msg_dds__LowCmd_,
+                crc,
+                target_positions,
+                kp,
+                kd,
+                hold_kp,
+                hold_kd,
+            )
+            report["lowcmd_summary"] = summarize_lowcmd(low_cmd)
+            for _ in range(max(1, report["motion_frames"])):
+                report["lowcmd_write_attempts"] += 1
+                if publisher.Write(low_cmd, 1.0):
+                    report["lowcmd_write_successes"] += 1
+                time.sleep(0.003)
+            publisher.Close()
+
+            final_sample = sample
+            read_until = time.monotonic() + 1.0
+            while time.monotonic() < read_until:
+                next_sample = subscriber.Read(0.1)
+                if next_sample is not None:
+                    final_sample = next_sample
+            report["lowstate_summary_after_motion"] = summarize_lowstate(final_sample)
+            moved_joints = []
+            for joint_name, joint_report in joint_reports.items():
+                final_q = motor_position(final_sample, joint_report["joint_index"])
+                joint_report["final_q"] = final_q
+                if final_q is not None:
+                    joint_report["actual_delta"] = final_q - joint_report["initial_q"]
+                    joint_report["target_error"] = joint_report["target_q"] - final_q
+                    joint_report["motion_detected"] = abs(joint_report["actual_delta"]) >= threshold
+                    if joint_report["motion_detected"]:
+                        moved_joints.append(joint_name)
+            report["joints"] = joint_reports
+            report["moved_joints"] = moved_joints
+            report["moved_joint_count"] = len(moved_joints)
+        subscriber.Close()
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+    finally:
+        stdout_tail, stderr_tail, returncode = terminate_process(process)
+
+    output = f"{stdout_tail}\n{stderr_tail}"
+    report["stdout_tail"] = stdout_tail
+    report["stderr_tail"] = stderr_tail
+    report["returncode"] = returncode
+    report["startup_reached_mujoco"] = "MuJoCo version" in output
+    report["bridge_started"] = "Mujoco data is prepared" in output or "Try to start sdk2 thread" in output
+    report["loader_error"] = "error while loading shared libraries" in output
+    report["glfw_error"] = "could not initialize GLFW" in output
+    report["cyclonedds_warning"] = "selected interface" in output or "ddsi_udp_conn_write" in output
+    report["ok"] = (
+        report["peer_started"]
+        and report["startup_reached_mujoco"]
+        and report["lowstate_sample_received"]
+        and report["lowcmd_write_successes"] > 0
+        and report.get("moved_joint_count", 0) >= min_moved_joints
+        and not report["loader_error"]
+        and not report["glfw_error"]
+    )
+    if report["ok"]:
+        report["next_step"] = "Promote this multi-joint official lowcmd pose into a long-lived DDS session provider and SDK-shaped arm action demo."
+    elif report.get("lowcmd_write_successes", 0) > 0:
+        report["next_step"] = "Lowcmd writes matched, but too few joints moved; reduce the pose, increase duration carefully, or inspect the official bridge control mode."
+    else:
+        report["next_step"] = "Lowcmd writes did not prove out; re-run the single-joint arm-motion probe before attempting pose control."
+    return report
+
+
 def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
     report = {
         "python_path_inserted": False,
@@ -903,6 +1159,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_arm_motion":
         report["arm_motion_probe"] = probe_official_mujoco_arm_motion(mujoco_root, domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_official_mujoco_arm_pose":
+        report["arm_pose_probe"] = probe_official_mujoco_arm_pose(mujoco_root, domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action != "status":
         report["status"] = "error"

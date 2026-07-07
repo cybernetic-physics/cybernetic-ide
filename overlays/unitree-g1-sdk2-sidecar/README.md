@@ -129,3 +129,21 @@ local results include the default `right_shoulder_roll` probe writing 220 of
 220 frames and moving from `0.0` to about `-0.289 rad`, plus a parameterized
 `left_elbow` probe writing 120 of 120 frames and moving from `0.0` to about
 `0.207 rad` through official `rt/lowstate`.
+
+Probe a bounded multi-joint arm pose through the same official lowcmd path:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=probe_official_mujoco_arm_pose \
+  -e CYBER_UNITREE_ARM_POSE_PRESET=raise_right_hand \
+  -e CYBER_UNITREE_ARM_POSE_FRAMES=180 \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper also accepts custom bounded `joint_deltas` for official G1 arm
+joints. The verified `raise_right_hand` preset wrote 180 of 180 frames and
+moved five right-arm joints through official `rt/lowstate`: shoulder pitch,
+shoulder roll, shoulder yaw, elbow, and wrist pitch.

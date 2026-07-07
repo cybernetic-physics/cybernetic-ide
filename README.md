@@ -327,6 +327,9 @@ ad hoc scripts first. The default tool surface includes:
   sends a bounded configurable arm-joint target over official `rt/lowcmd`,
   accepts joint/delta/frame/gain parameters, and proves motion by reading the
   changed joint position from `rt/lowstate`;
+- official SDK2 pose probe: `unitree_probe_official_mujoco_arm_pose`, which
+  sends a bounded multi-joint arm pose such as `raise_right_hand` over
+  official `rt/lowcmd` and reports which joints moved in `rt/lowstate`;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
