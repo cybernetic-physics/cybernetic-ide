@@ -553,8 +553,9 @@ The current repo has the first narrow version of that API boundary:
   local simulator compatibility fallback and is labeled that way in responses.
   Official `rt/lowstate` reads and one-frame sanitized generic `rt/lowcmd` /
   `rt/user_lowcmd` writes can flow through the managed official session when
-  the peer is running; sustained lowcmd streaming still needs a watchdog-aware
-  provider.
+  the peer is running. Lease-limited sustained lowcmd streams now flow through
+  the same managed official session via `ChannelPublisher.WriteStream(...)`;
+  unbounded watchdog-renewed control still needs a long-lived DDS provider.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,

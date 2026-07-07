@@ -426,9 +426,10 @@ Tasks:
   path, matching Unitree's G1 arm examples that enable the arm SDK through
   motor slot 29. Done for the official user-control topic:
   `ChannelPublisher("rt/user_lowcmd")` now uses the same provider boundary and
-  matches Unitree's C++ `g1_userctrl_dds_example.cpp` topic choice. Remaining:
-  sustained generic lowcmd streaming with explicit watchdogs and lease/safety
-  gates.
+  matches Unitree's C++ `g1_userctrl_dds_example.cpp` topic choice. Done for a
+  lease-limited sustained stream through `ChannelPublisher.WriteStream(...)`.
+  Remaining: long-running watchdog-renewed generic lowcmd control with explicit
+  stop semantics and safety gates.
 - Done: add lease-limited official DDS lowcmd streaming through sidecar
   `CYBER_UNITREE_ACTION=stream_official_mujoco_lowcmd`, Python
   `OfficialG1Sim.lowcmd_stream_session()`, and MCP

@@ -227,13 +227,13 @@ class UnitreeSession:
             motion = {
                 "arm_actions": "managed_unitree_rpc_bridge_arm_service",
                 "locomotion": "managed_unitree_rpc_bridge_sport_agv",
-                "lowcmd": "local_http_simulator_until_generic_dds_streaming_lands",
+                "lowcmd": "separate_dds_provider_for_lowcmd_streaming",
             }
             limitations = [
                 "This is a simulator-side service bridge, not physical robot DDS control.",
-                "Only the mapped sport/agv/arm RPC subset is available; generic lowcmd streaming remains separate.",
+                "Only the mapped sport/agv/arm RPC subset is available; generic lowcmd streaming belongs to the DDS provider path.",
             ]
-            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, then promote lowcmd streaming separately."
+            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, or dds for lowcmd/lowstate and lease-limited lowcmd streaming."
         elif transport == DDS and mode == SIM:
             provider = "official_mujoco_dds_simulator" if official_ok else "official_mujoco_dds_simulator_unready"
             implemented = official_ok
@@ -242,13 +242,13 @@ class UnitreeSession:
             motion = {
                 "arm_actions": "managed_official_mujoco_session_for_supported_poses" if official_ok else "unavailable_until_sidecar_ready",
                 "locomotion": "local_http_compatibility_until_dds_loco_provider_lands",
-                "lowcmd": "managed_official_mujoco_session_bounded_frame" if official_ok else "unavailable_until_sidecar_ready",
+                "lowcmd": "managed_official_mujoco_session_bounded_frame_and_lease_stream" if official_ok else "unavailable_until_sidecar_ready",
             }
             limitations = [
-                "Only bounded arm-pose commands and one-frame generic lowcmd writes are routed through the managed official DDS session today.",
-                "LocoClient locomotion and sustained lowcmd streaming still need the long-lived DDS provider.",
+                "Bounded arm poses, one-frame generic lowcmd writes, and lease-limited lowcmd streams are routed through the managed official DDS session today.",
+                "LocoClient locomotion and unbounded watchdog-renewed lowcmd control still need the long-lived DDS provider.",
             ]
-            next_step = "Start or inspect the managed official MuJoCo session, then promote loco and sustained lowcmd streaming to that provider."
+            next_step = "Start or inspect the managed official MuJoCo session, then promote loco and watchdog-renewed long-running control to that provider."
         else:
             provider = "real_unitree_dds"
             implemented = False

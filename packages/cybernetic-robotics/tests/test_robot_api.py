@@ -1789,6 +1789,8 @@ class RobotApiTests(unittest.TestCase):
         self.assertTrue(provider["implemented"])
         self.assertEqual(provider["provider"], "official_mujoco_dds_simulator")
         self.assertEqual(provider["motion"]["arm_actions"], "managed_official_mujoco_session_for_supported_poses")
+        self.assertEqual(provider["motion"]["lowcmd"], "managed_official_mujoco_session_bounded_frame_and_lease_stream")
+        self.assertIn("lease-limited lowcmd streams", " ".join(provider["limitations"]))
         self.assertTrue(provider["diagnostics_summary"]["official_sidecar_ok"])
 
     def test_lowcmd_rejects_malformed_command_lists(self):
