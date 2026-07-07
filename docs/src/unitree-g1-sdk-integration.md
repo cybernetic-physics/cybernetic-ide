@@ -597,6 +597,11 @@ The current repo has the first narrow version of that API boundary:
   coverage for all five official G1 examples under `example/g1/high_level/` and
   `example/g1/low_level/`; this is static compatibility, not proof of physical
   behavior parity.
+- `cyber-g1 sdk-smoke` and MCP `unitree_sdk_behavior_smoke` run conservative
+  behavior-level checks through the same official-style imports: arm action,
+  locomotion method calls, and lowcmd/lowstate channel publish/read. This proves
+  the local simulator facade responds to safe SDK-shaped calls, but it still
+  does not prove whole-body balance or sim-to-real equivalence.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the deeper transport boundary:
   `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
@@ -610,6 +615,8 @@ The current repo has the first narrow version of that API boundary:
   simulator state.
 - `unitree_sdk_compatibility_audit` gives Agent-panel users the same
   official-example compatibility report before porting an upstream script.
+- `unitree_sdk_behavior_smoke` gives Agent-panel users a behavior-level smoke
+  check for safe Unitree SDK-shaped calls after the simulator is running.
 - `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
   named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
   create editable Unitree-style starting points without guessing boilerplate.

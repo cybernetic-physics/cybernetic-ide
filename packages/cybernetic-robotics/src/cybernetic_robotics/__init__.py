@@ -21,6 +21,7 @@ from .official import OfficialG1ManagedSession, OfficialG1Sim
 from .scene import SceneWorkspace
 from .safety import evaluate_lowstate_safety
 from .sdk_audit import audit_official_g1_examples
+from .sdk_smoke import run_official_g1_sdk_smoke
 from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
 from .unitree import AgvClient, AudioClient, LocoClient
@@ -40,6 +41,7 @@ __all__ = [
     "OfficialG1ManagedSession",
     "ProtocolError",
     "RobotEndpoints",
+    "run_official_g1_sdk_smoke",
     "SceneWorkspace",
     "SimulatorClient",
     "SimulatorStatus",

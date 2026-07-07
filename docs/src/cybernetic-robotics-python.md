@@ -413,6 +413,21 @@ official G1 examples under `example/g1/high_level/` and
 equivalent; locomotion and low-level balance are still simulator
 approximations.
 
+Then use `cyber-g1 sdk-smoke` for a conservative behavior-level check against
+the local simulator facade:
+
+```sh
+cyber-g1 sdk-smoke --kind all
+cyber-g1 sdk-smoke --kind arm
+cyber-g1 sdk-smoke --kind loco
+cyber-g1 sdk-smoke --kind lowcmd
+```
+
+The smoke runner executes safe official-style `G1ArmActionClient`,
+`LocoClient`, and `ChannelPublisher` / `ChannelSubscriber` calls and returns
+status plus safety-check evidence. It intentionally avoids free-running
+official loops.
+
 ## Agent MCP Tools
 
 The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to
@@ -427,6 +442,7 @@ sim_validate_behavior
 unitree_provider_status
 unitree_session_status
 unitree_sdk_compatibility_audit
+unitree_sdk_behavior_smoke
 unitree_read_official_mujoco_lowstate
 unitree_official_mujoco_evidence_bundle
 robotics_tool_reference

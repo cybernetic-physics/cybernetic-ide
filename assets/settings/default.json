@@ -1166,6 +1166,7 @@
               "sim_status": true,
               "unitree_session_status": true,
               "unitree_sdk_compatibility_audit": true,
+              "unitree_sdk_behavior_smoke": true,
               "unitree_prepare_sdk2_sidecar": true,
               "unitree_sdk2_sidecar_status": true,
               "unitree_official_mujoco_plan": true,

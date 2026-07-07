@@ -8,6 +8,7 @@ import sys
 from .g1 import G1Robot
 from .official import OfficialG1Sim
 from .sdk_audit import audit_official_g1_examples
+from .sdk_smoke import run_official_g1_sdk_smoke
 from .session import UnitreeSession, UnitreeTransportConfig
 from .harness import DockerHarness
 from .simulator import SimulatorClient
@@ -22,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("provider")
     sdk_audit = subcommands.add_parser("sdk-audit")
     sdk_audit.add_argument("--upstream-root", default="/Users/cuboniks/wagmi/unitree_sdk2_python")
+    sdk_smoke = subcommands.add_parser("sdk-smoke")
+    sdk_smoke.add_argument("--kind", choices=["all", "arm", "loco", "lowcmd"], default="all")
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
@@ -84,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
         return _official_command(args)
     if args.command == "sdk-audit":
         return _print(audit_official_g1_examples(args.upstream_root))
+    if args.command == "sdk-smoke":
+        return _print(run_official_g1_sdk_smoke(args.kind))
 
     robot = G1Robot.connect(wait=args.command not in {"snapshot", "diagnostics"})
     if args.command == "status":

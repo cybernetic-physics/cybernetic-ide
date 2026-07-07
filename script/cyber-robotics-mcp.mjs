@@ -142,6 +142,24 @@ const tools = [
       idempotentHint: true,
     },
   ),
+  tool(
+    "unitree_sdk_behavior_smoke",
+    "Run safe behavior-level smoke checks through Cybernetic's Unitree SDK-shaped G1 shim.",
+    {
+      kind: {
+        type: "string",
+        enum: ["all", "arm", "loco", "lowcmd"],
+        default: "all",
+        description: "Subset of official-style SDK behavior surfaces to smoke test.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  ),
   tool("unitree_prepare_sdk2_sidecar", "Prepare pinned official Unitree SDK2 Python, SDK2 C++, and Unitree MuJoCo sources for the opt-in SDK2 sidecar.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1052,6 +1070,8 @@ async function callTool(name, args) {
       return textResult(providerStatusFromDiagnostics(await unitreeSessionStatus()));
     case "unitree_sdk_compatibility_audit":
       return textResult(unitreeSdkCompatibilityAudit(args));
+    case "unitree_sdk_behavior_smoke":
+      return textResult(unitreeSdkBehaviorSmoke(args));
     case "unitree_prepare_sdk2_sidecar":
       return textResult(runChecked("node", ["script/prepare-unitree-g1-sdk2-sidecar.mjs"], { timeoutMs: 240000 }));
     case "unitree_sdk2_sidecar_status":
@@ -1261,6 +1281,33 @@ function unitreeSdkCompatibilityAudit(args = {}) {
   }
   return {
     command: `python3 -m cybernetic_robotics.cli sdk-audit --upstream-root ${upstreamRoot}`,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function unitreeSdkBehaviorSmoke(args = {}) {
+  const kind = ["all", "arm", "loco", "lowcmd"].includes(args.kind) ? args.kind : "all";
+  const packageSrc = path.join(root, "packages/cybernetic-robotics/src");
+  const env = {
+    ...process.env,
+    PYTHONPATH: process.env.PYTHONPATH ? `${packageSrc}${path.delimiter}${process.env.PYTHONPATH}` : packageSrc,
+    CYBER_G1_GAME_CONTROL_URL: gameControlUrl(),
+  };
+  const result = runChecked(
+    "python3",
+    ["-m", "cybernetic_robotics.cli", "sdk-smoke", "--kind", kind],
+    { timeoutMs: 90_000, env },
+  );
+  let report = null;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    report = null;
+  }
+  return {
+    command: `python3 -m cybernetic_robotics.cli sdk-smoke --kind ${kind}`,
     stdout: result.stdout,
     stderr: result.stderr,
     report,
@@ -2329,6 +2376,12 @@ function roboticsToolReference() {
         "read",
         "Scans cloned official Unitree G1 Python examples and reports shim import/method coverage.",
         "Official unitree_sdk2_python checkout available under ~/wagmi or supplied path.",
+      ),
+      toolReference(
+        "unitree_sdk_behavior_smoke",
+        "robot-motion-validation",
+        "Runs safe arm, loco, and lowcmd Unitree SDK-shaped calls and returns simulator evidence.",
+        "Simulator HTTP endpoint reachable; use safety_stop after exploratory motion.",
       ),
       toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
       toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),

@@ -21,6 +21,7 @@ from cybernetic_robotics import (
     UnitreeTransportConfig,
     audit_official_g1_examples,
     evaluate_lowstate_safety,
+    run_official_g1_sdk_smoke,
 )
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
@@ -714,6 +715,43 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(report["partially_supported_examples"], 1)
         missing_methods = report["summary"]["missing_methods"]
         self.assertEqual(missing_methods[0]["method"], "TeleportToMoon")
+
+    def test_official_g1_sdk_behavior_smoke_runs_safe_facade_calls(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                report = run_official_g1_sdk_smoke("all", RobotEndpoints(game_control_url=fake.url))
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+        self.assertTrue(report["ok"])
+        self.assertIn("arm", report["results"])
+        self.assertIn("loco", report["results"])
+        self.assertIn("lowcmd", report["results"])
+        self.assertEqual(report["results"]["arm"]["code"], 0)
+        self.assertTrue(report["results"]["lowcmd"]["lowcmd_active"])
+        self.assertTrue(report["status"]["lowcmd_active"])
+        self.assertTrue(report["safety"]["safe_to_command"])
+
+    def test_official_g1_sdk_behavior_smoke_can_run_single_surface(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                report = run_official_g1_sdk_smoke("arm", RobotEndpoints(game_control_url=fake.url))
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(set(report["results"]), {"arm"})
+        self.assertEqual(report["status"]["pose"], "raise_right_hand")
 
     def test_unitree_session_diagnostics_reports_transport_and_topics(self):
         with FakeServer() as fake:
