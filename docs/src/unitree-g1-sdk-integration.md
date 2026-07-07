@@ -231,11 +231,15 @@ python3 -m py_compile \
   packages/cybernetic-robotics/src/unitree_sdk2py/comm/motion_switcher/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/utils/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
+  overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
-  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py
+  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py \
+  packages/g1-yoga-rl/g1_yoga_rl/*.py
 
 cargo test -p cyber_robot_viewer
+node --check script/prepare-unitree-g1-mujoco-container.mjs
+node --check script/prepare-unitree-g1-sdk2-sidecar.mjs
 ```
 
 Manual runtime validation:
@@ -288,6 +292,18 @@ G1 integration surface.
 | `unitree_rl_lab`      | Isaac Lab training and G1 policy deployment examples. Useful later for behavior and policy workflows.                                                          |
 | `unitree_rl_mjlab`    | MuJoCo-native RL training and deployment examples. Useful later for policy workflows.                                                                          |
 | `unitree_IL_lerobot`  | LeRobot data conversion, dataset editing, G1/Dex hand evaluation, and imitation-learning tooling. Useful after base SDK control exists.                        |
+
+Cybernetic's current learned-policy research path lives in
+`packages/g1-yoga-rl`. It now has a deploy gate for LocoMuJoCo-trained G1 yoga
+policies: export a PPOJax agent to NumPy, evaluate it in LocoMuJoCo, pack a
+29-DOF deploy bundle, validate observation parity against the training env, and
+run local sim2sim through
+`overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py`. That runtime
+is also wired into the live Docker protocol server when
+`UNITREE_G1_POLICY_BUNDLE` points at a packed bundle; `g1-yoga-sim2sim` remains
+the pre-Docker proof harness for observation/action mapping. Agents can inspect
+and control that optional runtime through `sim_policy_status`,
+`sim_policy_start`, and `sim_policy_stop`.
 
 ## Key Findings {#key-findings}
 

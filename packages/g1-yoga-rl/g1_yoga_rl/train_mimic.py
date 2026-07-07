@@ -92,16 +92,20 @@ def main() -> None:
     parser.add_argument("--traj", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--total-timesteps", type=float, default=10e6)
+    parser.add_argument("--chunks", type=int, default=10,
+                        help="train in N chunks, saving after each; the best-return chunk is kept "
+                             "so a late PPO collapse cannot destroy the run")
     parser.add_argument("--num-envs", type=int, default=64)
     parser.add_argument("--num-steps", type=int, default=100)
     parser.add_argument("--num-minibatches", type=int, default=8)
-    parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--horizon", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    args.total_timesteps = int(args.total_timesteps)
+    args.total_timesteps = int(args.total_timesteps) // args.chunks
 
     import jax
+    import numpy as np
 
     from loco_mujoco.algorithms import PPOJax
 
@@ -112,31 +116,41 @@ def main() -> None:
     config = build_config(args)
     agent_conf = PPOJax.init_agent_conf(env, config)
     train_fn = jax.jit(PPOJax.build_train_fn(env, agent_conf, mh=None))
+    resume_fn = jax.jit(PPOJax.build_resume_train_fn(env, agent_conf, mh=None))
 
     updates = config.experiment.num_updates
     samples_per_update = args.num_envs * args.num_steps
-    print(f"[train] total={args.total_timesteps:,} steps = {updates} updates x {samples_per_update} samples")
-
-    rng = jax.random.PRNGKey(args.seed)
-    start = time.perf_counter()
-    out = train_fn(rng)
-    jax.block_until_ready(out["agent_state"].train_state.params)
-    elapsed = time.perf_counter() - start
-    print(f"[train] done in {elapsed / 60.0:.1f} min "
-          f"({args.total_timesteps / max(elapsed, 1e-9):.0f} steps/s)")
+    print(f"[train] {args.chunks} chunks x {args.total_timesteps:,} steps "
+          f"({updates} updates x {samples_per_update} samples each)")
 
     args.out.mkdir(parents=True, exist_ok=True)
-    save_path = PPOJax.save_agent(str(args.out), agent_conf, out["agent_state"])
-    print(f"[train] agent saved -> {save_path}")
+    rng = jax.random.PRNGKey(args.seed)
+    agent_state = None
+    best_return = -np.inf
+    start = time.perf_counter()
+    for chunk in range(args.chunks):
+        rng, chunk_rng = jax.random.split(rng)
+        out = train_fn(chunk_rng) if agent_state is None else resume_fn(chunk_rng, agent_state)
+        agent_state = out["agent_state"]
+        jax.block_until_ready(agent_state.train_state.params)
 
-    metrics = out.get("training_metrics")
-    if metrics is not None:
-        returns = metrics.mean_episode_return
-        lengths = metrics.mean_episode_length
-        count = len(returns)
-        for i in range(0, count, max(1, count // 20)):
-            print(f"  update {i:5d}: return={float(returns[i]):8.2f} length={float(lengths[i]):6.1f}")
-        print(f"  final       : return={float(returns[-1]):8.2f} length={float(lengths[-1]):6.1f}")
+        metrics = out["training_metrics"]
+        returns = np.asarray(metrics.mean_episode_return)
+        lengths = np.asarray(metrics.mean_episode_length)
+        tail = max(1, len(returns) // 5)
+        tail_return = float(np.mean(returns[-tail:]))
+        elapsed = time.perf_counter() - start
+        print(f"[chunk {chunk + 1}/{args.chunks}] tail return={tail_return:8.2f} "
+              f"length={float(np.mean(lengths[-tail:])):6.1f} "
+              f"(elapsed {elapsed / 60.0:.1f} min)", flush=True)
+
+        if tail_return > best_return:
+            best_return = tail_return
+            save_path = PPOJax.save_agent(str(args.out), agent_conf, agent_state)
+            print(f"[chunk {chunk + 1}] new best -> {save_path}", flush=True)
+
+    print(f"[train] done in {(time.perf_counter() - start) / 60.0:.1f} min; "
+          f"best tail return {best_return:.2f}")
 
 
 if __name__ == "__main__":

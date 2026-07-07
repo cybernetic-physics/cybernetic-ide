@@ -13,8 +13,13 @@ Two modes:
 * --posed: kinematic posing with smooth glides between poses. Physics is paused,
   so the robot never falls -- good as a clean pose reference / choreography.
 
+* --policy: the trained LocoMuJoCo mimic policy drives the whole flow with
+  physics on -- smooth glides AND balance come from the network at 100 Hz.
+  Requires the sim image to be built with a policy bundle.
+
     python3 examples/yoga_teacher.py
     python3 examples/yoga_teacher.py --posed
+    python3 examples/yoga_teacher.py --policy --rounds 2
     python3 examples/yoga_teacher.py --hold-seconds 4 --rounds 2
 
 Install the package once with:
@@ -89,6 +94,10 @@ def main() -> int:
         help="Kinematic posing with smooth glides (physics paused; never falls).",
     )
     parser.add_argument(
+        "--policy", action="store_true",
+        help="Drive the flow with the trained balance policy (physics on).",
+    )
+    parser.add_argument(
         "--transition-seconds", type=float, default=1.5,
         help="Glide duration between poses in --posed mode.",
     )
@@ -110,7 +119,10 @@ def main() -> int:
     args.snapshot_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        held, fell = teach(args)
+        if args.policy:
+            held, fell = teach_policy(args)
+        else:
+            held, fell = teach(args)
     except SimulatorUnavailable as error:
         print(f"Simulator is not reachable: {error}", file=sys.stderr)
         print("Install helpers with: python3 -m pip install -e packages/cybernetic-robotics", file=sys.stderr)
@@ -127,6 +139,76 @@ def setup_scene(robot: G1Robot) -> None:
     robot.reset_camera()
     robot.orbit(dx=-8, dy=6)
     robot.zoom(140)
+
+
+def teach_policy(args: argparse.Namespace) -> tuple[int, int]:
+    """Run the flow under the trained mimic policy and narrate it live.
+
+    The sim advances a reference trajectory (1 s settle, then per pose a 1.5 s
+    glide + 3 s hold at 100 Hz) while the policy balances the robot on real
+    torques. /status reports the active reference frame, pose label, and a
+    fall counter (falls teleport the robot back onto the reference).
+    """
+
+    print("\n== G1 Yoga -- trained balance policy (physics on). Let's begin ==")
+
+    held = 0
+    fell = 0
+    with G1Robot.connect(timeout=args.timeout) as robot:
+        robot.reset()
+        setup_scene(robot)
+
+        response = robot.sim.command("yoga_policy", action="start", loop=True)
+        if not response.get("ok", False):
+            raise RuntimeError(
+                f"Policy mode unavailable: {response}. "
+                "Rebuild the sim image with a policy bundle to use --policy."
+            )
+        frames_total = int(response["policy"].get("frames_total", 0))
+
+        def policy_status() -> dict:
+            payload = robot.sim.command("yoga_policy", action="status")
+            return payload.get("policy", {})
+
+        frequency = 100.0
+        settle_frames = int(1.0 * frequency)
+        segment_frames = int(4.5 * frequency)
+
+        for round_index in range(1, max(1, args.rounds) + 1):
+            if args.rounds > 1:
+                print(f"\n-- Round {round_index} of {args.rounds} --")
+            round_offset = (round_index - 1) * frames_total
+            for step_index, asana in enumerate(FLOW, start=1):
+                hold_mid = (round_offset + settle_frames
+                            + (step_index - 1) * segment_frames
+                            + int(3.0 * frequency))
+                falls_before = None
+                while True:
+                    status = policy_status()
+                    if not status.get("active", False):
+                        raise RuntimeError("policy mode stopped unexpectedly")
+                    progressed = int(status.get("cycles", 0)) * frames_total + int(status["frame"])
+                    if falls_before is None:
+                        falls_before = int(status.get("falls", 0))
+                    if progressed >= hold_mid:
+                        break
+                    time.sleep(0.25)
+
+                frame = args.snapshot_dir / f"{round_index:02d}-{step_index:02d}-{asana.pose}-policy.jpg"
+                robot.snapshot(frame)
+                status = policy_status()
+                falls_after = int(status.get("falls", 0))
+                print(f"\n[{step_index}/{len(FLOW)}] {asana.name}")
+                print(f"    {asana.cue}")
+                if falls_after > (falls_before or 0):
+                    fell += 1
+                    print(f"    \U0001f4c9 lost balance ({falls_after - falls_before} recovery resets)")
+                else:
+                    held += 1
+                    print("    \U0001f4aa balanced by the trained policy")
+
+        robot.sim.command("yoga_policy", action="stop")
+    return held, fell
 
 
 def teach(args: argparse.Namespace) -> tuple[int, int]:

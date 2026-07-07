@@ -49,7 +49,17 @@ Simulator commands:
 - `lowcmd` commands record `received_at`, `age_seconds`, `expires_at`,
   `active`, `stale`, and `watchdog_seconds` metadata. The watchdog timeout is
   controlled by `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS` and defaults to `2.0`.
+- `yoga_policy` commands start, stop, or inspect the optional LocoMuJoCo-trained
+  policy runtime. Set `UNITREE_G1_POLICY_BUNDLE` to a packed `g1-yoga-pack`
+  bundle path inside the container; when the file is absent the command returns
+  `no policy bundle loaded`.
 - `POST /command` accepts the same command JSON over HTTP for simple probes.
+
+The default compose runtime mounts
+`.runtime/unitree-g1-mujoco/policy/` to
+`/opt/unitree-g1-mujoco-protocol/policy/`. Copy a deploy bundle to
+`.runtime/unitree-g1-mujoco/policy/g1_yoga_policy.npz` and recreate the
+container to enable `yoga_policy` mode.
 
 Direct HTTP examples:
 
@@ -59,6 +69,11 @@ curl -sS http://127.0.0.1:38383/status
 curl -sS \
   -H 'content-type: application/json' \
   -d '{"command":"pose","pose":"raise_right_hand"}' \
+  http://127.0.0.1:38383/command
+
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{"command":"yoga_policy","action":"start","loop":true}' \
   http://127.0.0.1:38383/command
 ```
 

@@ -19,6 +19,8 @@ import numpy as np
 import websockets
 from PIL import Image
 
+import g1_policy_runtime
+
 
 MESSAGE_TYPES = {
     "camera_frame_0": 3,
@@ -381,10 +383,46 @@ class G1MujocoState:
         if not self.model_path.exists():
             raise FileNotFoundError(f"Missing Unitree G1 MJCF model: {self.model_path}")
 
-        self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
+        # The yoga policy bundle (if present) requires the training model's
+        # mimic sites, which are injected into the MjSpec before compiling.
+        self.policy_bundle_path = Path(
+            os.environ.get(
+                "UNITREE_G1_POLICY_BUNDLE",
+                "/opt/unitree-g1-mujoco-protocol/policy/g1_yoga_policy.npz",
+            )
+        )
+        policy_bundle = None
+        if self.policy_bundle_path.exists():
+            policy_bundle = dict(np.load(self.policy_bundle_path, allow_pickle=True))
+            model_spec = mujoco.MjSpec.from_file(str(self.model_path))
+            g1_policy_runtime.inject_mimic_sites(model_spec, policy_bundle)
+            self.model = model_spec.compile()
+        else:
+            self.model = mujoco.MjModel.from_xml_path(str(self.model_path))
         self.data = mujoco.MjData(self.model)
-        self.model.opt.timestep = env_float("UNITREE_G1_TIMESTEP", 0.003)
+        self.default_timestep = env_float("UNITREE_G1_TIMESTEP", 0.003)
+        self.model.opt.timestep = self.default_timestep
         mujoco.mj_forward(self.model, self.data)
+
+        self.policy_controller = None
+        self.policy_state = {
+            "available": policy_bundle is not None,
+            "active": False,
+            "frame": 0,
+            "frames_total": 0,
+            "cycles": 0,
+            "falls": 0,
+            "loop": True,
+            "pose": None,
+        }
+        self.policy_physics_dt = 0.002
+        self.policy_substep_counter = 0
+        self.policy_substeps = 1
+        if policy_bundle is not None:
+            self.policy_controller = g1_policy_runtime.YogaPolicyController(self.model, policy_bundle)
+            frequency = float(policy_bundle["frequency"])
+            self.policy_substeps = max(1, int(round(1.0 / frequency / self.policy_physics_dt)))
+            self.policy_state["frames_total"] = self.policy_controller.n_frames
 
         self.camera = mujoco.MjvCamera()
         mujoco.mjv_defaultCamera(self.camera)
@@ -455,6 +493,9 @@ class G1MujocoState:
             self.active_pose = None
             self.control_mode = None
             self.base_yaw = 0.0
+            self.model.opt.timestep = self.default_timestep
+            self.policy_state["active"] = False
+            self.policy_substep_counter = 0
             self.loco_state.update(
                 {
                     "fsm_id": 1,
@@ -497,6 +538,7 @@ class G1MujocoState:
             for _ in range(max(1, count)):
                 self.refresh_lowcmd_watchdog_locked()
                 self.apply_hold_control_locked()
+                self.apply_policy_control_locked()
                 self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
@@ -686,6 +728,97 @@ class G1MujocoState:
         tau = gravity_comp + self.kp * (self.hold_target_qpos - q) - self.kd * qd
         np.clip(tau, self.ctrl_lo, self.ctrl_hi, out=tau)
         self.data.ctrl[:] = tau
+
+    def apply_policy_control_locked(self):
+        """Advance the yoga policy: a new action every policy_substeps physics
+        steps, gravity-comp PD on the 29-DOF-only actuators every step, and a
+        teleport back onto the reference on a fall so the looping demo
+        self-recovers."""
+
+        if self.control_mode != "policy" or self.policy_controller is None:
+            return
+        controller = self.policy_controller
+        if self.policy_substep_counter % self.policy_substeps == 0:
+            if float(self.data.qpos[2]) < 0.35:
+                controller.reset_to_frame(self.data, controller.frame)
+                self.policy_state["falls"] += 1
+            before_frame = controller.frame
+            controller.apply(self.data)
+            if controller.frame < before_frame:
+                self.policy_state["cycles"] += 1
+            self.policy_state["frame"] = controller.frame
+            if not self.policy_state.get("loop", True) and controller.frame == 0:
+                self.stop_yoga_policy_locked()
+                return
+        controller.hold_extra_actuators(self.data)
+        self.policy_substep_counter += 1
+
+    def start_yoga_policy(self, payload=None):
+        payload = payload or {}
+        with self.lock:
+            if self.policy_controller is None:
+                return {
+                    "ok": False,
+                    "error": "no policy bundle loaded",
+                    "bundle_path": str(self.policy_bundle_path),
+                }
+            start_frame = int(payload.get("frame", 0))
+            self.model.opt.timestep = self.policy_physics_dt
+            self.policy_controller.reset_to_frame(self.data, start_frame)
+            self.policy_substep_counter = 0
+            self.policy_state.update(
+                {
+                    "active": True,
+                    "frame": self.policy_controller.frame,
+                    "cycles": 0,
+                    "falls": 0,
+                    "loop": bool(payload.get("loop", True)),
+                }
+            )
+            self.control_mode = "policy"
+            self.active_pose = "yoga_policy"
+            self.paused = False
+            self.last_step_wall_time = time.monotonic()
+            return {
+                "ok": True,
+                "control_mode": self.control_mode,
+                "policy": self.policy_status_locked(),
+                "timestep": self.model.opt.timestep,
+            }
+
+    def stop_yoga_policy_locked(self):
+        self.model.opt.timestep = self.default_timestep
+        self.control_mode = None
+        self.active_pose = None
+        self.data.ctrl[:] = 0.0
+        self.paused = True
+        self.policy_state["active"] = False
+
+    def stop_yoga_policy(self):
+        with self.lock:
+            self.stop_yoga_policy_locked()
+            return {"ok": True, "policy": dict(self.policy_state)}
+
+    # the trajectory is settle(1s) then per pose glide(1.5s)+hold(3s), in the
+    # yoga flow order; used only to label the current segment in /status
+    POLICY_FLOW = [
+        "mountain", "upward_salute", "forward_fold", "chair", "warrior_one",
+        "warrior_two", "goddess", "tree", "namaste",
+    ]
+
+    def policy_status_locked(self):
+        status = dict(self.policy_state)
+        if status["active"] and self.policy_controller is not None:
+            frequency = 1.0 / self.policy_controller.control_dt
+            settle = int(round(1.0 * frequency))
+            segment = int(round(4.5 * frequency))
+            frame = int(status["frame"])
+            if frame < settle:
+                status["pose"] = "settle"
+            else:
+                index = min((frame - settle) // segment, len(self.POLICY_FLOW) - 1)
+                status["pose"] = self.POLICY_FLOW[index]
+        return status
 
     def apply_loco_velocity_locked(self, dt):
         if self.control_mode != "loco_velocity":
@@ -1161,6 +1294,7 @@ class G1MujocoState:
             for _ in range(steps):
                 self.refresh_lowcmd_watchdog_locked()
                 self.apply_hold_control_locked()
+                self.apply_policy_control_locked()
                 self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
@@ -1177,6 +1311,7 @@ class G1MujocoState:
                 "control_mode": self.control_mode,
                 "fallen": fallen,
                 "pelvis_height": pelvis_height,
+                "policy": self.policy_status_locked(),
                 "robot_statuses": {self.robot_name: True},
                 "is_multi_robot": False,
                 "robot_modes": {
@@ -1448,6 +1583,16 @@ class G1MujocoState:
                 payload.get("pose", "raise_right_hand"),
                 teleport=payload.get("teleport", True),
             )
+        if command == "yoga_policy":
+            action = payload.get("action", "start")
+            if action == "start":
+                return self.start_yoga_policy(payload)
+            if action == "stop":
+                return self.stop_yoga_policy()
+            if action == "status":
+                with self.lock:
+                    return {"ok": True, "policy": self.policy_status_locked()}
+            return {"ok": False, "error": f"unsupported yoga_policy action: {action}"}
         if command == "loco":
             return self.handle_loco_command(payload)
         if command == "lowcmd":
@@ -1623,10 +1768,35 @@ def start_http_server(state):
                 return
             self.write_image(data, content_type)
 
-    server = ThreadingHTTPServer(("0.0.0.0", 38383), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0", env_int("UNITREE_G1_HTTP_PORT", 38383)), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server
+
+
+def start_physics_loop(state):
+    """Advance physics against wall time on its own cadence.
+
+    Decoupled from rendering: the render loop only runs at render_hz (8 by
+    default) with a 0.08 s catch-up cap per call, which throttled physics to
+    ~64% of real time — far too slow for the 500 Hz policy control loop.
+    """
+
+    def loop():
+        interval = 1.0 / 200.0
+        while True:
+            started = time.monotonic()
+            try:
+                state.advance_for_wall_time()
+            except Exception as error:
+                print(f"[physics] {error}", flush=True)
+
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.0005, interval - elapsed))
+
+    thread = threading.Thread(target=loop, daemon=True)
+    thread.start()
+    return thread
 
 
 def start_render_loop(state):
@@ -1635,7 +1805,6 @@ def start_render_loop(state):
         while True:
             started = time.monotonic()
             try:
-                state.advance_for_wall_time()
                 state.refresh_jpeg_cache()
             except Exception as error:
                 print(f"[render] {error}", flush=True)
@@ -1710,7 +1879,11 @@ async def websocket_handler(state, websocket):
 
 async def main():
     state = G1MujocoState()
-    start_render_loop(state)
+    start_physics_loop(state)
+    # UNITREE_G1_RENDER_HZ=0 disables the JPEG render loop; useful for
+    # protocol tests on hosts where offscreen GL wedges in a background thread
+    if state.render_hz > 0:
+        start_render_loop(state)
     start_http_server(state)
     print(
         json.dumps(
@@ -1719,8 +1892,8 @@ async def main():
                 "model_path": str(state.model_path),
                 "model_revision": state.model_revision,
                 "mujoco": mujoco.mj_versionString(),
-                "physics_ws": "ws://0.0.0.0:8788",
-                "game_control": "http://0.0.0.0:38383",
+                "physics_ws": f"ws://0.0.0.0:{env_int('UNITREE_G1_WS_PORT', 8788)}",
+                "game_control": f"http://0.0.0.0:{env_int('UNITREE_G1_HTTP_PORT', 38383)}",
                 "paused": state.paused,
             },
             indent=2,
@@ -1730,7 +1903,7 @@ async def main():
     async with websockets.serve(
         lambda websocket: websocket_handler(state, websocket),
         "0.0.0.0",
-        8788,
+        env_int("UNITREE_G1_WS_PORT", 8788),
         max_size=None,
         ping_interval=20,
         ping_timeout=20,

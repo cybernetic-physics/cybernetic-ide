@@ -5,8 +5,8 @@ services:
     container_name: unitree-g1-mujoco
     shm_size: "256m"
     ports:
-      - "38383:38383"
-      - "8788:8788"
+      - "${UNITREE_G1_HTTP_PORT:-38383}:${UNITREE_G1_HTTP_PORT:-38383}"
+      - "${UNITREE_G1_WS_PORT:-8788}:${UNITREE_G1_WS_PORT:-8788}"
     environment:
       UNITREE_G1_MODEL_PATH: ${UNITREE_G1_MODEL_PATH:-/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml}
       UNITREE_G1_MODEL_REVISION: ${UNITREE_G1_MODEL_REVISION}
@@ -14,8 +14,12 @@ services:
       UNITREE_G1_AUTORUN: ${UNITREE_G1_AUTORUN:-0}
       UNITREE_G1_FRAME_HZ: ${UNITREE_G1_FRAME_HZ:-20}
       UNITREE_G1_RENDER_HZ: ${UNITREE_G1_RENDER_HZ:-8}
+      UNITREE_G1_HTTP_PORT: ${UNITREE_G1_HTTP_PORT:-38383}
+      UNITREE_G1_WS_PORT: ${UNITREE_G1_WS_PORT:-8788}
       UNITREE_G1_RENDER_WIDTH: ${UNITREE_G1_RENDER_WIDTH:-640}
       UNITREE_G1_RENDER_HEIGHT: ${UNITREE_G1_RENDER_HEIGHT:-480}
+      UNITREE_G1_POLICY_BUNDLE: ${UNITREE_G1_POLICY_BUNDLE:-/opt/unitree-g1-mujoco-protocol/policy/g1_yoga_policy.npz}
       MUJOCO_GL: osmesa
     volumes:
       - ${UNITREE_G1_MUJOCO_ASSET_ROOT}:/opt/unitree_mujoco:ro
+      - ${UNITREE_G1_POLICY_DIR_HOST:-./.runtime/unitree-g1-mujoco/policy}:/opt/unitree-g1-mujoco-protocol/policy:ro

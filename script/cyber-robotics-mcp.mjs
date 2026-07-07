@@ -171,6 +171,23 @@ const tools = [
     [],
     { readOnlyHint: false },
   ),
+  tool("sim_policy_status", "Read the optional G1 yoga policy runtime status from the simulator.", {}, [], {
+    readOnlyHint: true,
+  }),
+  tool(
+    "sim_policy_start",
+    "Start the optional LocoMuJoCo-trained G1 yoga policy runtime.",
+    {
+      loop: { type: "boolean", default: true },
+      frame: { type: "integer", minimum: 0, default: 0 },
+    },
+    [],
+    { readOnlyHint: false },
+  ),
+  tool("sim_policy_stop", "Stop the optional G1 yoga policy runtime.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+  }),
   tool(
     "viewer_camera_control",
     "Control the MuJoCo free camera through the simulator protocol.",
@@ -607,6 +624,17 @@ async function callTool(name, args) {
       return textResult(await validateBehavior(args));
     case "sim_apply_pose":
       return textResult(await command({ command: "pose", pose: args.pose || DEFAULT_POSE }));
+    case "sim_policy_status":
+      return textResult(await command({ command: "yoga_policy", action: "status" }));
+    case "sim_policy_start":
+      return textResult(await command({
+        command: "yoga_policy",
+        action: "start",
+        loop: args.loop !== false,
+        frame: toInt(args.frame, 0),
+      }));
+    case "sim_policy_stop":
+      return textResult(await command({ command: "yoga_policy", action: "stop" }));
     case "viewer_camera_control":
       return textResult(await camera(args));
     case "viewer_snapshot":

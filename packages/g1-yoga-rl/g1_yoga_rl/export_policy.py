@@ -20,11 +20,11 @@ import argparse
 import pickle
 from pathlib import Path
 
-import numpy as np
 
-
-def numpy_policy_action(policy: dict, obs: np.ndarray) -> np.ndarray:
+def numpy_policy_action(policy: dict, obs):
     """Deterministic actor forward pass using exported arrays ([-1,1] output)."""
+    import numpy as np
+
     x = (obs - policy["obs_mean"]) / np.sqrt(policy["obs_var"] + 1e-8)
     for i in range(int(policy["n_layers"])):
         x = x @ policy[f"w{i}"] + policy[f"b{i}"]
@@ -42,6 +42,7 @@ def main() -> None:
     import jax
     import jax.numpy as jnp
     import mujoco
+    import numpy as np
 
     from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
 
@@ -75,13 +76,17 @@ def main() -> None:
         [mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, int(i)) for i in action_indices]
     )
     export["obs_joint_names"] = np.array([
-        obs_type.xml_name for obs_type in env.obs_container.list_all()
+        obs_type.xml_name for obs_type in env.obs_container.values()
         if type(obs_type).__name__ == "JointPos"
     ])
     export["sites_for_mimic"] = np.array(list(env.sites_for_mimic))
     export["control_dt"] = np.asarray(env.dt)
 
-    # parity check: flax apply vs numpy forward
+    # Parity check: flax apply vs numpy forward. The flax RunningMeanStd
+    # normalizes with stats that INCLUDE the incoming batch, so the emulation
+    # here applies the same Welford update before normalizing; the deployed
+    # policy uses frozen stats instead (count is ~millions after a real run,
+    # making the per-step update negligible in-distribution).
     network = saved["agent_conf"]["network"]
     rng = np.random.default_rng(0)
     obs_dim = export["obs_mean"].shape[0]
@@ -91,7 +96,19 @@ def main() -> None:
         jnp.asarray(test_obs), mutable=["run_stats"],
     )
     jax_actions = np.asarray(pi.mode())
-    numpy_actions = np.stack([numpy_policy_action(export, o) for o in test_obs])
+
+    count = float(run_stats["count"])
+    mean, var = export["obs_mean"], export["obs_var"]
+    batch_mean = test_obs.mean(axis=0)
+    batch_var = test_obs.var(axis=0) + 1e-6
+    batch_count = test_obs.shape[0]
+    delta = batch_mean - mean
+    new_mean = mean + delta * batch_count / (count + batch_count)
+    new_var = (var * count + batch_var * batch_count
+               + np.square(delta) * count * batch_count / (count + batch_count)) / (count + batch_count)
+    updated = dict(export)
+    updated["obs_mean"], updated["obs_var"] = new_mean, new_var
+    numpy_actions = np.stack([numpy_policy_action(updated, o) for o in test_obs])
     worst = float(np.max(np.abs(jax_actions - numpy_actions)))
     print(f"[export] parity max|jax - numpy| = {worst:.2e}")
     if worst > 5e-4:

@@ -297,6 +297,9 @@ ad hoc scripts first. The default tool surface includes:
 - simulator validation: `sim_validate_behavior`, which checks ready/fallen
   state, render health, lowstate availability, lowcmd freshness, and optional
   snapshot evidence after a script runs;
+- learned policy runtime: `sim_policy_status`, `sim_policy_start`, and
+  `sim_policy_stop`, which control the optional LocoMuJoCo-trained yoga policy
+  when a deploy bundle is mounted into the simulator;
 - session diagnostics: `unitree_session_status`, which reports the selected
   Unitree transport, sim/real mode, DDS domain/interface, simulator
   reachability, and topic freshness;
@@ -384,7 +387,10 @@ robotics work should stay behind narrow product boundaries:
 - Unitree-shaped Python APIs live in `overlays/unitree-g1-sdk-shim`.
 - Beginner-friendly and power-user Python APIs live in
   `packages/cybernetic-robotics`.
-- LocoMuJoCo policy-training research utilities live in `packages/g1-yoga-rl`.
+- LocoMuJoCo policy-training and sim2sim deploy research utilities live in
+  `packages/g1-yoga-rl`; the 29-DOF deploy runtime lives in
+  `overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py`, with
+  policy bundles mounted from `.runtime/unitree-g1-mujoco/policy/`.
 - End-user demos live in `examples/`.
 - Long-form architecture and safety notes live in
   `docs/src/unitree-g1-sdk-integration.md`.
@@ -408,13 +414,16 @@ python3 -m py_compile \
   packages/cybernetic-robotics/src/unitree_sdk2py/comm/motion_switcher/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/utils/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
+  overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
-  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py
+  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py \
+  packages/g1-yoga-rl/g1_yoga_rl/*.py
 
 cargo test -p cyber_robot_viewer
 
 node --check script/prepare-unitree-g1-sdk2-sidecar.mjs
+node --check script/prepare-unitree-g1-mujoco-container.mjs
 docker compose \
   --env-file .runtime/unitree-g1-sdk2/compose.env \
   -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \

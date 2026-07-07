@@ -29,7 +29,7 @@ LocoMuJoCo from the local clone:
 ~/.local/bin/uv venv --python 3.12 .venv-rl
 source .venv-rl/bin/activate
 uv pip install -e ~/wagmi/loco-mujoco
-uv pip install -e packages/g1-yoga-rl
+uv pip install -e 'packages/g1-yoga-rl[locomujoco]'
 ```
 
 ## Commands
@@ -60,16 +60,69 @@ g1-yoga-train \
   --traj .runtime/g1-yoga-rl/yoga_trajectory.npz \
   --out .runtime/g1-yoga-rl/runs/smoke \
   --total-timesteps 1000000 \
-  --num-envs 64
+  --num-envs 64 \
+  --chunks 10
 ```
 
-Export a trained PPOJax agent to a plain NumPy policy bundle for future
-simulator deployment:
+Export a trained PPOJax agent to a plain NumPy policy:
 
 ```sh
 g1-yoga-export \
   --agent .runtime/g1-yoga-rl/runs/smoke/PPOJax_saved.pkl \
   --out .runtime/g1-yoga-rl/policies/yoga_policy.npz
+```
+
+Evaluate the exported policy in the original LocoMuJoCo CPU environment before
+trying to deploy it into Cybernetic's 29-DOF simulator:
+
+```sh
+g1-yoga-eval \
+  --policy .runtime/g1-yoga-rl/policies/yoga_policy.npz \
+  --traj .runtime/g1-yoga-rl/yoga_trajectory.npz \
+  --render-dir .runtime/g1-yoga-rl/eval-frames
+```
+
+Pack a deploy bundle for the Cybernetic simulator. This precomputes the
+reference half of the mimic observation with LocoMuJoCo's own math, stores the
+training model's mimic sites, and records actuator/joint names so the 29-DOF
+runtime can map by joint rather than fragile actuator index:
+
+```sh
+g1-yoga-pack \
+  --policy .runtime/g1-yoga-rl/policies/yoga_policy.npz \
+  --traj .runtime/g1-yoga-rl/yoga_trajectory.npz \
+  --out .runtime/g1-yoga-rl/policies/yoga_deploy_bundle.npz
+```
+
+To make the bundle visible to the Docker simulator, place it at the default
+policy mount location and recreate the simulator container:
+
+```sh
+cp .runtime/g1-yoga-rl/policies/yoga_deploy_bundle.npz \
+  .runtime/unitree-g1-mujoco/policy/g1_yoga_policy.npz
+docker compose \
+  --env-file .runtime/unitree-g1-mujoco/compose.env \
+  -f overlays/unitree-g1-mujoco-container/compose.yaml \
+  up -d --force-recreate
+```
+
+Validate that the deploy observation builder matches the training environment
+on sampled frames before rebuilding a Docker image:
+
+```sh
+g1-yoga-validate-deploy \
+  --bundle .runtime/g1-yoga-rl/policies/yoga_deploy_bundle.npz \
+  --traj .runtime/g1-yoga-rl/yoga_trajectory.npz
+```
+
+Run the deploy bundle through the same 29-DOF MuJoCo model used by the
+Cybernetic simulator. This is the local sim2sim gate before rebuilding or
+launching the Docker protocol server with a mounted policy bundle:
+
+```sh
+g1-yoga-sim2sim \
+  --bundle .runtime/g1-yoga-rl/policies/yoga_deploy_bundle.npz \
+  --render-dir .runtime/g1-yoga-rl/sim2sim-frames
 ```
 
 Render one frame per pose hold for visual QA:
@@ -102,6 +155,15 @@ g1-yoga-bench-env --mode both --num-envs 16 --num-steps 100
 
 Generated `.npz` datasets are intentionally not committed. Store them under
 `.runtime/g1-yoga-rl/` or regenerate them from the scripts.
+
+The simulator-side runtime lives at
+`overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py`. It is a
+plain NumPy/MuJoCo module that injects the LocoMuJoCo mimic sites into the
+29-DOF G1 model, reconstructs the policy observation, maps the 23-DOF policy
+actuators onto the 29-DOF model by driven joint name, and PD-holds the extra
+wrist/waist actuators. The live Docker protocol server loads it when
+`UNITREE_G1_POLICY_BUNDLE` points at a packed bundle and exposes the
+`yoga_policy` simulator command.
 
 ## Why This Exists
 

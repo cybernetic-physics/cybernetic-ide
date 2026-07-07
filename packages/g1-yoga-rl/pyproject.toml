@@ -13,8 +13,10 @@ dependencies = []
 [project.optional-dependencies]
 locomujoco = [
   "jax",
+  "mujoco",
   "numpy",
   "omegaconf",
+  "pillow",
 ]
 
 [project.scripts]
@@ -27,6 +29,10 @@ g1-yoga-analyze-stability = "g1_yoga_rl.analyze_pose_stability:main"
 g1-yoga-tune-feet = "g1_yoga_rl.tune_pose_feet:main"
 g1-yoga-train = "g1_yoga_rl.train_mimic:main"
 g1-yoga-export = "g1_yoga_rl.export_policy:main"
+g1-yoga-eval = "g1_yoga_rl.eval_policy:main"
+g1-yoga-pack = "g1_yoga_rl.pack_deploy:main"
+g1-yoga-validate-deploy = "g1_yoga_rl.validate_deploy:main"
+g1-yoga-sim2sim = "g1_yoga_rl.sim2sim_test:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["g1_yoga_rl"]

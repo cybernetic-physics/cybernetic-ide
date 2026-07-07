@@ -171,6 +171,10 @@ Tasks:
 - Done: add and verify `unitree_build_official_mujoco_peer`; it builds the
   upstream native C++ `simulate/build/unitree_mujoco` binary from the pinned
   runtime cache.
+- Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
+  MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
+  cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
+  mounting for deploy bundles.
 - Launch official `unitree_mujoco` in sim mode with a known DDS domain and
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.
@@ -256,6 +260,9 @@ Tasks:
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command
   freshness, and screenshot availability after a script runs.
+- Done: expose `sim_policy_status`, `sim_policy_start`, and `sim_policy_stop`
+  in the default Robotics Agent profile so agents can inspect or run the
+  optional learned-policy runtime when a deploy bundle is mounted.
 - Add `unitree_example_scaffold` variants for arm action, locomotion,
   low-level joint target, scene edit, and telemetry monitor.
 - Add tool docs that list safety level, side effects, and expected simulator
