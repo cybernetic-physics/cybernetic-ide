@@ -30,7 +30,7 @@ from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action
 from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_, unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.default import unitree_go_msg_dds__MotorCmds_, unitree_go_msg_dds__SportModeState_, unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
@@ -98,6 +98,14 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "tts": [],
         "streams": {},
     }
+    hand_sdk = {
+        "topic": "rt/hand_sdk",
+        "motor_count": 0,
+        "weight": 0.0,
+        "tau": 0.0,
+        "intent": "idle",
+        "cmds": [],
+    }
     camera = {
         "cameraId": 0,
         "type": "free",
@@ -132,6 +140,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "model_path": "/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml",
                         "loco": type(self).loco,
                         "render": {"camera": type(self).camera},
+                        "hand_sdk": type(self).hand_sdk,
                         "lowcmd": {
                             "motor_cmd_count": type(self).lowcmd_count,
                             **type(self).lowcmd_meta,
@@ -325,6 +334,21 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                 elif action == "stop_play":
                     type(self).audio["streams"].clear()
                 return self._json({"ok": True, "command": command, "audio": type(self).audio, **payload})
+            elif command == "hand_sdk":
+                cmds = payload.get("cmds", [])
+                if not isinstance(cmds, list):
+                    return self._json({"ok": False, "error": "cmds must be a list"})
+                tau = sum(float(item.get("tau", 0.0)) for item in cmds) / len(cmds) if cmds else 0.0
+                weight = max(0.0, min(1.0, float(cmds[0].get("mode", 0)) / 100.0)) if cmds else 0.0
+                type(self).hand_sdk = {
+                    "topic": payload.get("topic", "rt/hand_sdk"),
+                    "motor_count": len(cmds),
+                    "weight": weight,
+                    "tau": tau,
+                    "intent": "close" if tau > 0.03 else "open" if tau < -0.03 else "hold",
+                    "cmds": cmds,
+                }
+                return self._json({"ok": True, "command": command, "hand_sdk": type(self).hand_sdk})
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -385,6 +409,14 @@ class FakeServer:
             "led": {"R": 0, "G": 0, "B": 0},
             "tts": [],
             "streams": {},
+        }
+        FakeG1Handler.hand_sdk = {
+            "topic": "rt/hand_sdk",
+            "motor_count": 0,
+            "weight": 0.0,
+            "tau": 0.0,
+            "intent": "idle",
+            "cmds": [],
         }
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -1071,6 +1103,32 @@ class RobotApiTests(unittest.TestCase):
                 self.assertTrue(status.lowcmd_active)
                 self.assertFalse(status.lowcmd_stale)
                 self.assertAlmostEqual(status.lowcmd_age_seconds or 0.0, 0.0)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_hand_sdk_channel_records_open_close_intent(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                hand_cmds = unitree_go_msg_dds__MotorCmds_()
+                hand_cmds.cmds[0].mode = 100
+                for cmd in hand_cmds.cmds:
+                    cmd.tau = 0.3
+
+                publisher = ChannelPublisher("rt/hand_sdk", type(hand_cmds))
+                publisher.Init()
+                self.assertTrue(publisher.Write(hand_cmds))
+
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertEqual(publisher.last_response["topic"], "rt/hand_sdk")
+                self.assertEqual(FakeG1Handler.hand_sdk["motor_count"], 4)
+                self.assertEqual(FakeG1Handler.hand_sdk["intent"], "close")
+                self.assertAlmostEqual(FakeG1Handler.hand_sdk["weight"], 1.0)
+                self.assertAlmostEqual(FakeG1Handler.hand_sdk["tau"], 0.3)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

@@ -46,6 +46,15 @@ class ChannelPublisher:
     def Write(self, message, timeout: float | None = None):
         if not self.inited:
             raise RuntimeError(f"ChannelPublisher {self.name} is not initialized")
+        if self.name == "rt/hand_sdk":
+            cmds = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "cmds", [])]
+            response = _session_from_env(timeout or 5.0).publish_hand_sdk(
+                self.name,
+                cmds,
+                timeout=timeout or 5.0,
+            )
+            self.last_response = response
+            return bool(response.get("ok"))
         if self.name not in {"rt/lowcmd", "rt/arm_sdk"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]

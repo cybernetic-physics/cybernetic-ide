@@ -321,6 +321,31 @@ publisher.Write(command)
 See `examples/g1_lowcmd_sdk.py` for a conservative right-arm motion that uses
 the same channel shape.
 
+Hand SDK examples can publish the same Go-family `MotorCmds_` shape used by
+Unitree's C++ `g1_hand_sdk_example.cpp`:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher
+from unitree_sdk2py.idl.default import unitree_go_msg_dds__MotorCmds_
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import MotorCmds_
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+command = unitree_go_msg_dds__MotorCmds_()
+command.cmds[0].mode = 100
+for motor in command.cmds:
+    motor.tau = 0.3
+
+publisher = ChannelPublisher("rt/hand_sdk", MotorCmds_)
+publisher.Init()
+publisher.Write(command)
+print(publisher.last_response["hand_sdk"]["intent"])
+```
+
+The local simulator records blend weight, mean torque, motor count, and
+open/close intent under `/status.simulation.hand_sdk`. It does not yet drive
+full finger joint physics. See `examples/g1_hand_sdk.py` for a close/open demo.
+
 The simulator shim also exposes read-only approximations of Unitree MuJoCo's
 Go-family telemetry topics:
 

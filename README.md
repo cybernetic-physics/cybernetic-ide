@@ -56,6 +56,7 @@ making the user think about the transport layer.
 | `examples/g1_walk_square_loco.py` | Unitree `LocoClient` locomotion pattern demo that walks a small square. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_arm_sdk_dds.py` | Official-style G1 `rt/arm_sdk` demo that enables arm SDK slot 29 and publishes bounded arm LowCmd frames. |
+| `examples/g1_hand_sdk.py` | Official-style G1 `rt/hand_sdk` demo that records open/close hand intent using Unitree's MotorCmds shape. |
 | `examples/g1_lowstate_monitor.py` | Compact lowstate and named-joint telemetry monitor with optional JSONL output. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
 | `examples/g1_scene_obstacle.py` | Safe scene-editing demo that adds a box obstacle to a copied MJCF scene and writes a manifest. |
@@ -404,7 +405,8 @@ ad hoc scripts first. The default tool surface includes:
   `scene_add_box`;
 - Unitree-shaped G1 controls: `g1_execute_action`, `g1_loco_command`,
   `g1_agv_command`, `g1_motion_switcher`, `g1_safety_check`, `g1_lowstate`,
-  `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`;
+  `g1_joint_state`, `g1_apply_joint_targets`, `g1_lowcmd`, and
+  `g1_hand_sdk`;
 - Python control jobs: `python_control_run`, `python_control_start`,
   `python_control_logs`, `python_control_pause`, `python_control_resume`,
   `python_control_stop`, and `python_control_list`.

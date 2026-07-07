@@ -54,6 +54,10 @@ Simulator commands:
 - `lowcmd` commands record `received_at`, `age_seconds`, `expires_at`,
   `active`, `stale`, and `watchdog_seconds` metadata. The watchdog timeout is
   controlled by `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS` and defaults to `2.0`.
+- `hand_sdk` commands accept official-style `rt/hand_sdk` motor command arrays
+  and record the hand blend weight, mean torque, motor count, and open/close
+  intent in `/status.simulation.hand_sdk`. This is intent telemetry for SDK
+  parity; full finger joint physics is still a later model/control step.
 - `yoga_policy` commands start, stop, or inspect the optional LocoMuJoCo-trained
   policy runtime. Set `UNITREE_G1_POLICY_BUNDLE` to a packed `g1-yoga-pack`
   bundle path inside the container; when the file is absent the command returns
@@ -79,6 +83,11 @@ curl -sS \
 curl -sS \
   -H 'content-type: application/json' \
   -d '{"command":"yoga_policy","action":"start","loop":true}' \
+  http://127.0.0.1:38383/command
+
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{"command":"hand_sdk","topic":"rt/hand_sdk","cmds":[{"mode":100,"tau":0.3},{"tau":0.3},{"tau":0.3},{"tau":0.3}]}' \
   http://127.0.0.1:38383/command
 ```
 

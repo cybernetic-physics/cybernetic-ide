@@ -1112,6 +1112,35 @@ const tools = [
     ["motor_cmd"],
     { readOnlyHint: false },
   ),
+  tool(
+    "g1_hand_sdk",
+    "Publish a simulator-backed Unitree rt/hand_sdk command intent for opening or closing the G1 hand.",
+    {
+      tau: {
+        type: "number",
+        minimum: -1.5,
+        maximum: 1.5,
+        default: 0.3,
+        description: "Positive closes the hand, negative opens it, matching Unitree's hand SDK example.",
+      },
+      weight: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        default: 1,
+        description: "Blend weight encoded as weight*100 in cmds[0].mode by Unitree's example.",
+      },
+      motor_count: {
+        type: "integer",
+        minimum: 1,
+        maximum: 12,
+        default: 4,
+        description: "Number of hand motor commands to publish; Unitree's simple hand SDK example uses 4.",
+      },
+    },
+    [],
+    { readOnlyHint: false },
+  ),
   tool("safety_stop", "Release motion mode, damp locomotion, neutralize the G1 pose, and pause the simulator.", {}, [], {
     readOnlyHint: false,
     destructiveHint: true,
@@ -1447,6 +1476,8 @@ async function callTool(name, args) {
       return textResult(await executeG1JointTargets(args));
     case "g1_lowcmd":
       return textResult(await executeG1Lowcmd(args));
+    case "g1_hand_sdk":
+      return textResult(await executeG1HandSdk(args));
     case "safety_stop":
       return textResult(await safetyStop());
     case "docker_logs":
@@ -2593,6 +2624,25 @@ async function executeG1Lowcmd(args) {
   });
 }
 
+async function executeG1HandSdk(args) {
+  const tau = clampNumber(args.tau, -1.5, 1.5, 0.3);
+  const weight = clampNumber(args.weight, 0, 1, 1);
+  const motorCount = clampInt(args.motor_count, 1, 12, 4);
+  const mode = clampInt(Math.round(weight * 100), 0, 100, 100);
+  return command({
+    command: "hand_sdk",
+    topic: "rt/hand_sdk",
+    cmds: Array.from({ length: motorCount }, (_, index) => ({
+      mode: index === 0 ? mode : 0,
+      q: 0,
+      dq: 0,
+      tau,
+      kp: 0,
+      kd: 0,
+    })),
+  });
+}
+
 async function executeG1JointTargets(args) {
   if (!args.targets || typeof args.targets !== "object" || Array.isArray(args.targets)) {
     throw new Error("g1_apply_joint_targets requires targets as an object");
@@ -2814,6 +2864,7 @@ function roboticsToolReference() {
       toolReference("g1_safety_check", "read", "Evaluates Unitree-inspired termination checks.", "Run before and after deliberate motion."),
       toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
+      toolReference("g1_hand_sdk", "robot-motion-intent", "Publishes rt/hand_sdk open/close intent.", "Simulator running; records hand intent rather than full finger physics."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),
       toolReference("g1_joint_state", "read", "Reads named joint mapping and limits.", "Simulator running."),
       toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),

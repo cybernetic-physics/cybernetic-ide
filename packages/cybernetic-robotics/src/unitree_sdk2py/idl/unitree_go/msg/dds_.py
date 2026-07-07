@@ -55,4 +55,21 @@ class WirelessController_:
     __idl_typename__: str = "unitree_go.msg.dds_.WirelessController_"
 
 
-__all__ = ["PathPoint_", "SportModeState_", "TimeSpec_", "WirelessController_"]
+@dataclass
+class MotorCmd_:
+    mode: int = 0
+    q: float = 0.0
+    dq: float = 0.0
+    tau: float = 0.0
+    kp: float = 0.0
+    kd: float = 0.0
+    __idl_typename__: str = "unitree_go.msg.dds_.MotorCmd_"
+
+
+@dataclass
+class MotorCmds_:
+    cmds: list[MotorCmd_] = field(default_factory=lambda: [MotorCmd_() for _ in range(4)])
+    __idl_typename__: str = "unitree_go.msg.dds_.MotorCmds_"
+
+
+__all__ = ["MotorCmd_", "MotorCmds_", "PathPoint_", "SportModeState_", "TimeSpec_", "WirelessController_"]

@@ -548,6 +548,51 @@ class UnitreeSession:
             "compatibility_fallback": False,
         }
 
+    def publish_hand_sdk(
+        self,
+        topic: str,
+        cmds: list[dict[str, Any]],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Publish official-style G1 hand SDK commands through the active provider."""
+
+        if topic != "rt/hand_sdk":
+            raise NotImplementedError(f"Cybernetic Unitree session hand publisher does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree hand SDK publishing is locked until the real-hardware provider and safety gates are implemented",
+            }
+        if self.config.transport == DDS and self.config.mode == SIM:
+            return {
+                "ok": False,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "topic": topic,
+                "error": "managed official DDS hand SDK publishing is not wired yet; local simulator hand intent is available through local_http",
+                "compatibility_fallback": False,
+            }
+
+        previous_timeout = self.simulator.timeout
+        if timeout is not None:
+            self.simulator.timeout = float(timeout)
+        try:
+            response = self.simulator.hand_sdk(cmds, topic=topic)
+        finally:
+            self.simulator.timeout = previous_timeout
+        return {
+            **response,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
     def read_lowstate(self) -> dict[str, Any]:
         """Read lowstate telemetry through the active provider when possible."""
 

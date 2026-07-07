@@ -389,6 +389,15 @@ class G1MujocoState:
             "released_at": None,
             "silent": False,
         }
+        self.hand_sdk_state = {
+            "topic": "rt/hand_sdk",
+            "received_at": None,
+            "motor_count": 0,
+            "weight": 0.0,
+            "tau": 0.0,
+            "intent": "idle",
+            "cmds": [],
+        }
         self.lowcmd_state = {
             "topic": None,
             "received_at": None,
@@ -559,6 +568,15 @@ class G1MujocoState:
                 "applied_position_targets": 0,
                 "clamped": [],
                 "ignored": [],
+            }
+            self.hand_sdk_state = {
+                "topic": "rt/hand_sdk",
+                "received_at": None,
+                "motor_count": 0,
+                "weight": 0.0,
+                "tau": 0.0,
+                "intent": "idle",
+                "cmds": [],
             }
             self.data.ctrl[:] = 0.0
             self.paused = True
@@ -1089,6 +1107,55 @@ class G1MujocoState:
                 response["lowcmd"] = dict(self.lowcmd_state)
         return response
 
+    def handle_hand_sdk_command(self, payload):
+        cmds = payload.get("cmds", [])
+        if not isinstance(cmds, list):
+            return {"ok": False, "error": "cmds must be a list"}
+        if len(cmds) > 12:
+            return {"ok": False, "error": "hand_sdk supports at most 12 motor commands"}
+
+        normalized = []
+        for index, command in enumerate(cmds):
+            if not isinstance(command, dict):
+                return {"ok": False, "error": f"cmds[{index}] must be an object"}
+            try:
+                normalized.append(
+                    {
+                        "mode": int(command.get("mode", 0)),
+                        "q": float(command.get("q", 0.0)),
+                        "dq": float(command.get("dq", 0.0)),
+                        "tau": clamp(float(command.get("tau", 0.0)), -1.5, 1.5),
+                        "kp": clamp(float(command.get("kp", 0.0)), 0.0, 20.0),
+                        "kd": clamp(float(command.get("kd", 0.0)), 0.0, 5.0),
+                    }
+                )
+            except (TypeError, ValueError) as error:
+                return {"ok": False, "error": f"cmds[{index}] has non-numeric fields: {error}"}
+
+        weight = 0.0
+        tau = 0.0
+        if normalized:
+            weight = clamp(normalized[0]["mode"] / 100.0, 0.0, 1.0)
+            tau = sum(command["tau"] for command in normalized) / len(normalized)
+        intent = "close" if tau > 0.03 else "open" if tau < -0.03 else "hold"
+
+        with self.lock:
+            self.hand_sdk_state = {
+                "topic": payload.get("topic", "rt/hand_sdk"),
+                "received_at": time.time(),
+                "motor_count": len(normalized),
+                "weight": weight,
+                "tau": tau,
+                "intent": intent,
+                "cmds": normalized,
+            }
+            self.frame_id += 1
+            return {
+                "ok": True,
+                "control_mode": "hand_sdk",
+                "hand_sdk": dict(self.hand_sdk_state),
+            }
+
     def handle_loco_command(self, payload):
         action = payload.get("action", "state")
         with self.lock:
@@ -1442,6 +1509,7 @@ class G1MujocoState:
                 "pose": self.active_pose,
                 "loco": dict(self.loco_state),
                 "motion_switcher": dict(self.motion_switcher_state),
+                "hand_sdk": dict(self.hand_sdk_state),
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
                 "all_robot_names": [self.robot_name],
@@ -1722,6 +1790,8 @@ class G1MujocoState:
             return self.handle_lowcmd_command(payload)
         if command == "joint_targets":
             return self.handle_joint_targets_command(payload)
+        if command == "hand_sdk":
+            return self.handle_hand_sdk_command(payload)
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}

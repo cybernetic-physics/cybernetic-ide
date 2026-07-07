@@ -260,6 +260,11 @@ Tasks:
   `g1_agv_command` so newer Unitree G1 SDK examples that use AGV-style
   forward/yaw velocity and height-column intent can run against the local
   simulator facade.
+- Done: add simulator-backed `rt/hand_sdk` intent support inspired by
+  Unitree's C++ `g1_hand_sdk_example.cpp`. `ChannelPublisher("rt/hand_sdk")`
+  accepts `unitree_go.msg.dds_.MotorCmds_`, records open/close hand intent in
+  simulator status, and exposes MCP `g1_hand_sdk`. Full finger physics and Dex3
+  `rt/dex3/*` topics remain future work.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,

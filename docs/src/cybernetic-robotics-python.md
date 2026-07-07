@@ -483,6 +483,17 @@ Run the official-style arm SDK topic example:
 python3 examples/g1_arm_sdk_dds.py
 ```
 
+Run the official-style hand SDK intent example:
+
+```sh
+python3 examples/g1_hand_sdk.py
+```
+
+`ChannelPublisher("rt/hand_sdk")` accepts Unitree's simple
+`unitree_go.msg.dds_.MotorCmds_` shape from the official C++ hand SDK example.
+The simulator records blend weight, mean tau, and open/close intent in
+`/status.simulation.hand_sdk`; it does not yet simulate full finger physics.
+
 ## Named Joint Targets
 
 Most developers should start with named joints before writing raw motor-index

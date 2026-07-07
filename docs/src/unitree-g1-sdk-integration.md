@@ -601,6 +601,10 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_arm_sdk_dds.py` mirrors Unitree's G1 arm SDK examples by
   publishing `unitree_hg` `LowCmd_` frames to `rt/arm_sdk` and setting motor
   command slot 29 to enable the arm SDK path.
+- `examples/g1_hand_sdk.py` mirrors Unitree's C++ `g1_hand_sdk_example.cpp` by
+  publishing `unitree_go` `MotorCmds_` frames to `rt/hand_sdk`. This is
+  simulator intent telemetry today: the runtime records weight, tau, and
+  open/close intent, while full MuJoCo finger actuation remains future work.
 - The channel shim also supports read-only `rt/sportmodestate` and
   `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
   synthesized from local simulator status and lowstate.

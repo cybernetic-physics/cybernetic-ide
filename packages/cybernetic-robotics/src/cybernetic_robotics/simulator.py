@@ -178,6 +178,9 @@ class SimulatorClient:
     def lowcmd(self, motor_cmd: list[JsonObject], **fields: Any) -> JsonObject:
         return self.command("lowcmd", motor_cmd=motor_cmd, **fields)
 
+    def hand_sdk(self, cmds: list[JsonObject], **fields: Any) -> JsonObject:
+        return self.command("hand_sdk", cmds=cmds, **fields)
+
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")
 

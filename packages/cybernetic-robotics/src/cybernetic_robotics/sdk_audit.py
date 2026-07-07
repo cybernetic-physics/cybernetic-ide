@@ -259,6 +259,7 @@ def _known_official_classes() -> set[str]:
 def _supported_topics() -> set[str]:
     return {
         "rt/arm_sdk",
+        "rt/hand_sdk",
         "rt/lowcmd",
         "rt/lowstate",
         "rt/sportmodestate",
