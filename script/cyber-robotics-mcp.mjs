@@ -12,6 +12,7 @@ const DEFAULT_GAME_CONTROL_URL = "http://127.0.0.1:38383";
 const DEFAULT_WS_URL = "ws://127.0.0.1:8788";
 const DEFAULT_CONTAINER = "unitree-g1-mujoco";
 const OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session";
+const UNITREE_RPC_BRIDGE_CONTAINER = "unitree-g1-rpc-bridge";
 const DEFAULT_POSE = "raise_right_hand";
 const MAX_LOG_BYTES = 256_000;
 const CAMERA_BOOKMARKS_PATH = ".runtime/robot-viewer-camera-bookmarks.json";
@@ -255,6 +256,36 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
+  tool("unitree_start_rpc_bridge", "Start a managed Unitree sport/agv RPC bridge container on the SDK2 DDS domain.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool("unitree_rpc_bridge_status", "Inspect the managed Unitree sport/agv RPC bridge container.", {}, [], {
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool(
+    "unitree_probe_rpc_bridge_client",
+    "Call an already-running managed Unitree sport/agv RPC bridge with official SDK clients.",
+    {
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.2,
+        maximum: 10,
+        default: 1,
+        description: "Per-RPC timeout used by the bridge clients.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  ),
+  tool("unitree_stop_rpc_bridge", "Stop and remove the managed Unitree sport/agv RPC bridge container.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1149,6 +1180,14 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoRpcDiscovery(args));
     case "unitree_probe_rpc_bridge_smoke":
       return textResult(sdk2ProbeRpcBridgeSmoke(args));
+    case "unitree_start_rpc_bridge":
+      return textResult(sdk2StartRpcBridge());
+    case "unitree_rpc_bridge_status":
+      return textResult(sdk2RpcBridgeStatus());
+    case "unitree_probe_rpc_bridge_client":
+      return textResult(sdk2ProbeRpcBridgeClient(args));
+    case "unitree_stop_rpc_bridge":
+      return textResult(sdk2StopRpcBridge());
     case "unitree_stop_official_mujoco_session":
       return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
@@ -2465,6 +2504,20 @@ function roboticsToolReference() {
         "Official SDK2 sidecar prepared; does not command the robot.",
       ),
       toolReference(
+        "unitree_start_rpc_bridge",
+        "service-start",
+        "Starts a named sport/agv RPC bridge container.",
+        "Official SDK2 sidecar prepared.",
+      ),
+      toolReference("unitree_rpc_bridge_status", "read", "Inspects the named sport/agv RPC bridge container.", "Bridge may or may not be running."),
+      toolReference(
+        "unitree_probe_rpc_bridge_client",
+        "diagnostic",
+        "Calls the managed RPC bridge with official SDK clients.",
+        "Managed Unitree RPC bridge running and ready.",
+      ),
+      toolReference("unitree_stop_rpc_bridge", "service-stop", "Stops and removes the named sport/agv RPC bridge container.", "Bridge container exists."),
+      toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
         "read-with-optional-stop",
         "May send a safe StopMove RPC when include_stop is true.",
@@ -3028,6 +3081,154 @@ function sdk2ProbeRpcBridgeSmoke(options = {}) {
     stdout: result.stdout,
     stderr: result.stderr,
     report,
+  };
+}
+
+function sdk2StartRpcBridge() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const removed = run("docker", ["rm", "-f", UNITREE_RPC_BRIDGE_CONTAINER], { timeoutMs: 60_000 });
+  const args = [
+    ...sdk2ComposeArgs(),
+    "run",
+    "-d",
+    "--name",
+    UNITREE_RPC_BRIDGE_CONTAINER,
+    "-e",
+    "CYBER_UNITREE_ACTION=serve_unitree_rpc_bridge",
+    "unitree-g1-sdk2-sidecar",
+  ];
+  const started = runChecked("docker", args, { timeoutMs: 120_000 });
+  const status = waitForRpcBridgeReady();
+  return {
+    command: `docker ${args.join(" ")}`,
+    removed_existing: {
+      attempted: true,
+      status: removed.status,
+      stdout: removed.stdout,
+      stderr: removed.stderr,
+    },
+    started,
+    status,
+  };
+}
+
+function waitForRpcBridgeReady(timeoutMs = 8_000) {
+  const deadline = Date.now() + timeoutMs;
+  let status = sdk2RpcBridgeStatus();
+  while (status.running && !status.ready && Date.now() < deadline) {
+    run("sleep", ["0.25"], { timeoutMs: 2_000 });
+    status = sdk2RpcBridgeStatus();
+  }
+  return status;
+}
+
+function sdk2RpcBridgeStatus() {
+  return sdk2ManagedJsonLogContainerStatus(
+    UNITREE_RPC_BRIDGE_CONTAINER,
+    "serve_unitree_rpc_bridge",
+    "serve_unitree_rpc_bridge_exit",
+  );
+}
+
+function sdk2StopRpcBridge() {
+  const result = run("docker", ["rm", "-f", UNITREE_RPC_BRIDGE_CONTAINER], { timeoutMs: 60_000 });
+  return {
+    container: UNITREE_RPC_BRIDGE_CONTAINER,
+    removed: result.status === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: sdk2RpcBridgeStatus(),
+  };
+}
+
+function sdk2ProbeRpcBridgeClient(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const bridge = sdk2RpcBridgeStatus();
+  if (!bridge.running || !bridge.ready) {
+    return {
+      ok: false,
+      error: "managed Unitree RPC bridge is not running and ready",
+      next_step: "Run unitree_start_rpc_bridge, then inspect unitree_rpc_bridge_status if readiness does not hold.",
+      bridge,
+    };
+  }
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.2, 10, 1);
+  const env = [
+    "CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_client",
+    `CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm"];
+  for (const entry of env) {
+    args.push("-e", entry);
+  }
+  args.push("unitree-g1-sdk2-sidecar");
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    bridge,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ManagedJsonLogContainerStatus(container, readyAction, exitAction) {
+  const inspect = run("docker", ["inspect", container, "--format", "{{json .State}}"], { timeoutMs: 30_000 });
+  const logs = run("docker", ["logs", "--tail", "2000", container], { timeoutMs: 30_000 });
+  let state = null;
+  if (inspect.status === 0 && inspect.stdout.trim()) {
+    try {
+      state = JSON.parse(inspect.stdout.trim());
+    } catch {
+      state = null;
+    }
+  }
+  let reports = logs.status === 0 ? parseJsonObjects(logs.stdout) : [];
+  let lifecycleSource = "tail";
+  if (state?.Running === true && reports.length === 0 && logs.status === 0) {
+    const fullLogs = run("docker", ["logs", container], { timeoutMs: 30_000 });
+    if (fullLogs.status === 0) {
+      reports = parseJsonObjects(fullLogs.stdout);
+      lifecycleSource = "full_logs_fallback";
+    }
+  }
+  const readyReport = reports.find((report) => report?.action === readyAction) ?? reports[0] ?? null;
+  const exitReport = [...reports].reverse().find((report) => report?.action === exitAction) ?? null;
+  const lastReport = reports.length > 0 ? reports[reports.length - 1] : null;
+  const running = state?.Running === true;
+  return {
+    container,
+    exists: inspect.status === 0,
+    running,
+    status: state?.Status ?? null,
+    exit_code: state?.ExitCode ?? null,
+    started_at: state?.StartedAt ?? null,
+    finished_at: state?.FinishedAt ?? null,
+    inspect_error: inspect.status === 0 ? null : inspect.stderr.trim(),
+    ready_report: readyReport,
+    last_report: lastReport,
+    exit_report: exitReport,
+    lifecycle_reports_seen: reports.length,
+    lifecycle_report_source: lifecycleSource,
+    ready: running && readyReport?.ok === true && !exitReport,
+    logs_tail: logs.status === 0 ? logs.stdout : null,
+    logs_error: logs.status === 0 ? null : logs.stderr.trim(),
   };
 }
 

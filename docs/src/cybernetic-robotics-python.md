@@ -163,6 +163,11 @@ is sent.
 `agv` RPC servers inside the SDK2 sidecar and calls them with SDK clients. This
 does not command MuJoCo or hardware; it proves the server/client bridge shape
 needed for a future long-running service bridge.
+`official.start_rpc_bridge()` promotes that shape into a named
+`unitree-g1-rpc-bridge` container, while `official.rpc_bridge_client()` calls
+the running bridge with official SDK clients and `official.stop_rpc_bridge()`
+removes it. The first managed bridge keeps in-memory `sport`/`agv` state; it is
+the service shell that future work maps onto simulator providers.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
@@ -481,6 +486,10 @@ unitree_sdk_behavior_smoke
 unitree_read_official_mujoco_lowstate
 unitree_probe_official_mujoco_rpc_discovery
 unitree_probe_rpc_bridge_smoke
+unitree_start_rpc_bridge
+unitree_rpc_bridge_status
+unitree_probe_rpc_bridge_client
+unitree_stop_rpc_bridge
 unitree_probe_official_mujoco_loco_rpc
 unitree_official_mujoco_evidence_bundle
 robotics_tool_reference

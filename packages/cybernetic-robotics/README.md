@@ -133,6 +133,9 @@ with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
     print(sim.rpc_discovery()["missing_request_readers"])
     print(sim.rpc_bridge_smoke()["services_started"])
+    print(sim.start_rpc_bridge()["status"]["ready"])
+    print(sim.rpc_bridge_client()["calls"])
+    sim.stop_rpc_bridge()
     print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
     sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
@@ -148,7 +151,10 @@ G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response` before local locomotion calls are promoted to official
 DDS routing. `rpc_bridge_smoke()` starts temporary `sport` and `agv` RPC
 servers and calls them with SDK clients, proving the bridge contract without
-commanding MuJoCo or hardware.
+commanding MuJoCo or hardware. `start_rpc_bridge()` keeps that service shell
+alive in a named `unitree-g1-rpc-bridge` container so external SDK clients can
+discover and call it; the current handlers are in-memory until the bridge is
+mapped onto simulator providers.
 
 `cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
 Python examples with the local `unitree_sdk2py` shim. It reports import, class,

@@ -1707,6 +1707,97 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_smoke", command)
         self.assertIn("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=1.5", command)
 
+    def test_official_g1_sim_manages_rpc_bridge_lifecycle(self):
+        checked_calls = []
+        unchecked_calls = []
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            checked_calls.append(args)
+            return subprocess.CompletedProcess(args, 0, stdout="bridge-container-id\n", stderr="")
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            unchecked_calls.append(args)
+            command = " ".join(args)
+            if "inspect unitree-g1-rpc-bridge" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"Running": True, "Status": "running", "ExitCode": 0}),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "action": "serve_unitree_rpc_bridge",
+                            "ok": True,
+                            "services_started": ["sport", "agv"],
+                        }
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="removed\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            started = official.start_rpc_bridge(wait=False)
+            status = official.rpc_bridge_status()
+
+        self.assertTrue(started["ok"])
+        self.assertEqual(started["container"], "unitree-g1-rpc-bridge")
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["ready_report"]["services_started"], ["sport", "agv"])
+        start_command = " ".join(checked_calls[0])
+        self.assertIn("run -d --name unitree-g1-rpc-bridge", start_command)
+        self.assertIn("CYBER_UNITREE_ACTION=serve_unitree_rpc_bridge", start_command)
+        self.assertTrue(any("rm -f unitree-g1-rpc-bridge" in " ".join(call) for call in unchecked_calls))
+
+    def test_official_g1_sim_can_probe_managed_rpc_bridge_client(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "rpc_bridge_client": {
+                            "ok": True,
+                            "calls": [{"name": "sport.GetFsmId", "ok": True, "return": [0, 500]}],
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.rpc_bridge_client(timeout=1.5)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "managed_unitree_sdk2_rpc_bridge")
+        self.assertEqual(result["calls"][0]["name"], "sport.GetFsmId")
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_client", command)
+        self.assertIn("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=1.5", command)
+
 
 if __name__ == "__main__":
     unittest.main()

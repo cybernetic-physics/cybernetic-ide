@@ -319,6 +319,19 @@ Tasks:
   and `agv.HeightAdjust` all returned `RPC_OK`. The next real implementation
   should keep those servers running and map handlers onto the simulator
   provider boundary instead of the in-memory smoke state.
+- Done: add the first managed RPC bridge lifecycle with
+  `unitree_start_rpc_bridge`, `unitree_rpc_bridge_status`,
+  `unitree_probe_rpc_bridge_client`, and `unitree_stop_rpc_bridge`, plus Python
+  mirrors on `OfficialG1Sim`. This starts `unitree-g1-rpc-bridge` as a
+  long-running `sport`/`agv` SDK2 service shell for external clients.
+- Current managed-bridge evidence: live validation started
+  `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
+  received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
+  `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
+  bridge cleanly.
+- Remaining: replace the bridge's in-memory state handlers with calls into the
+  Cybernetic simulator provider boundary so official SDK `LocoClient` /
+  `AgvClient` calls actually move the MuJoCo G1.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

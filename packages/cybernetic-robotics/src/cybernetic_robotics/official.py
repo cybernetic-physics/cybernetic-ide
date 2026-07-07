@@ -12,6 +12,7 @@ from .config import find_robotics_root
 
 ARM_POSE_PRESETS = {"raise_right_hand", "raise_left_hand"}
 OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session"
+UNITREE_RPC_BRIDGE_CONTAINER = "unitree-g1-rpc-bridge"
 ARM_JOINTS = {
     "left_shoulder_pitch",
     "left_shoulder_roll",
@@ -188,6 +189,110 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def start_rpc_bridge(self, *, wait: bool = True, wait_timeout: float = 8.0) -> dict[str, Any]:
+        """Start a managed Unitree sport/agv RPC bridge container."""
+
+        if not self.compose_env.exists():
+            raise FileNotFoundError(
+                f"missing {self.compose_env}; run `node script/prepare-unitree-g1-sdk2-sidecar.mjs` first"
+            )
+        removed = self._unchecked_runner(
+            ["docker", "rm", "-f", UNITREE_RPC_BRIDGE_CONTAINER],
+            self.root,
+            min(self.timeout, 60),
+        )
+        env = {"CYBER_UNITREE_ACTION": "serve_unitree_rpc_bridge"}
+        args = [
+            "docker",
+            "compose",
+            "--env-file",
+            str(self.compose_env),
+            "-f",
+            str(self.compose_file),
+            "run",
+            "-d",
+            "--name",
+            UNITREE_RPC_BRIDGE_CONTAINER,
+        ]
+        for name, value in env.items():
+            args.extend(["-e", f"{name}={value}"])
+        args.append("unitree-g1-sdk2-sidecar")
+        started = self._runner(args, self.root, self.timeout)
+        status = self.wait_for_rpc_bridge_ready(wait_timeout) if wait else self.rpc_bridge_status()
+        return {
+            "ok": bool(status.get("running") and status.get("ready")),
+            "container": UNITREE_RPC_BRIDGE_CONTAINER,
+            "command": " ".join(args),
+            "removed_existing": {
+                "attempted": True,
+                "status": removed.returncode,
+                "stdout": removed.stdout,
+                "stderr": removed.stderr,
+            },
+            "started": {
+                "returncode": started.returncode,
+                "stdout": started.stdout,
+                "stderr": started.stderr,
+            },
+            "status": status,
+        }
+
+    def wait_for_rpc_bridge_ready(self, timeout_seconds: float = 8.0) -> dict[str, Any]:
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        status = self.rpc_bridge_status()
+        while status.get("running") and not status.get("ready") and time.monotonic() < deadline:
+            time.sleep(0.25)
+            status = self.rpc_bridge_status()
+        return status
+
+    def rpc_bridge_status(self, *, log_tail: int = 2000) -> dict[str, Any]:
+        """Inspect the managed Unitree sport/agv RPC bridge container."""
+
+        return self._managed_json_log_container_status(
+            UNITREE_RPC_BRIDGE_CONTAINER,
+            ready_action="serve_unitree_rpc_bridge",
+            exit_action="serve_unitree_rpc_bridge_exit",
+            log_tail=log_tail,
+        )
+
+    def stop_rpc_bridge(self) -> dict[str, Any]:
+        """Stop and remove the managed Unitree sport/agv RPC bridge."""
+
+        result = self._unchecked_runner(
+            ["docker", "rm", "-f", UNITREE_RPC_BRIDGE_CONTAINER],
+            self.root,
+            min(self.timeout, 60),
+        )
+        return {
+            "ok": result.returncode == 0,
+            "container": UNITREE_RPC_BRIDGE_CONTAINER,
+            "removed": result.returncode == 0,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "status": self.rpc_bridge_status(),
+        }
+
+    def rpc_bridge_client(self, *, timeout: float = 1.0) -> dict[str, Any]:
+        """Call an already-running managed Unitree RPC bridge with SDK clients."""
+
+        env = {
+            "CYBER_UNITREE_ACTION": "probe_unitree_rpc_bridge_client",
+            "CYBER_UNITREE_RPC_BRIDGE_TIMEOUT": str(_clamp_float(timeout, 0.2, 10.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        probe = report.get("rpc_bridge_client") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(probe, dict) and probe.get("ok")),
+            "source": "managed_unitree_sdk2_rpc_bridge",
+            "calls": probe.get("calls", []) if isinstance(probe, dict) else [],
+            "probe": probe,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
         """Start the managed official Unitree MuJoCo DDS peer session.
 
@@ -253,13 +358,28 @@ class OfficialG1Sim:
     def session_status(self, *, log_tail: int = 2000) -> dict[str, Any]:
         """Inspect the managed official MuJoCo session container."""
 
+        return self._managed_json_log_container_status(
+            OFFICIAL_MUJOCO_SESSION_CONTAINER,
+            ready_action="serve_official_mujoco",
+            exit_action="serve_official_mujoco_exit",
+            log_tail=log_tail,
+        )
+
+    def _managed_json_log_container_status(
+        self,
+        container: str,
+        *,
+        ready_action: str,
+        exit_action: str,
+        log_tail: int,
+    ) -> dict[str, Any]:
         inspect = self._unchecked_runner(
-            ["docker", "inspect", OFFICIAL_MUJOCO_SESSION_CONTAINER, "--format", "{{json .State}}"],
+            ["docker", "inspect", container, "--format", "{{json .State}}"],
             self.root,
             min(self.timeout, 30),
         )
         logs = self._unchecked_runner(
-            ["docker", "logs", "--tail", str(_clamp_int(log_tail, 1, 1000)), OFFICIAL_MUJOCO_SESSION_CONTAINER],
+            ["docker", "logs", "--tail", str(_clamp_int(log_tail, 1, 2000)), container],
             self.root,
             min(self.timeout, 30),
         )
@@ -268,24 +388,24 @@ class OfficialG1Sim:
         lifecycle_source = "tail"
         if state.get("Running") is True and not reports and logs.returncode == 0:
             full_logs = self._unchecked_runner(
-                ["docker", "logs", OFFICIAL_MUJOCO_SESSION_CONTAINER],
+                ["docker", "logs", container],
                 self.root,
                 min(self.timeout, 30),
             )
             if full_logs.returncode == 0:
                 reports = _parse_json_objects(full_logs.stdout)
                 lifecycle_source = "full_logs_fallback"
-        ready_report = next((report for report in reports if report.get("action") == "serve_official_mujoco"), None)
+        ready_report = next((report for report in reports if report.get("action") == ready_action), None)
         if ready_report is None and reports:
             ready_report = reports[0]
         exit_report = next(
-            (report for report in reversed(reports) if report.get("action") == "serve_official_mujoco_exit"),
+            (report for report in reversed(reports) if report.get("action") == exit_action),
             None,
         )
         last_report = reports[-1] if reports else None
         running = state.get("Running") is True
         return {
-            "container": OFFICIAL_MUJOCO_SESSION_CONTAINER,
+            "container": container,
             "exists": inspect.returncode == 0,
             "running": running,
             "status": state.get("Status"),
@@ -497,6 +617,18 @@ class OfficialG1ManagedSession:
 
     def rpc_bridge_smoke(self, *, timeout: float = 1.0) -> dict[str, Any]:
         return self.sim.rpc_bridge_smoke(timeout=timeout)
+
+    def start_rpc_bridge(self, *, wait: bool = True, wait_timeout: float = 8.0) -> dict[str, Any]:
+        return self.sim.start_rpc_bridge(wait=wait, wait_timeout=wait_timeout)
+
+    def rpc_bridge_status(self, *, log_tail: int = 2000) -> dict[str, Any]:
+        return self.sim.rpc_bridge_status(log_tail=log_tail)
+
+    def rpc_bridge_client(self, *, timeout: float = 1.0) -> dict[str, Any]:
+        return self.sim.rpc_bridge_client(timeout=timeout)
+
+    def stop_rpc_bridge(self) -> dict[str, Any]:
+        return self.sim.stop_rpc_bridge()
 
     def arm_pose(self, preset: str = "raise_right_hand", **kwargs: Any) -> dict[str, Any]:
         return self.sim.arm_pose_session(preset, **kwargs)

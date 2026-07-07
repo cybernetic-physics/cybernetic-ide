@@ -153,6 +153,25 @@ Unitree RPC servers inside the sidecar and calls them with SDK clients. It does
 not command MuJoCo or hardware; it proves the request/response service bridge
 shape before a long-running bridge maps those APIs onto simulator providers.
 
+Start a managed Unitree-shaped RPC bridge:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run -d --name unitree-g1-rpc-bridge \
+  -e CYBER_UNITREE_ACTION=serve_unitree_rpc_bridge \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP lifecycle is `unitree_start_rpc_bridge`,
+`unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
+`unitree_stop_rpc_bridge`. Python users can call
+`OfficialG1Sim.start_rpc_bridge()`, `rpc_bridge_status()`,
+`rpc_bridge_client()`, and `stop_rpc_bridge()`. This first managed bridge keeps
+`sport` and `agv` SDK2 servers alive with in-memory state; the next step is to
+map those handlers onto Cybernetic's simulator provider boundary.
+
 Probe whether the managed official peer answers G1 sport/LocoClient RPCs:
 
 ```sh

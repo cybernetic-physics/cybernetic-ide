@@ -645,6 +645,15 @@ The current repo has the first narrow version of that API boundary:
   handlers onto the simulator provider boundary. Live smoke evidence showed
   `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
   and `agv.HeightAdjust` all returning `RPC_OK`.
+- `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
+  `unitree_probe_rpc_bridge_client` / `unitree_stop_rpc_bridge` turn that smoke
+  into a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is
+  still a shell with in-memory `sport`/`agv` state, but it proves external SDK
+  clients can discover and call a long-running Cybernetic-owned RPC service.
+  Live validation started the bridge, called it from a separate sidecar client,
+  observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
+  `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
+  bridge container cleanly.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method
