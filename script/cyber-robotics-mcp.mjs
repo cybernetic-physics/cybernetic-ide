@@ -564,6 +564,52 @@ const tools = [
     },
   ),
   tool(
+    "unitree_command_official_mujoco_lowcmd",
+    "Publish one bounded generic SDK2/CycloneDDS rt/lowcmd frame to an already-running managed official Unitree MuJoCo G1 session.",
+    {
+      motor_cmd: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            mode: { type: "integer", minimum: 0, maximum: 15 },
+            q: { type: "number", minimum: -3.5, maximum: 3.5 },
+            dq: { type: "number", minimum: -20, maximum: 20 },
+            tau: { type: "number", minimum: -80, maximum: 80 },
+            kp: { type: "number", minimum: 0, maximum: 80 },
+            kd: { type: "number", minimum: 0, maximum: 8 },
+          },
+          additionalProperties: false,
+        },
+        default: [],
+        description: "LowCmd motor_cmd prefix to apply. Unspecified motor slots hold their sampled lowstate positions.",
+      },
+      mode_pr: { type: "integer", default: 0 },
+      mode_machine: { type: "integer", default: 0 },
+      crc: { type: "integer", default: 0 },
+      frames: {
+        type: "integer",
+        minimum: 1,
+        maximum: 60,
+        default: 1,
+        description: "Number of identical lowcmd frames to publish.",
+      },
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.5,
+        maximum: 30,
+        default: 6,
+        description: "Deadline for reading the safety lowstate sample before publishing.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  ),
+  tool(
     "unitree_official_mujoco_evidence_bundle",
     "Run a bounded arm pose against the managed official Unitree MuJoCo G1 DDS session and write before/after rt/lowstate evidence.",
     {
@@ -1310,6 +1356,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoArmPose(args));
     case "unitree_command_official_mujoco_arm_pose":
       return textResult(sdk2CommandOfficialMujocoArmPose(args));
+    case "unitree_command_official_mujoco_lowcmd":
+      return textResult(sdk2CommandOfficialMujocoLowcmd(args));
     case "unitree_official_mujoco_evidence_bundle":
       return textResult(await sdk2OfficialMujocoEvidenceBundle(args));
     case "sim_pause":
@@ -1692,17 +1740,17 @@ function providerStatusFromDiagnostics(diagnostics) {
       provider: officialOk ? "official_mujoco_dds_simulator" : "official_mujoco_dds_simulator_unready",
       implemented: officialOk,
       command_path: "Official SDK2/CycloneDDS sidecar for supported arm poses; local HTTP remains the fallback for viewer and local loco tools.",
-      telemetry_path: "Official sidecar rt/lowcmd/rt/lowstate probes plus local simulator diagnostics when available.",
+      telemetry_path: "Official sidecar rt/lowstate reads and bounded rt/lowcmd writes plus local simulator diagnostics when available.",
       motion: {
         arm_actions: officialOk ? "managed_official_mujoco_session_for_supported_poses" : "unavailable_until_sidecar_ready",
         locomotion: "local_http_compatibility_until_dds_loco_provider_lands",
-        lowcmd: "official_probe_or_local_http_depending_on_tool",
+        lowcmd: officialOk ? "managed_official_mujoco_session_bounded_frame" : "unavailable_until_sidecar_ready",
       },
       limitations: [
-        "Only bounded arm-pose commands are routed through the managed official DDS session today.",
-        "LocoClient locomotion and generic lowcmd streaming still need the long-lived DDS provider.",
+        "Only bounded arm-pose commands and one-frame generic lowcmd writes are routed through the managed official DDS session today.",
+        "LocoClient locomotion and sustained lowcmd streaming still need the long-lived DDS provider.",
       ],
-      next_step: "Start or inspect the managed official MuJoCo session, then promote loco/lowcmd paths to that provider.",
+      next_step: "Start or inspect the managed official MuJoCo session, then promote loco and sustained lowcmd streaming to that provider.",
       config,
       warnings: diagnostics.warnings || [],
       diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
@@ -2820,6 +2868,24 @@ function roboticsToolReference() {
         "read-with-optional-stop",
         "May send a safe StopMove RPC when include_stop is true.",
         "Managed official MuJoCo DDS session running and ready.",
+      ),
+      toolReference(
+        "unitree_read_official_mujoco_lowstate",
+        "read",
+        "Reads one official rt/lowstate sample from the managed Unitree MuJoCo session.",
+        "Managed official MuJoCo DDS session running and ready.",
+      ),
+      toolReference(
+        "unitree_command_official_mujoco_arm_pose",
+        "robot-motion",
+        "Publishes bounded official rt/lowcmd arm-pose frames to the managed Unitree MuJoCo session.",
+        "Managed official MuJoCo DDS session running and ready.",
+      ),
+      toolReference(
+        "unitree_command_official_mujoco_lowcmd",
+        "expert-robot-motion",
+        "Publishes one sanitized generic official rt/lowcmd frame to the managed Unitree MuJoCo session.",
+        "Managed official MuJoCo DDS session running and ready; inspect lowstate first.",
       ),
       toolReference(
         "unitree_official_mujoco_evidence_bundle",
@@ -3992,6 +4058,61 @@ function sdk2CommandOfficialMujocoArmPose(options = {}) {
   return {
     command: `docker ${args.join(" ")}`,
     parameters: { preset, joint_deltas: jointDeltas, frames, kp, kd, hold_kp: holdKp, hold_kd: holdKd, min_moved_joints: minMovedJoints },
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2CommandOfficialMujocoLowcmd(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+  const motorCmd = Array.isArray(options.motor_cmd)
+    ? options.motor_cmd.slice(0, 35).map((item) => ({
+        ...(Number.isFinite(Number(item?.mode)) ? { mode: clampInt(item.mode, 0, 15, 1) } : {}),
+        ...(Number.isFinite(Number(item?.q)) ? { q: clampNumber(item.q, -3.5, 3.5, 0) } : {}),
+        ...(Number.isFinite(Number(item?.dq)) ? { dq: clampNumber(item.dq, -20, 20, 0) } : {}),
+        ...(Number.isFinite(Number(item?.tau)) ? { tau: clampNumber(item.tau, -80, 80, 0) } : {}),
+        ...(Number.isFinite(Number(item?.kp)) ? { kp: clampNumber(item.kp, 0, 80, 0) } : {}),
+        ...(Number.isFinite(Number(item?.kd)) ? { kd: clampNumber(item.kd, 0, 8, 0) } : {}),
+      }))
+    : [];
+  const payload = {
+    motor_cmd: motorCmd,
+    mode_pr: clampInt(options.mode_pr, 0, 255, 0),
+    mode_machine: clampInt(options.mode_machine, 0, 1000, 0),
+    crc: clampInt(options.crc, 0, 0xffffffff, 0),
+  };
+  const frames = clampInt(options.frames, 1, 60, 1);
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.5, 30, 6);
+  const env = [
+    "CYBER_UNITREE_ACTION=command_official_mujoco_lowcmd",
+    `CYBER_UNITREE_LOWCMD_JSON=${JSON.stringify(payload)}`,
+    `CYBER_UNITREE_LOWCMD_FRAMES=${frames}`,
+    `CYBER_UNITREE_LOWCMD_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm", ...env.flatMap((entry) => ["-e", entry]), "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 180_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    parameters: { ...payload, frames, timeout_seconds: timeoutSeconds },
     session,
     stdout: result.stdout,
     stderr: result.stderr,

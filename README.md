@@ -371,6 +371,11 @@ ad hoc scripts first. The default tool surface includes:
 - managed official SDK2 pose command: `unitree_command_official_mujoco_arm_pose`,
   which sends the same bounded multi-joint pose to an already-running
   `unitree-g1-sdk2-session` instead of launching a second MuJoCo peer;
+- managed official SDK2 lowcmd command:
+  `unitree_command_official_mujoco_lowcmd`, which reads a safety
+  `rt/lowstate` sample from the managed session, fills unspecified motors with
+  hold values, clamps the supplied motor command prefix, recomputes CRC in the
+  sidecar, and publishes a bounded `rt/lowcmd` frame;
 - official SDK2 RPC discovery: `unitree_probe_official_mujoco_rpc_discovery`,
   which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
   matched service-side DDS readers before an agent tries a request/response

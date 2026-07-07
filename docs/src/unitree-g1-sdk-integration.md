@@ -545,10 +545,11 @@ The current repo has the first narrow version of that API boundary:
   MuJoCo + SDK2/CycloneDDS session.
 - `LocoClient`, `ChannelPublisher("rt/lowcmd")`, and
   `ChannelSubscriber("rt/lowstate")` now cross the same `UnitreeSession`
-  boundary. DDS-mode locomotion and generic lowcmd writes are still local
-  simulator compatibility fallbacks and are labeled that way in responses;
-  official `rt/lowstate` reads can flow through the managed session summary
-  path when the official peer is running.
+  boundary. DDS-mode locomotion is still a local simulator compatibility
+  fallback and is labeled that way in responses. Official `rt/lowstate` reads
+  and one-frame sanitized generic `rt/lowcmd` writes can flow through the
+  managed official session when the peer is running; sustained lowcmd streaming
+  still needs a watchdog-aware provider.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,

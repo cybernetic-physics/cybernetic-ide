@@ -559,6 +559,37 @@ def summarize_lowcmd(command) -> dict:
     }
 
 
+def _clamp_number(value, minimum: float, maximum: float, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = float(default)
+    return max(float(minimum), min(float(maximum), number))
+
+
+def apply_lowcmd_payload(low_cmd, payload: dict, sample, crc_factory):
+    low_cmd.mode_pr = int(payload.get("mode_pr", getattr(sample, "mode_pr", 0)))
+    low_cmd.mode_machine = int(payload.get("mode_machine", getattr(sample, "mode_machine", 0)))
+    motors = list(getattr(low_cmd, "motor_cmd", []) or [])
+    incoming = payload.get("motor_cmd", [])
+    if not isinstance(incoming, list):
+        raise ValueError("motor_cmd must be a list")
+    if len(incoming) > len(motors):
+        raise ValueError(f"motor_cmd supports at most {len(motors)} entries")
+    for index, raw in enumerate(incoming):
+        if not isinstance(raw, dict):
+            raise ValueError(f"motor_cmd[{index}] must be an object")
+        motor = motors[index]
+        motor.mode = int(_clamp_number(raw.get("mode", getattr(motor, "mode", 1)), 0, 15, 1))
+        motor.q = _clamp_number(raw.get("q", getattr(motor, "q", 0.0)), -3.5, 3.5)
+        motor.dq = _clamp_number(raw.get("dq", getattr(motor, "dq", 0.0)), -20.0, 20.0)
+        motor.tau = _clamp_number(raw.get("tau", getattr(motor, "tau", 0.0)), -80.0, 80.0)
+        motor.kp = _clamp_number(raw.get("kp", getattr(motor, "kp", 0.0)), 0.0, 80.0)
+        motor.kd = _clamp_number(raw.get("kd", getattr(motor, "kd", 0.0)), 0.0, 8.0)
+    low_cmd.crc = crc_factory.Crc(low_cmd)
+    return low_cmd
+
+
 def terminate_process(process: subprocess.Popen, timeout: float = 4.0) -> tuple[str, str, int | None]:
     if process.poll() is None:
         try:
@@ -799,6 +830,95 @@ def probe_official_mujoco_lowcmd_exchange(mujoco_root: str, domain: int, interfa
         report["next_step"] = "Lowstate is readable, but rt/lowcmd writes did not match a subscriber; inspect DDS discovery/interface settings before moving control to the official transport."
     else:
         report["next_step"] = "Lowstate was not received, so re-run unitree_probe_official_mujoco_dds before attempting lowcmd control."
+    return report
+
+
+def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
+    raw_payload = os.environ.get("CYBER_UNITREE_LOWCMD_JSON", "{}")
+    report = {
+        "action": "command_official_mujoco_lowcmd",
+        "read_topic": "rt/lowstate",
+        "write_topic": "rt/lowcmd",
+        "domain": domain,
+        "interface": interface or None,
+        "lowstate_sample_received": False,
+        "lowcmd_write_attempts": 0,
+        "lowcmd_write_successes": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_LOWCMD_TIMEOUT", "6")),
+        "frames": max(1, min(60, int(os.environ.get("CYBER_UNITREE_LOWCMD_FRAMES", "1")))),
+        "safety": {
+            "requires_lowstate_sample": True,
+            "fills_unspecified_motors_from_current_lowstate": True,
+            "clamps": {
+                "q": [-3.5, 3.5],
+                "dq": [-20.0, 20.0],
+                "tau": [-80.0, 80.0],
+                "kp": [0.0, 80.0],
+                "kd": [0.0, 8.0],
+            },
+        },
+    }
+    try:
+        payload = json.loads(raw_payload)
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a JSON object")
+        report["requested_motor_cmd_count"] = len(payload.get("motor_cmd", []) or [])
+    except Exception as exc:
+        report["ok"] = False
+        report["error"] = f"invalid CYBER_UNITREE_LOWCMD_JSON: {exc}"
+        return report
+
+    subscriber = None
+    publisher = None
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+        from unitree_sdk2py.utils.crc import CRC
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        sample = None
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary_before_write"] = summarize_lowstate(sample)
+                break
+        if sample is None:
+            report["ok"] = False
+            report["error"] = "no official rt/lowstate sample received before lowcmd write"
+            report["next_step"] = "Start unitree-g1-sdk2-session and verify unitree_read_official_mujoco_lowstate before writing lowcmd."
+            return report
+
+        crc = CRC()
+        low_cmd = make_hold_lowcmd(sample, unitree_hg_msg_dds__LowCmd_, crc)
+        low_cmd = apply_lowcmd_payload(low_cmd, payload, sample, crc)
+        report["lowcmd_summary"] = summarize_lowcmd(low_cmd)
+
+        publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+        publisher.Init()
+        for _ in range(report["frames"]):
+            report["lowcmd_write_attempts"] += 1
+            if publisher.Write(low_cmd, 1.0):
+                report["lowcmd_write_successes"] += 1
+            time.sleep(0.003)
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+    finally:
+        if publisher is not None:
+            publisher.Close()
+        if subscriber is not None:
+            subscriber.Close()
+
+    report["ok"] = report["lowstate_sample_received"] and report["lowcmd_write_successes"] > 0
+    if report["ok"]:
+        report["next_step"] = "This proves generic SDK2 lowcmd publishing can target the managed official MuJoCo session; extend to sustained streaming with watchdogs next."
+    else:
+        report["next_step"] = "Lowcmd write did not succeed; inspect traceback and managed session readiness before streaming."
     return report
 
 
@@ -2895,6 +3015,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "command_official_mujoco_arm_pose":
         report["arm_pose_command"] = command_official_mujoco_arm_pose(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "command_official_mujoco_lowcmd":
+        report["lowcmd_command"] = command_official_mujoco_lowcmd(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_loco_rpc":
         report["loco_rpc_probe"] = probe_official_mujoco_loco_rpc(domain, interface or None)

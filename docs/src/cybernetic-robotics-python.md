@@ -461,10 +461,13 @@ they use local HTTP, while `CYBER_UNITREE_TRANSPORT=rpc_bridge` routes the
 supported high-level sport/agv/arm subset through the managed Unitree RPC
 bridge.
 `ChannelPublisher("rt/lowcmd")` and `ChannelSubscriber("rt/lowstate")` also
-cross the same session boundary. Until generic lowcmd streaming is promoted
-into the managed official provider, DDS-mode locomotion and lowcmd calls are
-clearly marked as local simulator compatibility fallbacks instead of being
-presented as official CycloneDDS control.
+cross the same session boundary. With `CYBER_UNITREE_TRANSPORT=dds` in
+simulator mode, `ChannelSubscriber("rt/lowstate")` reads from the managed
+official session and `ChannelPublisher("rt/lowcmd")` can publish one bounded,
+sanitized frame through `OfficialG1Sim.lowcmd_session()`. Sustained generic
+lowcmd streaming is still future work; DDS-mode locomotion remains clearly
+marked as a local simulator compatibility fallback instead of being presented
+as official CycloneDDS control.
 
 Run the full example:
 

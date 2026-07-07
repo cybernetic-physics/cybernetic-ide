@@ -230,17 +230,17 @@ class UnitreeSession:
             provider = "official_mujoco_dds_simulator" if official_ok else "official_mujoco_dds_simulator_unready"
             implemented = official_ok
             command_path = "Official SDK2/CycloneDDS sidecar for supported arm poses; local HTTP remains the fallback for viewer and local loco tools."
-            telemetry_path = "Official sidecar rt/lowcmd/rt/lowstate probes plus local simulator diagnostics when available."
+            telemetry_path = "Official sidecar rt/lowstate reads and bounded rt/lowcmd writes plus local simulator diagnostics when available."
             motion = {
                 "arm_actions": "managed_official_mujoco_session_for_supported_poses" if official_ok else "unavailable_until_sidecar_ready",
                 "locomotion": "local_http_compatibility_until_dds_loco_provider_lands",
-                "lowcmd": "official_probe_or_local_http_depending_on_tool",
+                "lowcmd": "managed_official_mujoco_session_bounded_frame" if official_ok else "unavailable_until_sidecar_ready",
             }
             limitations = [
-                "Only bounded arm-pose commands are routed through the managed official DDS session today.",
-                "LocoClient locomotion and generic lowcmd streaming still need the long-lived DDS provider.",
+                "Only bounded arm-pose commands and one-frame generic lowcmd writes are routed through the managed official DDS session today.",
+                "LocoClient locomotion and sustained lowcmd streaming still need the long-lived DDS provider.",
             ]
-            next_step = "Start or inspect the managed official MuJoCo session, then promote loco/lowcmd paths to that provider."
+            next_step = "Start or inspect the managed official MuJoCo session, then promote loco and sustained lowcmd streaming to that provider."
         else:
             provider = "real_unitree_dds"
             implemented = False
@@ -500,6 +500,35 @@ class UnitreeSession:
                 "next_step": "Implement reviewed real-mode lowcmd safety gates before enabling physical command publishing.",
             }
 
+        if self.config.transport == DDS and self.config.mode == SIM:
+            if topic != "rt/lowcmd":
+                return {
+                    "ok": False,
+                    "transport": DDS,
+                    "provider": "official_mujoco_dds_simulator",
+                    "topic": topic,
+                    "error": f"managed official DDS session does not yet support publishing {topic}",
+                    "supported_topics": ["rt/lowcmd"],
+                    "next_step": "Add a reviewed sidecar command for this topic before routing SDK writes through official DDS.",
+                }
+            official = self._official(timeout=timeout)
+            response = official.lowcmd_session(
+                motor_cmd=motor_cmd,
+                mode_pr=int(mode_pr),
+                mode_machine=int(mode_machine),
+                crc=int(crc),
+                frames=1,
+                timeout_seconds=float(timeout or 6.0),
+            )
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "topic": topic,
+                "official_dds_supported": True,
+                "compatibility_fallback": False,
+            }
+
         previous_timeout = self.simulator.timeout
         if timeout is not None:
             self.simulator.timeout = float(timeout)
@@ -513,15 +542,6 @@ class UnitreeSession:
             )
         finally:
             self.simulator.timeout = previous_timeout
-        if self.config.transport == DDS:
-            return {
-                **response,
-                "transport": DDS,
-                "provider": "local_http_simulator_compatibility",
-                "official_dds_supported": False,
-                "compatibility_fallback": True,
-                "next_step": "Promote generic lowcmd streaming into the managed official SDK2/CycloneDDS sidecar.",
-            }
         return {
             **response,
             "transport": LOCAL_HTTP,

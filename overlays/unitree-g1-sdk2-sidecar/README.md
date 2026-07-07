@@ -244,6 +244,15 @@ means the request could not be written to DDS, typically because the
 `rt/api/sport/request` writer did not match a service-side reader before the
 timeout or because the DDS write failed.
 
+Generic lowcmd writes to an already-running managed official MuJoCo session use
+`CYBER_UNITREE_ACTION=command_official_mujoco_lowcmd`, exposed in Python as
+`OfficialG1Sim.lowcmd_session()` and in MCP as
+`unitree_command_official_mujoco_lowcmd`. The command reads one official
+`rt/lowstate` sample first, fills unspecified motor slots with hold-position
+values from that sample, clamps supplied `motor_cmd` fields, recomputes CRC in
+the sidecar, and publishes at most 60 identical `rt/lowcmd` frames. This is the
+first generic lowcmd provider path; it is not yet sustained streaming.
+
 Command the managed official session with a bounded arm pose:
 
 ```sh

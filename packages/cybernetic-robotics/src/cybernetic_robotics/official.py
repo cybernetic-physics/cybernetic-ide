@@ -119,6 +119,47 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def lowcmd_session(
+        self,
+        *,
+        motor_cmd: list[dict[str, Any]],
+        mode_pr: int = 0,
+        mode_machine: int = 0,
+        crc: int = 0,
+        frames: int = 1,
+        timeout_seconds: float = 6.0,
+    ) -> dict[str, Any]:
+        """Publish one bounded generic rt/lowcmd frame to the managed session."""
+
+        payload = {
+            "motor_cmd": list(motor_cmd),
+            "mode_pr": int(mode_pr),
+            "mode_machine": int(mode_machine),
+            "crc": int(crc),
+        }
+        env = {
+            "CYBER_UNITREE_ACTION": "command_official_mujoco_lowcmd",
+            "CYBER_UNITREE_LOWCMD_JSON": json.dumps(payload, separators=(",", ":"), sort_keys=True),
+            "CYBER_UNITREE_LOWCMD_FRAMES": str(_clamp_int(frames, 1, 60)),
+            "CYBER_UNITREE_LOWCMD_TIMEOUT": str(_clamp_float(timeout_seconds, 0.5, 30.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        command = report.get("lowcmd_command") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(command, dict) and command.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "topic": "rt/lowcmd",
+            "lowcmd_write_successes": command.get("lowcmd_write_successes") if isinstance(command, dict) else None,
+            "lowcmd_write_attempts": command.get("lowcmd_write_attempts") if isinstance(command, dict) else None,
+            "lowcmd_summary": command.get("lowcmd_summary") if isinstance(command, dict) else None,
+            "command_result": command,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def loco_rpc_session(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
         """Probe official G1 LocoClient sport RPCs against a managed session."""
 
@@ -727,6 +768,9 @@ class OfficialG1ManagedSession:
 
     def lowstate(self) -> dict[str, Any]:
         return self.sim.lowstate_session()
+
+    def lowcmd(self, **kwargs: Any) -> dict[str, Any]:
+        return self.sim.lowcmd_session(**kwargs)
 
     def loco_rpc(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
         return self.sim.loco_rpc_session(include_stop=include_stop, timeout=timeout)

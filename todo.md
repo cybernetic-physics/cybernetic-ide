@@ -398,10 +398,13 @@ Tasks:
   on it, and finally route the same API surface to the official Unitree MuJoCo
   DDS actuator path rather than only the local HTTP compatibility provider.
 - Remaining: connect generic lowcmd streaming to a long-lived real
-  SDK2/CycloneDDS sidecar session instead of only local HTTP compatibility. The
-  arm-action path crosses the official managed session boundary, and high-level
-  loco/agv can now cross the managed RPC bridge boundary; the next candidate is
-  sustained generic lowcmd streaming with explicit safety gates.
+  SDK2/CycloneDDS sidecar session instead of only local HTTP compatibility.
+  Done for the first bounded frame: `ChannelPublisher("rt/lowcmd")` in
+  simulator DDS mode now routes through the managed official MuJoCo session,
+  reads a safety `rt/lowstate` sample, fills unspecified motors with hold
+  values, clamps fields, recomputes CRC inside the sidecar, and writes a
+  bounded frame. Remaining: sustained generic lowcmd streaming with explicit
+  watchdogs and lease/safety gates.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

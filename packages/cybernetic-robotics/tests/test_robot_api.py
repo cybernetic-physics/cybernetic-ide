@@ -1077,6 +1077,48 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
+    def test_unitree_session_routes_dds_lowcmd_to_managed_official_session(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls: list[dict[str, object]] = []
+
+            def lowcmd_session(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "topic": "rt/lowcmd",
+                    "lowcmd_write_attempts": 1,
+                    "lowcmd_write_successes": 1,
+                    "lowcmd_summary": {"motor_count": 35},
+                }
+
+        official = FakeOfficial()
+        session = UnitreeSession(
+            UnitreeTransportConfig(transport="dds", mode="sim"),
+            official=official,
+        )
+        motor_cmd = [{"mode": 1, "q": -0.2, "kp": 12.0, "kd": 0.5}]
+
+        response = session.publish_lowcmd("rt/lowcmd", motor_cmd, mode_pr=1, mode_machine=5, crc=123)
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["provider"], "official_mujoco_dds_simulator")
+        self.assertTrue(response["official_dds_supported"])
+        self.assertFalse(response["compatibility_fallback"])
+        self.assertEqual(response["lowcmd_write_successes"], 1)
+        self.assertEqual(official.calls[0]["motor_cmd"], motor_cmd)
+        self.assertEqual(official.calls[0]["mode_machine"], 5)
+
+    def test_unitree_session_rejects_unsupported_dds_publish_topic(self):
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=object())
+
+        response = session.publish_lowcmd("rt/arm_sdk", [], mode_pr=0, mode_machine=0, crc=0)
+
+        self.assertFalse(response["ok"])
+        self.assertEqual(response["provider"], "official_mujoco_dds_simulator")
+        self.assertEqual(response["supported_topics"], ["rt/lowcmd"])
+
     def test_unitree_lowstate_channel_can_read_official_dds_summary(self):
         class FakeOfficial:
             def lowstate_session(self):
@@ -1961,6 +2003,54 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 42)
         command = " ".join(captured["args"])
         self.assertIn("CYBER_UNITREE_ACTION=read_official_mujoco_lowstate", command)
+
+    def test_official_g1_sim_can_command_managed_session_lowcmd(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "lowcmd_command": {
+                            "ok": True,
+                            "lowcmd_write_attempts": 1,
+                            "lowcmd_write_successes": 1,
+                            "lowcmd_summary": {"motor_count": 35, "crc": 12345},
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=77, _runner=fake_runner)
+
+            result = official.lowcmd_session(
+                motor_cmd=[{"mode": 1, "q": -0.2, "kp": 12.0, "kd": 0.5}],
+                mode_pr=1,
+                mode_machine=5,
+                crc=12345,
+                frames=3,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["lowcmd_write_successes"], 1)
+        self.assertEqual(captured["timeout"], 77)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=command_official_mujoco_lowcmd", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_FRAMES=3", command)
+        self.assertIn('"mode_machine":5', command)
 
     def test_official_g1_sim_can_probe_managed_session_loco_rpc(self):
         captured = {}
