@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import subprocess
+import tempfile
 import threading
 import unittest
 
-from cybernetic_robotics import G1Robot, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
+from cybernetic_robotics import G1Robot, OfficialG1Sim, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
@@ -576,6 +579,51 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_official_g1_sim_raise_hand_builds_sidecar_probe_command(self):
+        captured: dict[str, object] = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "arm_pose_probe": {
+                            "ok": True,
+                            "preset": "raise_right_hand",
+                            "moved_joints": ["right_shoulder_pitch", "right_elbow"],
+                            "lowcmd_write_successes": 180,
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=123, _runner=fake_runner)
+
+            result = official.raise_right_hand(frames=999, joint_deltas={"right_elbow": 0.75})
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["moved_joints"], ["right_shoulder_pitch", "right_elbow"])
+        self.assertEqual(result["lowcmd_write_successes"], 180)
+        self.assertEqual(result["parameters"]["frames"], 600)
+        self.assertEqual(result["parameters"]["joint_deltas"], {"right_elbow": 0.5})
+        self.assertEqual(captured["timeout"], 123)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=probe_official_mujoco_arm_pose", command)
+        self.assertIn("CYBER_UNITREE_ARM_POSE_PRESET=raise_right_hand", command)
+        self.assertIn("CYBER_UNITREE_ARM_POSE_FRAMES=600", command)
+        self.assertIn("unitree-g1-sdk2-sidecar", command)
 
 
 if __name__ == "__main__":

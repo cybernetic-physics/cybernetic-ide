@@ -55,6 +55,7 @@ with G1Robot.connect() as robot:
 cyber-g1 status
 cyber-g1 diagnostics
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10
 cyber-g1 step --count 20
 cyber-g1 demo
@@ -73,6 +74,32 @@ from cybernetic_robotics import UnitreeSession
 
 print(UnitreeSession.from_env().diagnostics())
 ```
+
+## Official Unitree MuJoCo + SDK2 Probe
+
+When you want to prove the SDK2/CycloneDDS path instead of the lightweight
+local viewer harness, use the opt-in official sidecar bridge:
+
+```python
+from cybernetic_robotics import OfficialG1Sim
+
+official = OfficialG1Sim.discover()
+result = official.raise_right_hand()
+print(result["ok"], result["moved_joints"])
+```
+
+Or from the CLI:
+
+```sh
+cyber-g1 official raise-hand
+python3 examples/g1_official_raise_hand.py
+```
+
+This launches the official `unitree_mujoco` G1 peer in the sidecar, publishes a
+bounded multi-joint HG `LowCmd_` pose over `rt/lowcmd`, and verifies moved
+joints through official `rt/lowstate`. It is deliberately short-lived and
+simulator-only. The long-lived DDS session provider is still the next backend
+step.
 
 ## Unitree SDK2-Shaped API
 

@@ -197,6 +197,9 @@ Tasks:
   `raise_right_hand` preset publishes a bounded multi-joint HG `LowCmd_`,
   writes 180 of 180 official `rt/lowcmd` frames, and verifies five moved
   right-arm joints through official `rt/lowstate`.
+- Done: add `OfficialG1Sim` and `cyber-g1 official raise-hand` so Python users
+  can trigger that official Unitree MuJoCo + SDK2/CycloneDDS hand-raise proof
+  without writing Docker Compose or MCP boilerplate.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -322,6 +325,8 @@ are honest by reading examples that do real things.
 Tasks:
 
 - `examples/g1_wave_hand_sdk.py`: high-level wave behavior.
+- Done: `examples/g1_official_raise_hand.py`: official sidecar-backed SDK2/DDS
+  hand-raise proof.
 - `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern.
 - `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
 - Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.

@@ -229,6 +229,21 @@ verified `raise_right_hand` preset moved five target joints
 `rt/lowcmd` writes. This is still a diagnostic probe, but it is much closer to
 the developer-facing "raise hand" SDK demo than isolated joint pokes.
 
+The Python package now exposes that same official proof path through
+`OfficialG1Sim` and `cyber-g1 official raise-hand`, so a developer can stay in
+the Cybernetic SDK instead of hand-writing MCP or Docker Compose commands:
+
+```python
+from cybernetic_robotics import OfficialG1Sim
+
+official = OfficialG1Sim.discover()
+print(official.raise_right_hand()["moved_joints"])
+```
+
+This wrapper still runs the short-lived sidecar probe. It does not replace the
+planned long-lived DDS session provider, but it is the first Python API surface
+that drives the official Unitree MuJoCo + SDK2/CycloneDDS path end to end.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
@@ -267,6 +282,7 @@ python3 -m py_compile \
   examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  examples/g1_official_raise_hand.py \
   examples/g1_loco_sdk.py \
   examples/g1_lowcmd_sdk.py \
   examples/g1_joint_targets.py \
@@ -454,6 +470,9 @@ The current repo has the first narrow version of that API boundary:
   low-level `rt/lowcmd` / `rt/lowstate` channel examples.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
+- `examples/g1_official_raise_hand.py` uses `OfficialG1Sim.raise_right_hand()`
+  to run the official sidecar peer and verify the bounded multi-joint hand
+  raise through real SDK2/CycloneDDS `rt/lowcmd` and `rt/lowstate`.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,

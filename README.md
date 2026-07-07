@@ -50,6 +50,7 @@ making the user think about the transport layer.
 | `script/probe-unitree-g1-mujoco-protocol.mjs` | CLI probe for the reversed Booster-like simulator envelope. |
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
+| `examples/g1_official_raise_hand.py` | Opt-in official Unitree MuJoCo + SDK2/CycloneDDS hand-raise probe. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
@@ -175,6 +176,7 @@ Run it from the terminal:
 
 ```sh
 python3 examples/g1_raise_hand_sdk.py
+python3 examples/g1_official_raise_hand.py
 ```
 
 After installing `packages/cybernetic-robotics`, the same import shape is
@@ -227,6 +229,10 @@ Dockerized MuJoCo command:
 That direct pose command is intentionally transitional. The user-facing API is
 already aligned with Unitree SDK2; the backend can move toward official
 `unitree_mujoco` + SDK2/CycloneDDS topics without changing example code.
+For the current opt-in official path, `examples/g1_official_raise_hand.py` and
+`cyber-g1 official raise-hand` launch the official sidecar peer and verify a
+bounded multi-joint `raise_right_hand` pose through real `rt/lowcmd` /
+`rt/lowstate`.
 
 ## Running the G1 LocoClient Demo
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from .g1 import G1Robot
+from .official import OfficialG1Sim
 from .session import UnitreeSession, UnitreeTransportConfig
 from .harness import DockerHarness
 from .simulator import SimulatorClient
@@ -54,10 +55,20 @@ def main(argv: list[str] | None = None) -> int:
     logs = subcommands.add_parser("logs")
     logs.add_argument("--tail", type=int, default=120)
 
+    official = subcommands.add_parser("official")
+    official_subcommands = official.add_subparsers(dest="official_command", required=True)
+    official_raise = official_subcommands.add_parser("raise-hand")
+    _add_official_pose_options(official_raise)
+    official_pose = official_subcommands.add_parser("pose")
+    official_pose.add_argument("preset", choices=["raise_right_hand", "raise_left_hand"])
+    _add_official_pose_options(official_pose)
+
     args = parser.parse_args(argv)
 
     if args.command in {"prepare", "start", "stop", "logs"}:
         return _harness_command(args)
+    if args.command == "official":
+        return _official_command(args)
 
     robot = G1Robot.connect(wait=args.command not in {"snapshot", "diagnostics"})
     if args.command == "status":
@@ -109,6 +120,32 @@ def _camera_command(sim: SimulatorClient, args: argparse.Namespace) -> int:
     if args.camera_command == "zoom":
         return _print(sim.zoom(args.delta).raw)
     raise AssertionError(args.camera_command)
+
+
+def _add_official_pose_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--frames", type=int, default=180)
+    parser.add_argument("--kp", type=float, default=30.0)
+    parser.add_argument("--kd", type=float, default=1.0)
+    parser.add_argument("--hold-kp", type=float, default=18.0)
+    parser.add_argument("--hold-kd", type=float, default=0.8)
+    parser.add_argument("--min-moved-joints", type=int, default=2)
+
+
+def _official_command(args: argparse.Namespace) -> int:
+    official = OfficialG1Sim.discover()
+    options = {
+        "frames": args.frames,
+        "kp": args.kp,
+        "kd": args.kd,
+        "hold_kp": args.hold_kp,
+        "hold_kd": args.hold_kd,
+        "min_moved_joints": args.min_moved_joints,
+    }
+    if args.official_command == "raise-hand":
+        return _print(official.raise_right_hand(**options))
+    if args.official_command == "pose":
+        return _print(official.arm_pose(args.preset, **options))
+    raise AssertionError(args.official_command)
 
 
 def _harness_command(args: argparse.Namespace) -> int:

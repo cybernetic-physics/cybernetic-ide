@@ -64,6 +64,7 @@ API and the Unitree SDK-shaped shim:
 ```sh
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
+python3 examples/g1_official_raise_hand.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_joint_targets.py
@@ -76,6 +77,7 @@ The package installs `cyber-g1`:
 ```sh
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10
 cyber-g1 step --count 20
 cyber-g1 demo
@@ -92,6 +94,25 @@ cyber-g1 stop
 
 These commands assume `CYBER_ROBOTICS_ROOT` points at the Cybernetic IDE repo,
 or that the current working directory is inside the repo.
+
+## Official Unitree MuJoCo Probe
+
+The beginner API above talks to Cybernetic's lightweight local viewer harness.
+For the official Unitree MuJoCo + SDK2/CycloneDDS path, use `OfficialG1Sim`:
+
+```python
+from cybernetic_robotics import OfficialG1Sim
+
+official = OfficialG1Sim.discover()
+result = official.raise_right_hand()
+print(result["ok"], result["moved_joints"])
+```
+
+This runs the opt-in SDK2 sidecar, launches the official `unitree_mujoco` G1
+peer, publishes a bounded multi-joint HG `LowCmd_` pose over `rt/lowcmd`, and
+verifies moved joints through official `rt/lowstate`. It is simulator-only and
+short-lived by design. The future `transport=dds` provider should make the
+same kind of official bridge long-lived behind the normal Unitree-shaped API.
 
 ## Unitree SDK2-Shaped Code
 
