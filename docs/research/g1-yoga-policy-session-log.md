@@ -109,21 +109,28 @@ and let the projection translate what the 23-DOF model can't express:
 - Retuned chair/fold/warrior entries in `NAMED_POSES`; goddess got ankle
   compensation.
 
-**Sign-convention findings (verified numerically, probe scripts, not yet fully
-resolved):** on the 23-DOF model, `hip_pitch`, `knee`, and `ankle_pitch` all
-rotate the foot's sole about +y in the *same* direction and add linearly
-(foot pitch ≈ hip + knee + ankle). Consequences:
+**Sign conventions (RESOLVED, verified numerically against both MJCFs):**
+forward is +x (toe geoms at +0.12 from the ankle); `hip_pitch`, `knee`, and
+`ankle_pitch` all rotate about +y and add linearly, with POSITIVE values
+swinging the segment BACKWARD. Hip flexion (thigh forward) is therefore
+negative `hip_pitch`, and a flat foot requires
+base_pitch + hip + knee + ankle ≈ 0. The original registry used positive hips
+for forward bends — the legs swung backward instead, one reason those poses
+toppled. The earlier "impossible chair" conclusion was an artifact of
+same-sign hips: with hip −0.75 / knee +0.85 the terms cancel and chair is
+easy. `base_pitch` quat [cos θ/2, 0, sin θ/2, 0] pitches the torso forward ✓.
 
-- Flat feet require hip + knee + ankle ≈ 0 (plus base pitch). With
-  `ankle_pitch` limited to −0.87, leg configurations with hip+knee beyond
-  ~0.87 in the same direction cannot have flat feet — the first-cut "deep
-  chair" (hip 0.85, knee 0.95) is geometrically impossible for this robot
-  with heels down. Chair must be shallower or heels-up.
-- My first hip-compensation sign for the waist translation was inverted
-  (caught because grounding found feet *above* the pelvis); fixed.
-- Still to resolve: which world direction is the robot's "forward"
-  (+x vs −x) — determines the `base_pitch` sign and the anatomical reading of
-  hip flexion. Next probe: toe-geom offsets in neutral pose.
+**Final retuned registry (all margins from analyze_pose_stability, 23-DOF
+projected + grounded):** mountain +6.5 cm, upward_salute +6.0, forward_fold
++3.8 (base 0.35 + waist 0.52 ≈ 50° fold, feet ~14 cm ahead of hips, stays
+under the torso-up fall threshold), chair +2.4 (waist 0.5 forward lean, CoM
+moved off the heel edge), warrior_one +4.5 (true lunge, both feet planted,
+rear knee/ankle solved by the Newton tuner), warrior_two +6.3, goddess +1.1,
+namaste +7.2; tree remains single-support by design (CoM 11 cm off the stance
+foot — the policy must deviate to balance; stretch goal). Rendered frames of
+every pose visually verified (proper standing fold, chair with hips back +
+torso lean, planted lunges). Kinematic application in the 29-DOF sim verified
+in-process (base_pitch quat applied, no false "fallen").
 
 Tooling written for this loop (all under `packages/g1-yoga-rl/scripts/`):
 
@@ -138,6 +145,72 @@ Tooling written for this loop (all under `packages/g1-yoga-rl/scripts/`):
   ankle-roll limit — acceptable); chair/goddess hit the −0.87 ankle-pitch
   limit with ~19–53° residual tilt → their leg geometry must be retuned per
   the flat-feet constraint above.
+
+### 4. Training runs
+
+- **run1** (20M steps, lr 3e-4, single monolithic train_fn): learned to
+  return ~114 / episode length ~220 by update ~1250, then **collapsed
+  catastrophically** (~update 1700, return ~10) and never recovered; the
+  intermediate state was unrecoverable because PPOJax only returns the final
+  agent. End-to-end throughput 3,768 steps/s (88.5 min).
+- Trainer rewritten to **chunked training**: one jitted resume function, N
+  chunks (default 10), agent saved after every chunk, best tail-return kept —
+  a late collapse can no longer destroy the run. lr default dropped to 1e-4.
+- **run2** (20M steps, 10×2M chunks, lr 1e-4): chunk 1 tail return 96.5,
+  chunk 2 tail return 336 / length 423. Interim eval of the chunk-2 agent
+  through the FULL deploy pipeline: **4/9 poses held** (mountain,
+  upward_salute, warrior_one, goddess) — already beats the 3/9 PD baseline
+  and rescues two previous topplers, at 4M steps.
+
+### 5. Export / deploy pipeline (built and validated with interim agents)
+
+- `g1-yoga-export`: PPOJax pickle → numpy npz (actor MLP 450→512→256→23 tanh,
+  frozen RunningMeanStd, DefaultControl act_mean/act_delta over ctrlrange) +
+  parity test vs the flax network (3.7e-07; the flax RunningMeanStd
+  normalizes with batch-updated stats, so the test emulates that update).
+- `g1-yoga-pack`: deploy bundle npz — policy + **precomputed reference half
+  of the goal obs** (225 dims/frame, computed with loco_mujoco's own
+  functions) + raw ref qpos/qvel for teleport resets + mimic-site table +
+  actuator→joint mapping (mapped by driven joint name across models).
+- `overlays/.../python/g1_policy_runtime.py`: sim-side runtime — injects the
+  15 mimic sites into the 29-DOF MjSpec (hand sites remapped from the 23-DOF
+  lumped wrist body to `*_wrist_yaw_link` −0.084 x), numpy obs builder
+  (plain 57 + current-site 168 via loco-mujoco-mirroring math with mujoco's
+  own quat helpers) + MLP + actuator mapping + gravity-comp PD for the six
+  29-DOF-only actuators + teleport reset.
+- `g1-yoga-validate-deploy`: obs parity 29-DOF-deploy vs training truth at
+  sampled frames: **plain 0.0, current-site ≤4e-16, reference-goal ≤7e-8** —
+  machine precision. (Found along the way: loco_mujoco's CPU `reset()`
+  computes the obs before `mj_forward` sees the trajectory state, so
+  reset-obs site kinematics are stale upstream; validation compares against
+  freshly-forwarded `_create_observation` instead.)
+- `g1-yoga-sim2sim`: closed-loop policy rollout on the 29-DOF scene with the
+  exact deploy control loop (policy 100 Hz over 0.002 s physics). Smoke-agent
+  survival ticks match the training env (34–79 vs 34–87) → the sim2sim gap is
+  small.
+
+### 6. Sim policy mode (implemented, locally verified end-to-end)
+
+- `g1_protocol_sim.py`: loads the bundle if present (default
+  `/opt/unitree-g1-mujoco-protocol/policy/g1_yoga_policy.npz`, override via
+  `UNITREE_G1_POLICY_BUNDLE`), injects mimic sites at model load; new
+  `yoga_policy` command (`start`/`stop`/`status`) drives control_mode
+  "policy": physics timestep switches to 0.002, a new action every 5 steps,
+  loop-wrapping reference frames, fall (< 0.35 m pelvis) teleports back onto
+  the reference and counts `falls`; `/status` reports frame / cycles / falls
+  / pose label.
+- **Physics pump decoupled from rendering**: the old render loop advanced
+  physics at 8 Hz with a 0.08 s cap (≈64% real time at best). New dedicated
+  200 Hz physics thread; render loop only refreshes JPEGs; `UNITREE_G1_RENDER_HZ=0`
+  disables rendering (macOS offscreen GL wedges in background threads — a
+  local-testing artifact only, Docker/osmesa unaffected). HTTP/WS ports now
+  env-configurable (`UNITREE_G1_HTTP_PORT`/`UNITREE_G1_WS_PORT`).
+- Local end-to-end run (host python, render off): `yoga_policy start` →
+  frames advance ~83/s wall, falls counted + auto-recovery works with the
+  weak smoke policy.
+- `examples/yoga_teacher.py --policy`: starts the loop, narrates pose-by-pose
+  from `/status` policy frames, snapshots each hold, tallies falls per pose
+  window.
 
 ## Current state of the working tree (uncommitted)
 

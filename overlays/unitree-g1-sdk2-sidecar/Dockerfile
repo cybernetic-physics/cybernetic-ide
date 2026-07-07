@@ -11,9 +11,14 @@ RUN apt-get update \
         libeigen3-dev \
         libfmt-dev \
         libglfw3-dev \
+        libgl1 \
+        libglib2.0-0 \
+        libosmesa6 \
         libspdlog-dev \
         libyaml-cpp-dev \
         pkg-config \
+        xauth \
+        xvfb \
     && mkdir -p /opt/cyclonedds \
     && ln -s /usr/include /opt/cyclonedds/include \
     && ln -s /usr/bin /opt/cyclonedds/bin \
