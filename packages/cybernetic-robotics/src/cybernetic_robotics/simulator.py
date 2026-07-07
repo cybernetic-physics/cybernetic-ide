@@ -159,6 +159,27 @@ class SimulatorClient:
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")
 
+    def joint_state(self) -> JsonObject:
+        return self.get_json("/joint_state")
+
+    def apply_joint_targets(
+        self,
+        targets: dict[str, float],
+        *,
+        kp: float = 38.0,
+        kd: float = 1.4,
+        tau: float = 0.0,
+        dq: float = 0.0,
+    ) -> JsonObject:
+        return self.command(
+            "joint_targets",
+            targets={str(name): float(value) for name, value in targets.items()},
+            kp=float(kp),
+            kd=float(kd),
+            tau=float(tau),
+            dq=float(dq),
+        )
+
     def camera(self, action: str = "state", **fields: Any) -> CameraState:
         if action == "state" and not fields:
             return CameraState(self.get_json("/camera"))

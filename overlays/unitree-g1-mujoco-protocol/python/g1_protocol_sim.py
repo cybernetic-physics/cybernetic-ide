@@ -344,6 +344,31 @@ class G1MujocoState:
             raise KeyError(f"unknown joint: {joint_name}")
         return joint_id, int(self.model.jnt_qposadr[joint_id])
 
+    def actuator_joint_map_locked(self):
+        joints = []
+        for index in range(self.model.nu):
+            joint_id = int(self.actuator_joint_id[index])
+            qpos_addr = int(self.actuator_qpos_adr[index])
+            dof_addr = int(self.actuator_dof_adr[index])
+            joint_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_id) or f"joint_{joint_id}"
+            actuator_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, index) or f"actuator_{index}"
+            limited = bool(self.model.jnt_limited[joint_id])
+            minimum, maximum = self.model.jnt_range[joint_id]
+            joints.append(
+                {
+                    "motor_index": index,
+                    "joint_id": joint_id,
+                    "joint_name": joint_name,
+                    "actuator_name": actuator_name,
+                    "q": float(self.data.qpos[qpos_addr]),
+                    "dq": float(self.data.qvel[dof_addr]),
+                    "tau_est": float(self.data.ctrl[index]),
+                    "limited": limited,
+                    "range": [float(minimum), float(maximum)] if limited else None,
+                }
+            )
+        return joints
+
     def _target_qpos_locked(self, targets):
         """Full qpos vector for a joint-target dict (reset baseline + targets).
 
@@ -521,6 +546,19 @@ class G1MujocoState:
                 "lowcmd": dict(self.lowcmd_state),
             }
 
+    def joint_state_payload(self):
+        with self.lock:
+            joints = self.actuator_joint_map_locked()
+            return {
+                "robot": self.robot_name,
+                "model_path": str(self.model_path),
+                "actuator_count": int(self.model.nu),
+                "message_motor_slots": 35,
+                "joints": joints,
+                "by_name": {joint["joint_name"]: joint for joint in joints},
+                "lowcmd": dict(self.lowcmd_state),
+            }
+
     def handle_lowcmd_command(self, payload):
         motor_cmd = payload.get("motor_cmd", [])
         if not isinstance(motor_cmd, list):
@@ -601,6 +639,61 @@ class G1MujocoState:
                 "paused": self.paused,
                 "lowcmd": dict(self.lowcmd_state),
             }
+
+    def handle_joint_targets_command(self, payload):
+        targets = payload.get("targets", {})
+        if not isinstance(targets, dict) or not targets:
+            return {"ok": False, "error": "joint_targets requires a non-empty targets object"}
+
+        try:
+            kp = float(payload.get("kp", 38.0))
+            kd = float(payload.get("kd", 1.4))
+            tau = float(payload.get("tau", 0.0))
+            dq = float(payload.get("dq", 0.0))
+        except (TypeError, ValueError) as error:
+            return {"ok": False, "error": f"joint target gains must be numeric: {error}"}
+
+        with self.lock:
+            joints = self.actuator_joint_map_locked()
+            by_name = {joint["joint_name"]: joint for joint in joints}
+            motor_cmd = [{"mode": 0, "q": 0.0, "dq": 0.0, "tau": 0.0, "kp": 0.0, "kd": 0.0} for _ in range(35)]
+            unknown = []
+            for joint_name, target in targets.items():
+                joint = by_name.get(str(joint_name))
+                if joint is None:
+                    unknown.append(str(joint_name))
+                    continue
+                motor_cmd[int(joint["motor_index"])] = {
+                    "mode": 1,
+                    "q": target,
+                    "dq": dq,
+                    "tau": tau,
+                    "kp": kp,
+                    "kd": kd,
+                }
+            if unknown:
+                return {
+                    "ok": False,
+                    "error": f"unknown joints: {', '.join(unknown)}",
+                    "available_joints": sorted(by_name),
+                }
+
+        response = self.handle_lowcmd_command(
+            {
+                "command": "lowcmd",
+                "topic": payload.get("topic", "rt/lowcmd/joint_targets"),
+                "mode_pr": payload.get("mode_pr", 0),
+                "mode_machine": payload.get("mode_machine", self.loco_state.get("fsm_id") or 0),
+                "crc": payload.get("crc", 0),
+                "motor_cmd": motor_cmd,
+            }
+        )
+        if response.get("ok"):
+            with self.lock:
+                self.lowcmd_state["source"] = "joint_targets"
+                self.lowcmd_state["joint_targets"] = {str(key): float(value) for key, value in targets.items()}
+                response["lowcmd"] = dict(self.lowcmd_state)
+        return response
 
     def handle_loco_command(self, payload):
         action = payload.get("action", "state")
@@ -1133,6 +1226,8 @@ class G1MujocoState:
             return self.handle_loco_command(payload)
         if command == "lowcmd":
             return self.handle_lowcmd_command(payload)
+        if command == "joint_targets":
+            return self.handle_joint_targets_command(payload)
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}
@@ -1211,6 +1306,10 @@ def start_http_server(state):
 
             if parsed.path == "/lowstate":
                 self.write_json(200, state.low_state_payload())
+                return
+
+            if parsed.path == "/joint_state":
+                self.write_json(200, state.joint_state_payload())
                 return
 
             if parsed.path == "/visual_frame":

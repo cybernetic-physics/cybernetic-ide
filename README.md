@@ -49,6 +49,7 @@ making the user think about the transport layer.
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
+| `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
 | `examples/g1_behavior_gallery.py` | Behavior gallery that runs arm action, locomotion, wave, stand-height, safe-neutral, and saves snapshots. |
 | `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
 | `examples/use_cybernetic_robotics_lib.py` | Polished package demo that exercises both `G1Robot` and the Unitree SDK2-shaped shim. |
@@ -120,6 +121,7 @@ cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_joint_targets.py
 python3 examples/g1_behavior_gallery.py
 python3 examples/easy_g1_playground.py
 ```
@@ -318,6 +320,7 @@ python3 -m py_compile \
   examples/g1_raise_hand_sdk.py \
   examples/g1_loco_sdk.py \
   examples/g1_lowcmd_sdk.py \
+  examples/g1_joint_targets.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \

@@ -174,6 +174,7 @@ python3 -m py_compile \
   examples/g1_raise_hand_sdk.py \
   examples/g1_loco_sdk.py \
   examples/g1_lowcmd_sdk.py \
+  examples/g1_joint_targets.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \
@@ -202,6 +203,7 @@ node script/probe-unitree-g1-mujoco-protocol.mjs --topic simulation_state
 python3 examples/g1_raise_hand_sdk.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_joint_targets.py
 ```
 
 ## Missing Booster Studio Features {#missing-booster-studio-features}
@@ -345,6 +347,9 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_lowcmd_sdk.py` uses Unitree-shaped `ChannelPublisher`,
   `ChannelSubscriber`, `LowCmd_`, `LowState_`, `CRC`, and
   `MotionSwitcherClient` imports.
+- `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
+  `/joint_state` and compiles joint-name targets back into simulator-backed
+  lowcmd slots.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

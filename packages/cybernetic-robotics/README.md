@@ -122,6 +122,19 @@ publisher.Write(command)
 See `examples/g1_lowcmd_sdk.py` for a conservative right-arm motion that uses
 the same channel shape.
 
+For named-joint control, use the higher-level package API:
+
+```python
+from cybernetic_robotics import G1Robot
+
+with G1Robot.connect() as robot:
+    print(robot.joint_state()["by_name"]["right_elbow_joint"])
+    robot.apply_joint_targets({"right_elbow_joint": 0.9})
+```
+
+See `examples/g1_joint_targets.py` for a complete script that inspects the
+joint map, applies a right-arm target, and saves a snapshot.
+
 This is a bootstrap bridge. In sim mode it posts to Cybernetic's local
 GameControl endpoint. Future real-robot mode should let the same user code
 resolve to Unitree's official SDK2 package and CycloneDDS transport.

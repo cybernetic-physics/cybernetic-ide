@@ -9,10 +9,10 @@ This mirrors the important shape of Unitree's official low-level examples:
 - publish LowCmd_ messages on rt/lowcmd
 - compute a CRC before writing
 
-The simulator bridge converts the command to MuJoCo motor torques. Keep this
-example small and conservative: low-level joint control is powerful, and the
-current harness is a developer playground rather than a full whole-body
-controller.
+The simulator bridge applies commanded joint targets as held MuJoCo frames and
+records torque estimates for telemetry. Keep this example small and
+conservative: low-level joint control is powerful, and the current harness is a
+developer playground rather than a full whole-body controller.
 """
 
 from __future__ import annotations

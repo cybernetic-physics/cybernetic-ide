@@ -102,6 +102,12 @@ class G1Robot:
     def pose(self, name: str, **kwargs: Any) -> dict[str, Any]:
         return self.sim.pose(name, **kwargs)
 
+    def joint_state(self) -> dict[str, Any]:
+        return self.sim.joint_state()
+
+    def apply_joint_targets(self, targets: dict[str, float], **kwargs: Any) -> dict[str, Any]:
+        return self.sim.apply_joint_targets(targets, **kwargs)
+
     def hold(self, name: str, teleport: bool = True) -> dict[str, Any]:
         """Physically hold a pose: motors PD-track it while physics runs."""
 

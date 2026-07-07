@@ -181,6 +181,25 @@ const tools = [
   tool("g1_lowstate", "Read simulator-backed Unitree rt/lowstate motor and IMU telemetry.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("g1_joint_state", "Read named G1 joint state with motor-index mapping and limits.", {}, [], {
+    readOnlyHint: true,
+  }),
+  tool(
+    "g1_apply_joint_targets",
+    "Apply simulator-backed G1 joint targets by joint name.",
+    {
+      targets: {
+        type: "object",
+        description: "Object mapping joint names to target radians, for example {\"right_shoulder_pitch_joint\": -1.2}.",
+      },
+      kp: { type: "number", default: 38.0 },
+      kd: { type: "number", default: 1.4 },
+      tau: { type: "number", default: 0 },
+      dq: { type: "number", default: 0 },
+    },
+    ["targets"],
+    { readOnlyHint: false },
+  ),
   tool(
     "g1_lowcmd",
     "Publish a simulator-backed Unitree rt/lowcmd motor command list.",
@@ -434,6 +453,10 @@ async function callTool(name, args) {
       return textResult(await executeG1LocoCommand(args));
     case "g1_lowstate":
       return textResult(await getJson("/lowstate"));
+    case "g1_joint_state":
+      return textResult(await getJson("/joint_state"));
+    case "g1_apply_joint_targets":
+      return textResult(await executeG1JointTargets(args));
     case "g1_lowcmd":
       return textResult(await executeG1Lowcmd(args));
     case "safety_stop":
@@ -620,6 +643,24 @@ async function executeG1Lowcmd(args) {
       kp: Number(cmd?.kp || 0),
       kd: Number(cmd?.kd || 0),
     })),
+  });
+}
+
+async function executeG1JointTargets(args) {
+  if (!args.targets || typeof args.targets !== "object" || Array.isArray(args.targets)) {
+    throw new Error("g1_apply_joint_targets requires targets as an object");
+  }
+  const targets = {};
+  for (const [name, value] of Object.entries(args.targets)) {
+    targets[name] = Number(value);
+  }
+  return command({
+    command: "joint_targets",
+    targets,
+    kp: Number(args.kp ?? 38.0),
+    kd: Number(args.kd ?? 1.4),
+    tau: Number(args.tau || 0),
+    dq: Number(args.dq || 0),
   });
 }
 

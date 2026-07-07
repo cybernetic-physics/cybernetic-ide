@@ -85,6 +85,10 @@ It also exposes `g1_loco_command` for common `LocoClient`-style commands:
 For lower-level inspection and control, agents can use:
 
 - `g1_lowstate`: read synthesized `rt/lowstate` telemetry.
+- `g1_joint_state`: read named joint state, motor indices, limits, and lowcmd
+  bookkeeping.
+- `g1_apply_joint_targets`: apply joint targets by Unitree G1 joint name while
+  still routing through the simulator-backed lowcmd path.
 - `g1_lowcmd`: publish a list of simulator-backed motor commands.
 
 ## Example Scripts
@@ -96,10 +100,12 @@ python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_raise_hand_sdk.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_joint_targets.py
 python3 examples/g1_behavior_gallery.py
 python3 examples/yoga_teacher.py
 ```
 
 They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
-`LocoClient`-shaped locomotion, low-level `rt/lowcmd`/`rt/lowstate` control, a
-behavior gallery with snapshots, and a higher-level scripted motion flow.
+`LocoClient`-shaped locomotion, low-level `rt/lowcmd`/`rt/lowstate` control,
+named-joint target control, a behavior gallery with snapshots, and a
+higher-level scripted motion flow.

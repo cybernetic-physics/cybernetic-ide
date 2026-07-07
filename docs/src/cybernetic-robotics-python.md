@@ -66,6 +66,7 @@ python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_joint_targets.py
 ```
 
 ## CLI
@@ -201,6 +202,36 @@ Run the full example:
 python3 examples/g1_lowcmd_sdk.py
 ```
 
+## Named Joint Targets
+
+Most developers should start with named joints before writing raw motor-index
+commands. The simulator exposes `/joint_state`, which maps Unitree G1 joint
+names to motor indices, ranges, positions, velocities, and torque estimates.
+
+```python
+from cybernetic_robotics import G1Robot
+
+with G1Robot.connect() as robot:
+    state = robot.joint_state()
+    print(state["by_name"]["right_elbow_joint"])
+
+    robot.apply_joint_targets(
+        {
+            "right_shoulder_pitch_joint": -1.45,
+            "right_elbow_joint": 0.95,
+        },
+        kp=34.0,
+        kd=1.2,
+    )
+```
+
+This still routes through the simulator-backed lowcmd path, but it avoids
+hard-coded motor indices in beginner and agent-authored scripts. Run:
+
+```sh
+python3 examples/g1_joint_targets.py
+```
+
 ## Agent MCP Tools
 
 The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to
@@ -211,6 +242,8 @@ viewer_camera_control
 viewer_snapshot
 viewer_snapshot_file
 g1_lowstate
+g1_joint_state
+g1_apply_joint_targets
 g1_lowcmd
 ```
 

@@ -221,8 +221,9 @@ Agents should not need to discover ad hoc scripts before they can be helpful.
 
 Tasks:
 
-- Add `g1_joint_state` with named joint mapping.
-- Add `g1_apply_joint_targets` with joint names rather than only motor indices.
+- Done: add `g1_joint_state` with named joint mapping.
+- Done: add `g1_apply_joint_targets` with joint names rather than only motor
+  indices.
 - Add `sim_capture_sequence` for before/during/after behavior review.
 - Add `scene_add_object`, `scene_remove_object`, and `scene_list_objects`.
 - Add `sim_validate_behavior` that checks fallen state, command freshness, and
@@ -248,7 +249,7 @@ Tasks:
 - `examples/g1_wave_hand_sdk.py`: high-level wave behavior.
 - `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern.
 - `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
-- `examples/g1_joint_targets.py`: named-joint low-level target demo.
+- Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.
 - `examples/g1_scene_obstacle.py`: add an object, move camera, snapshot.
 - `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a
   debugging bundle an AI agent can use.

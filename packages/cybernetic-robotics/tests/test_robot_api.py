@@ -35,6 +35,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
     }
     lowcmd_count = 0
     last_lowcmd = {}
+    joint_targets = {}
 
     def do_GET(self):  # noqa: N802 - stdlib handler method.
         if self.path == "/health":
@@ -74,6 +75,37 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         for index in range(35)
                     ],
                     "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
+                }
+            )
+        if self.path == "/joint_state":
+            joints = [
+                {
+                    "motor_index": 22,
+                    "joint_name": "right_shoulder_pitch_joint",
+                    "q": type(self).joint_targets.get("right_shoulder_pitch_joint", 0.0),
+                    "dq": 0.0,
+                    "tau_est": 0.0,
+                    "limited": True,
+                    "range": [-3.1, 2.5],
+                },
+                {
+                    "motor_index": 25,
+                    "joint_name": "right_elbow_joint",
+                    "q": type(self).joint_targets.get("right_elbow_joint", 0.0),
+                    "dq": 0.0,
+                    "tau_est": 0.0,
+                    "limited": True,
+                    "range": [-1.0, 2.0],
+                },
+            ]
+            return self._json(
+                {
+                    "robot": "g1",
+                    "actuator_count": 29,
+                    "message_motor_slots": 35,
+                    "joints": joints,
+                    "by_name": {joint["joint_name"]: joint for joint in joints},
+                    "lowcmd": {},
                 }
             )
         if self.path == "/camera_frame_0.jpg":
@@ -123,6 +155,20 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         },
                     }
                 )
+            elif command == "joint_targets":
+                type(self).joint_targets = dict(payload.get("targets") or {})
+                type(self).paused = True
+                return self._json(
+                    {
+                        "ok": True,
+                        "control_mode": "lowcmd",
+                        "paused": True,
+                        "lowcmd": {
+                            "source": "joint_targets",
+                            "joint_targets": type(self).joint_targets,
+                        },
+                    }
+                )
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -161,6 +207,7 @@ class FakeServer:
         }
         FakeG1Handler.lowcmd_count = 0
         FakeG1Handler.last_lowcmd = {}
+        FakeG1Handler.joint_targets = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -280,6 +327,26 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_named_joint_targets_use_simulator_protocol(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            robot = G1Robot.connect(endpoints=endpoints)
+
+            before = robot.joint_state()
+            result = robot.apply_joint_targets(
+                {
+                    "right_shoulder_pitch_joint": -1.2,
+                    "right_elbow_joint": 0.8,
+                }
+            )
+            after = robot.joint_state()
+
+            self.assertEqual(before["by_name"]["right_elbow_joint"]["q"], 0.0)
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["lowcmd"]["source"], "joint_targets")
+            self.assertEqual(after["by_name"]["right_shoulder_pitch_joint"]["q"], -1.2)
+            self.assertEqual(after["by_name"]["right_elbow_joint"]["q"], 0.8)
 
 
 if __name__ == "__main__":
