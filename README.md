@@ -24,6 +24,10 @@ making the user think about the transport layer.
 - A Unitree SDK2-shaped Python facade under
   `overlays/unitree-g1-sdk-shim/` so end-user code can call
   `G1ArmActionClient.ExecuteAction(action_map["right hand up"])`.
+- An installable `cybernetic-robotics` Python package under
+  `packages/cybernetic-robotics/` with a beginner `G1Robot` API, CLI, raw
+  protocol clients, scene helpers, and a packaged `unitree_sdk2py` simulator
+  shim.
 - Example scripts in `examples/` for both low-level simulator probes and the
   Unitree-shaped hand-raise demo.
 - Cybernetic IDE task entries for running the simulator demo directly from the
@@ -37,11 +41,14 @@ making the user think about the transport layer.
 | `overlays/unitree-g1-mujoco-protocol/` | Python MuJoCo renderer/control server packaged as `cyber/unitree-g1-mujoco-protocol:0.1.0`. |
 | `overlays/unitree-g1-mujoco-container/` | Docker Compose wrapper that mounts the Unitree G1 MuJoCo assets and exposes `8788`/`38383`. |
 | `overlays/unitree-g1-sdk-shim/` | Bootstrap `unitree_sdk2py` compatibility package for simulator-backed Unitree-shaped code. |
+| `packages/cybernetic-robotics/` | Installable Python package for beginner-friendly G1 control, power-user protocol access, MJCF scene helpers, and Unitree SDK2-shaped imports. |
 | `script/prepare-unitree-g1-mujoco-container.mjs` | Fetches the pinned public `unitreerobotics/unitree_mujoco` G1 assets into `.runtime/` and writes `compose.env`. |
 | `script/probe-unitree-g1-mujoco-protocol.mjs` | CLI probe for the reversed Booster-like simulator envelope. |
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
+| `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
 | `docs/src/unitree-g1-sdk-integration.md` | Architecture, end-user guide, developer guide, safety gates, and next milestones. |
+| `docs/src/cybernetic-robotics-python.md` | User and developer guide for the installable Python robotics package. |
 
 ## Quick Start
 
@@ -94,6 +101,30 @@ cyber: open robot viewer beside
 The Robot Viewer should open beside the active code pane and connect to the
 local simulator.
 
+Install the Python package for the easiest control path:
+
+```sh
+python3 -m pip install -e packages/cybernetic-robotics
+```
+
+Then try:
+
+```sh
+cyber-g1 status
+cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+python3 examples/easy_g1_playground.py
+```
+
+Or write a small script:
+
+```python
+from cybernetic_robotics import G1Robot
+
+with G1Robot.connect() as robot:
+    robot.raise_right_hand()
+    robot.snapshot(".runtime/g1-control-demo/right-hand-up.jpg")
+```
+
 ## Running the Hand-Raise Demo
 
 The SDK-shaped demo intentionally looks like a Unitree SDK2 Python example:
@@ -115,6 +146,10 @@ Run it from the terminal:
 ```sh
 python3 examples/g1_raise_hand_sdk.py
 ```
+
+After installing `packages/cybernetic-robotics`, the same import shape is
+available without manually injecting `overlays/unitree-g1-sdk-shim` onto
+`PYTHONPATH`.
 
 Or run the task inside Cybernetic IDE:
 
@@ -199,6 +234,8 @@ robotics work should stay behind narrow product boundaries:
 - Container lifecycle lives in `overlays/unitree-g1-mujoco-container` plus
   `script/prepare-unitree-g1-mujoco-container.mjs`.
 - Unitree-shaped Python APIs live in `overlays/unitree-g1-sdk-shim`.
+- Beginner-friendly and power-user Python APIs live in
+  `packages/cybernetic-robotics`.
 - End-user demos live in `examples/`.
 - Long-form architecture and safety notes live in
   `docs/src/unitree-g1-sdk-integration.md`.
@@ -207,8 +244,12 @@ Validation commands used for the robotics extension:
 
 ```sh
 python3 -m py_compile \
+  examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/g1/arm/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \

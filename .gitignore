@@ -38,6 +38,9 @@
 /zed.xcworkspace
 DerivedData/
 Packages
+!/packages/
+!/packages/cybernetic-robotics/
+!/packages/cybernetic-robotics/**
 xcuserdata/
 crates/docs_preprocessor/actions.json
 

@@ -31,6 +31,9 @@ The implemented features are:
   controls in the embedded viewer.
 - Python examples for protocol probing and simulator control.
 - A Unitree SDK2-shaped Python facade for the first G1 arm-action demo.
+- `packages/cybernetic-robotics/`, an installable Python package with a
+  beginner `G1Robot` API, `cyber-g1` CLI, raw simulator clients, MJCF scene
+  helpers, and packaged `unitree_sdk2py` compatibility modules.
 
 ## End User Guide {#end-user-guide}
 
@@ -74,6 +77,29 @@ Run the general simulator probe:
 
 ```sh
 python3 examples/control_g1_sim.py --steps 20 --run-seconds 1.2
+```
+
+Install the beginner-friendly package:
+
+```sh
+python3 -m pip install -e packages/cybernetic-robotics
+```
+
+Then drive the robot with less boilerplate:
+
+```python
+from cybernetic_robotics import G1Robot
+
+with G1Robot.connect() as robot:
+    robot.raise_right_hand()
+    robot.snapshot(".runtime/g1-control-demo/right-hand-up.jpg")
+```
+
+Or use the CLI:
+
+```sh
+cyber-g1 status
+cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 ```
 
 Run the first Unitree-shaped SDK demo:
@@ -135,6 +161,7 @@ Keep robotics changes behind the Cybernetic extension boundaries:
 | MuJoCo renderer/control service | `overlays/unitree-g1-mujoco-protocol/` |
 | Container lifecycle | `overlays/unitree-g1-mujoco-container/` and `script/prepare-unitree-g1-mujoco-container.mjs` |
 | Unitree-shaped Python facade | `overlays/unitree-g1-sdk-shim/` |
+| Installable Python package | `packages/cybernetic-robotics/` |
 | End-user demos | `examples/` |
 | Long-form docs | `docs/src/unitree-g1-sdk-integration.md` |
 
@@ -142,8 +169,12 @@ Focused validation:
 
 ```sh
 python3 -m py_compile \
+  examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/g1/arm/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
@@ -294,6 +325,10 @@ The current repo has the first narrow version of that API boundary:
 - `overlays/unitree-g1-sdk-shim/` provides a local `unitree_sdk2py` compatibility
   package with `ChannelFactoryInitialize`, `G1ArmActionClient`, and Unitree's
   G1 arm `action_map`.
+- `packages/cybernetic-robotics/` packages that same beginner experience into
+  an installable Python project with `G1Robot`, `SimulatorClient`,
+  `TinyWebSocket`, `SceneWorkspace`, `cyber-g1`, and simulator-backed
+  `unitree_sdk2py` modules.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
 - In the current simulator backend, that action posts `{"command": "pose",

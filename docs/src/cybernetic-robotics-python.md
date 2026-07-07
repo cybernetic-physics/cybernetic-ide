@@ -1,0 +1,181 @@
+# Cybernetic Robotics Python
+
+The `cybernetic-robotics` Python package is the easiest way to control the
+local Unitree G1 MuJoCo simulator from Cybernetic IDE.
+
+It replaces repetitive demo-script boilerplate with a small layered API:
+
+- `G1Robot` for first-time users who want to make the robot move.
+- `SimulatorClient` for direct GameControl HTTP calls.
+- `TinyWebSocket` for the Booster-style physics WebSocket.
+- `SceneWorkspace` for safe MJCF scene-copy edits.
+- `unitree_sdk2py` compatibility modules for Unitree SDK2-shaped examples.
+- `cyber-g1` for terminal-driven status, pose, camera, snapshot, and lifecycle
+  commands.
+
+The package has no required third-party Python dependencies. It talks to the
+Dockerized simulator that Cybernetic IDE already runs.
+
+## Install
+
+From the Cybernetic IDE repo root:
+
+```sh
+python3 -m pip install -e packages/cybernetic-robotics
+```
+
+Prepare and start the G1 simulator:
+
+```sh
+node script/prepare-unitree-g1-mujoco-container.mjs
+docker build -t cyber/unitree-g1-mujoco-protocol:0.1.0 overlays/unitree-g1-mujoco-protocol
+docker compose \
+  --env-file .runtime/unitree-g1-mujoco/compose.env \
+  -f overlays/unitree-g1-mujoco-container/compose.yaml \
+  up -d
+```
+
+## First Script
+
+Create a file like this:
+
+```python
+from cybernetic_robotics import G1Robot
+
+with G1Robot.connect() as robot:
+    robot.reset()
+    robot.raise_right_hand()
+    robot.snapshot(".runtime/g1-control-demo/right-hand-up.jpg")
+    print(robot.status().pose)
+```
+
+Run it:
+
+```sh
+python3 my_g1_script.py
+```
+
+The context manager pauses the simulator when the block exits. That keeps
+beginner experiments from leaving a control script running by accident.
+
+## CLI
+
+The package installs `cyber-g1`:
+
+```sh
+cyber-g1 status
+cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 camera orbit --dx 40 --dy -10
+cyber-g1 step --count 20
+cyber-g1 demo
+```
+
+Harness helpers are available too:
+
+```sh
+cyber-g1 prepare
+cyber-g1 start
+cyber-g1 logs --tail 80
+cyber-g1 stop
+```
+
+These commands assume `CYBER_ROBOTICS_ROOT` points at the Cybernetic IDE repo,
+or that the current working directory is inside the repo.
+
+## Unitree SDK2-Shaped Code
+
+Installing `cybernetic-robotics` also exposes a simulator-backed subset of
+`unitree_sdk2py`:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+arm = G1ArmActionClient()
+arm.SetTimeout(10.0)
+arm.Init()
+arm.ExecuteAction(action_map["right hand up"])
+```
+
+The compatibility package currently implements only high-level arm actions
+needed by the local simulator:
+
+| Action name | Action ID | Simulator pose |
+| --- | ---: | --- |
+| `right hand up` | `23` | `raise_right_hand` |
+| `release arm` | `99` | `neutral` |
+
+Unsupported actions return a non-zero result and list the action map. That
+makes missing simulator coverage obvious while keeping the official SDK2 method
+shape.
+
+## Power User API
+
+Use `SimulatorClient` when you want the raw HTTP endpoint:
+
+```python
+from cybernetic_robotics import SimulatorClient
+
+sim = SimulatorClient.from_env()
+print(sim.status().simulation["mujoco"])
+sim.command("pose", pose="raise_right_hand")
+sim.orbit(dx=20, dy=-5)
+sim.snapshot(".runtime/g1-control-demo/frame.jpg")
+```
+
+Use `TinyWebSocket` when you want the Booster-style physics socket:
+
+```python
+from cybernetic_robotics import TinyWebSocket
+
+with TinyWebSocket.from_env() as ws:
+    print(ws.request_json({"type": "command", "command": "pause"}))
+    message_type, frame = ws.subscribe_once("simulation_state")
+    print(message_type, len(frame))
+```
+
+Use `SceneWorkspace` for safe MJCF edits:
+
+```python
+from cybernetic_robotics.scene import SceneWorkspace
+
+scene = SceneWorkspace.discover()
+host_path, container_path = scene.add_box(
+    "blue_test_box",
+    position=(0.8, 0.0, 0.15),
+    size=(0.12, 0.12, 0.12),
+    rgba=(0.1, 0.45, 1.0, 1.0),
+    activate=True,
+)
+print(host_path)
+print(container_path)
+```
+
+Scene helpers write a copy under `.runtime/.../cybernetic_scenes/`. They do
+not overwrite the pinned upstream Unitree MJCF asset.
+
+## Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `CYBER_G1_GAME_CONTROL_URL` | GameControl HTTP URL. Default: `http://127.0.0.1:38383`. |
+| `CYBER_G1_PHYSICS_URL` | Physics WebSocket URL. Default: `ws://127.0.0.1:8788`. |
+| `CYBER_G1_WS_HOST` | Fallback WebSocket host when `CYBER_G1_PHYSICS_URL` is not set. |
+| `CYBER_G1_WS_PORT` | Fallback WebSocket port when `CYBER_G1_PHYSICS_URL` is not set. |
+| `CYBER_ROBOTICS_ROOT` | Cybernetic IDE checkout for Docker and scene helpers. |
+
+## Design Notes
+
+The package is deliberately split into layers:
+
+- Beginner scripts should import `G1Robot` and avoid transport details.
+- SDK-shaped demos should import `unitree_sdk2py` so future official SDK2/DDS
+  work can keep the same user code.
+- Advanced tools should use `SimulatorClient`, `TinyWebSocket`, and
+  `SceneWorkspace` directly.
+
+The current backend still maps high-level actions onto a direct MuJoCo pose
+command. Physical robot control must remain behind explicit real-robot mode
+and safety gates.

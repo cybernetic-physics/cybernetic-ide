@@ -44,6 +44,7 @@
 # Cybernetic Robotics
 
 - [Unitree G1 SDK Integration](./unitree-g1-sdk-integration.md)
+- [Cybernetic Robotics Python](./cybernetic-robotics-python.md)
 
 # AI
 
