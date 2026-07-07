@@ -169,9 +169,12 @@ the running bridge with official SDK clients and `official.stop_rpc_bridge()`
 removes it. The managed bridge keeps `sport`/`agv` state and now forwards safe
 setter RPCs to the local simulator provider when
 `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. The currently forwarded calls
-are `sport.SetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
-and `agv.HeightAdjust`; unreachable simulator calls are reported as
-`bridge_state_only` in the RPC JSON response instead of being hidden.
+are `sport.SetFsmId`, `sport.SetBalanceMode`, `sport.SetSwingHeight`,
+`sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`, `agv.Move`, and
+`agv.HeightAdjust`. That covers common `LocoClient` shortcuts such as `Damp`,
+`StopMove`, `WaveHand`, and `ShakeHand`; unreachable simulator calls are
+reported as `bridge_state_only` in the RPC JSON response instead of being
+hidden.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion

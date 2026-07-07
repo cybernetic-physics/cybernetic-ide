@@ -718,6 +718,16 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(result["provider"], "bridge_state_only")
         self.assertIn("SDK RPC returned RPC_OK", result["note"])
 
+    def test_sidecar_rpc_bridge_maps_common_sport_shortcuts(self):
+        sidecar = load_sidecar_entrypoint_module()
+
+        self.assertEqual(sidecar._sport_fsm_mode(1), "damp")
+        self.assertEqual(sidecar._sport_fsm_mode(500), "start")
+        self.assertEqual(sidecar._sport_fsm_mode(12345), "fsm_12345")
+        self.assertEqual(sidecar._sport_arm_task_action(0), "wave_hand")
+        self.assertEqual(sidecar._sport_arm_task_action(2), "shake_hand")
+        self.assertEqual(sidecar._sport_arm_task_action(99), "set_arm_task")
+
     def test_motion_switcher_client_uses_simulator_state(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")

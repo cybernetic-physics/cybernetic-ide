@@ -379,7 +379,9 @@ ad hoc scripts first. The default tool surface includes:
   `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
   `unitree_stop_rpc_bridge`, which keep the first `sport`/`agv` RPC service
   alive as a named container for external SDK clients and forward supported
-  setter calls to the simulator HTTP provider when it is reachable;
+  setter/shortcut calls like `SetVelocity`, `Damp`, `StopMove`, `WaveHand`,
+  `ShakeHand`, and AGV move/height commands to the simulator HTTP provider when
+  it is reachable;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
