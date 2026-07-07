@@ -22,6 +22,8 @@ surfaces a developer is likely to reach for first:
 - `unitree_sdk2py.g1.loco.g1_loco_client.LocoClient`
 - `unitree_sdk2py.g1.agv.g1_agv_client.AgvClient`
 - `unitree_sdk2py.core.channel.ChannelPublisher("rt/lowcmd", LowCmd_)`
+- `unitree_sdk2py.core.channel.ChannelPublisher("rt/user_lowcmd", LowCmd_)`
+  for the G1 C++ user-control example topic.
 - `unitree_sdk2py.core.channel.ChannelSubscriber("rt/lowstate", LowState_)`
 
 The arm action shim supports `ExecuteAction(action_map["right hand up"])` and

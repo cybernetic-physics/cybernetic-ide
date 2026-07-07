@@ -1187,6 +1187,34 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
+    def test_unitree_style_user_lowcmd_topic_uses_same_lowcmd_provider(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                lowcmd = unitree_hg_msg_dds__LowCmd_()
+                lowcmd.mode_pr = 1
+                lowcmd.mode_machine = 1
+                lowcmd.motor_cmd[15].mode = 1
+                lowcmd.motor_cmd[15].q = 0.2
+                lowcmd.motor_cmd[15].kp = 30.0
+                lowcmd.motor_cmd[15].kd = 1.0
+
+                publisher = ChannelPublisher("rt/user_lowcmd", LowCmd_)
+                publisher.Init()
+                self.assertTrue(publisher.Write(lowcmd))
+
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertEqual(publisher.last_response["topic"], "rt/user_lowcmd")
+                self.assertEqual(FakeG1Handler.last_lowcmd["topic"], "rt/user_lowcmd")
+                self.assertEqual(FakeG1Handler.last_lowcmd["mode_pr"], 1)
+                self.assertEqual(FakeG1Handler.last_lowcmd["mode_machine"], 1)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
     def test_unitree_style_hand_sdk_channel_records_open_close_intent(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
@@ -1396,16 +1424,29 @@ class RobotApiTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (high / "g1_userctrl_example.py").write_text(
+                "\n".join(
+                    [
+                        "from unitree_sdk2py.core.channel import ChannelPublisher",
+                        "from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_",
+                        "user_pub = ChannelPublisher('rt/user_lowcmd', LowCmd_)",
+                        "user_pub.Init()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
 
             report = audit_official_g1_examples(root)
 
-        self.assertEqual(report["example_count"], 3)
-        self.assertEqual(report["fully_supported_examples"], 2)
+        self.assertEqual(report["example_count"], 4)
+        self.assertEqual(report["fully_supported_examples"], 3)
         self.assertEqual(report["partially_supported_examples"], 1)
         missing_methods = report["summary"]["missing_methods"]
         self.assertEqual(missing_methods[0]["method"], "TeleportToMoon")
         arm_example = next(item for item in report["examples"] if item["path"].endswith("g1_arm_sdk_example.py"))
         self.assertIn({"topic": "rt/arm_sdk", "direction": "publish", "supported": True, "status": "supported"}, arm_example["topics"])
+        user_example = next(item for item in report["examples"] if item["path"].endswith("g1_userctrl_example.py"))
+        self.assertIn({"topic": "rt/user_lowcmd", "direction": "publish", "supported": True, "status": "supported"}, user_example["topics"])
         self.assertFalse(report["summary"]["missing_topics"])
 
     def test_official_g1_sdk_behavior_smoke_runs_safe_facade_calls(self):

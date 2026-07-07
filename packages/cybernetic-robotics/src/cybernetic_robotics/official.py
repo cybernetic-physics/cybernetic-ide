@@ -132,7 +132,7 @@ class OfficialG1Sim:
     ) -> dict[str, Any]:
         """Publish one bounded generic Unitree HG LowCmd frame to the managed session."""
 
-        if topic not in {"rt/lowcmd", "rt/arm_sdk"}:
+        if topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
             raise ValueError(f"unsupported official Unitree lowcmd topic: {topic}")
 
         payload = {

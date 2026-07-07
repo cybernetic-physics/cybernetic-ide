@@ -56,6 +56,7 @@ making the user think about the transport layer.
 | `examples/g1_walk_square_loco.py` | Unitree `LocoClient` locomotion pattern demo that walks a small square. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_arm_sdk_dds.py` | Official-style G1 `rt/arm_sdk` demo that enables arm SDK slot 29 and publishes bounded arm LowCmd frames. |
+| `examples/g1_user_lowcmd_sdk.py` | Official-style G1 `rt/user_lowcmd` demo inspired by Unitree's C++ user-control example. |
 | `examples/g1_hand_sdk.py` | Official-style G1 `rt/hand_sdk` demo that records open/close hand intent using Unitree's MotorCmds shape. |
 | `examples/g1_dex3_sdk.py` | Official-style G1 Dex3 hand demo using `HandCmd_` and `HandState_` topics with synthesized simulator telemetry. |
 | `examples/g1_lowstate_monitor.py` | Compact lowstate and named-joint telemetry monitor with optional JSONL output. |
@@ -383,7 +384,8 @@ ad hoc scripts first. The default tool surface includes:
   `unitree_command_official_mujoco_lowcmd`, which reads a safety
   `rt/lowstate` sample from the managed session, fills unspecified motors with
   hold values, clamps the supplied motor command prefix, recomputes CRC in the
-  sidecar, and publishes a bounded `rt/lowcmd` or `rt/arm_sdk` frame;
+  sidecar, and publishes a bounded `rt/lowcmd`, `rt/arm_sdk`, or
+  `rt/user_lowcmd` frame;
 - official SDK2 RPC discovery: `unitree_probe_official_mujoco_rpc_discovery`,
   which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
   matched service-side DDS readers before an agent tries a request/response
@@ -555,7 +557,7 @@ milestones:
 
 1. Promote the SDK2 sidecar scaffold into the default sim runtime by launching
    official `unitree_mujoco` plus CycloneDDS SDK2 topics (`rt/arm_sdk`,
-   `rt/lowcmd`, `rt/lowstate`).
+   `rt/lowcmd`, `rt/user_lowcmd`, `rt/lowstate`).
 2. Add real/sim session selection with explicit safety gates.
 3. Stream low-state telemetry into Robot Viewer panels.
 4. Add safe high-level locomotion controls before low-level joint control.

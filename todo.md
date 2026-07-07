@@ -420,8 +420,11 @@ Tasks:
   bounded frame. Done for the official arm SDK topic:
   `ChannelPublisher("rt/arm_sdk")` now uses the same managed official session
   path, matching Unitree's G1 arm examples that enable the arm SDK through
-  motor slot 29. Remaining: sustained generic lowcmd streaming with explicit
-  watchdogs and lease/safety gates.
+  motor slot 29. Done for the official user-control topic:
+  `ChannelPublisher("rt/user_lowcmd")` now uses the same provider boundary and
+  matches Unitree's C++ `g1_userctrl_dds_example.cpp` topic choice. Remaining:
+  sustained generic lowcmd streaming with explicit watchdogs and lease/safety
+  gates.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

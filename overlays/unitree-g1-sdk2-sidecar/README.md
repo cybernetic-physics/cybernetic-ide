@@ -250,8 +250,10 @@ Generic lowcmd writes to an already-running managed official MuJoCo session use
 `unitree_command_official_mujoco_lowcmd`. The command reads one official
 `rt/lowstate` sample first, fills unspecified motor slots with hold-position
 values from that sample, clamps supplied `motor_cmd` fields, recomputes CRC in
-the sidecar, and publishes at most 60 identical `rt/lowcmd` frames. This is the
-first generic lowcmd provider path; it is not yet sustained streaming.
+the sidecar, and publishes at most 60 identical `rt/lowcmd`, `rt/arm_sdk`, or
+`rt/user_lowcmd` frames. `rt/user_lowcmd` matches Unitree's G1 user-control C++
+example topic. This is the first generic lowcmd provider path; it is not yet
+sustained streaming.
 
 Command the managed official session with a bounded arm pose:
 

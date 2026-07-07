@@ -569,9 +569,9 @@ const tools = [
     {
       topic: {
         type: "string",
-        enum: ["rt/lowcmd", "rt/arm_sdk"],
+        enum: ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"],
         default: "rt/lowcmd",
-        description: "Official Unitree HG LowCmd topic to publish. Use rt/arm_sdk for official G1 arm SDK examples.",
+        description: "Official Unitree HG LowCmd topic to publish. Use rt/arm_sdk for arm SDK examples or rt/user_lowcmd for Unitree's user-control example.",
       },
       motor_cmd: {
         type: "array",
@@ -4481,7 +4481,7 @@ function sdk2CommandOfficialMujocoLowcmd(options = {}) {
     mode_machine: clampInt(options.mode_machine, 0, 1000, 0),
     crc: clampInt(options.crc, 0, 0xffffffff, 0),
   };
-  const topic = ["rt/lowcmd", "rt/arm_sdk"].includes(options.topic) ? options.topic : "rt/lowcmd";
+  const topic = ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"].includes(options.topic) ? options.topic : "rt/lowcmd";
   const frames = clampInt(options.frames, 1, 60, 1);
   const timeoutSeconds = clampNumber(options.timeout_seconds, 0.5, 30, 6);
   const env = [

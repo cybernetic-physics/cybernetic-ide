@@ -444,9 +444,12 @@ lowcmd_pub.Write(low_cmd)
 position, velocity, estimated torque, IMU quaternion, and mode-machine fields
 from the local simulator. `ChannelPublisher("rt/lowcmd", LowCmd_)` applies
 commanded joint position targets into a held MuJoCo frame and records torque
-estimates for telemetry. The simulator records `mode_pr`, `mode_machine`, CRC,
-accepted command count, applied position target count, clamped joint targets,
-and ignored motor slots in the `lowcmd` field of `/status` and `/lowstate`.
+estimates for telemetry. `ChannelPublisher("rt/user_lowcmd", LowCmd_)` uses the
+same safe provider boundary while preserving the topic used by Unitree's C++
+`g1_userctrl_dds_example.cpp`. The simulator records `mode_pr`, `mode_machine`,
+CRC, accepted command count, applied position target count, clamped joint
+targets, and ignored motor slots in the `lowcmd` field of `/status` and
+`/lowstate`.
 The bridge intentionally preserves Unitree method names and import paths, but
 it is still simulator-only and does not replace Unitree's full CycloneDDS
 transport or a real whole-body balance controller.
@@ -461,16 +464,18 @@ MuJoCo + SDK2/CycloneDDS session. `LocoClient` and `AgvClient` delegate to
 they use local HTTP, while `CYBER_UNITREE_TRANSPORT=rpc_bridge` routes the
 supported high-level sport/agv/arm subset through the managed Unitree RPC
 bridge.
-`ChannelPublisher("rt/lowcmd")`, `ChannelPublisher("rt/arm_sdk")`, and
-`ChannelSubscriber("rt/lowstate")` also cross the same session boundary. With
-`CYBER_UNITREE_TRANSPORT=dds` in simulator mode,
+`ChannelPublisher("rt/lowcmd")`, `ChannelPublisher("rt/user_lowcmd")`,
+`ChannelPublisher("rt/arm_sdk")`, and `ChannelSubscriber("rt/lowstate")` also
+cross the same session boundary. With `CYBER_UNITREE_TRANSPORT=dds` in
+simulator mode,
 `ChannelSubscriber("rt/lowstate")` reads from the managed official session and
-the two LowCmd publishers can publish one bounded, sanitized frame through
+the LowCmd publishers can publish one bounded, sanitized frame through
 `OfficialG1Sim.lowcmd_session()`. The `rt/arm_sdk` path mirrors Unitree's G1
-arm SDK examples, including slot 29 as the arm-sdk enable slot. Sustained
-generic lowcmd streaming is still future work; DDS-mode locomotion remains
-clearly marked as a local simulator compatibility fallback instead of being
-presented as official CycloneDDS control.
+arm SDK examples, including slot 29 as the arm-sdk enable slot; the
+`rt/user_lowcmd` path mirrors Unitree's user-control topic. Sustained generic
+lowcmd streaming is still future work; DDS-mode locomotion remains clearly
+marked as a local simulator compatibility fallback instead of being presented
+as official CycloneDDS control.
 
 Run the full example:
 

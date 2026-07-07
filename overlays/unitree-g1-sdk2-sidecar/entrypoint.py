@@ -859,10 +859,10 @@ def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
             },
         },
     }
-    if write_topic not in {"rt/lowcmd", "rt/arm_sdk"}:
+    if write_topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
         report["ok"] = False
         report["error"] = f"unsupported Unitree HG LowCmd topic: {write_topic}"
-        report["supported_topics"] = ["rt/lowcmd", "rt/arm_sdk"]
+        report["supported_topics"] = ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"]
         return report
     try:
         payload = json.loads(raw_payload)

@@ -496,7 +496,7 @@ class UnitreeSession:
     ) -> dict[str, Any]:
         """Publish low-level motor commands through the active provider boundary."""
 
-        if topic not in {"rt/lowcmd", "rt/arm_sdk"}:
+        if topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
             raise NotImplementedError(f"Cybernetic Unitree session publisher does not support {topic}")
         if self.config.mode == REAL:
             return {
@@ -545,6 +545,7 @@ class UnitreeSession:
             **response,
             "transport": LOCAL_HTTP,
             "provider": "local_http_simulator",
+            "topic": topic,
             "compatibility_fallback": False,
         }
 

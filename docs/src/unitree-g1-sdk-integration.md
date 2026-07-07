@@ -442,6 +442,9 @@ For G1, the friendly first surface is high-level SDK control:
   level telemetry.
 - `rt/lowcmd`: expert-only motor commands with `mode_machine`, `mode_pr`,
   joint commands, gains, torque feedforward, and CRC.
+- `rt/user_lowcmd`: user-control LowCmd topic used by Unitree's C++
+  `g1_userctrl_dds_example.cpp`; Cybernetic routes it through the same bounded
+  lowcmd provider while preserving the topic for evidence.
 - `rt/arm_sdk`, `rt/hand_sdk`, and Dex topics: arm and hand control surfaces
   for later milestones.
 
@@ -543,13 +546,14 @@ The current repo has the first narrow version of that API boundary:
   there, so local simulator mode still uses GameControl HTTP while simulator DDS
   mode routes supported hand-raise poses through the managed official Unitree
   MuJoCo + SDK2/CycloneDDS session.
-- `LocoClient`, `ChannelPublisher("rt/lowcmd")`, and
-  `ChannelSubscriber("rt/lowstate")` now cross the same `UnitreeSession`
-  boundary. DDS-mode locomotion is still a local simulator compatibility
-  fallback and is labeled that way in responses. Official `rt/lowstate` reads
-  and one-frame sanitized generic `rt/lowcmd` writes can flow through the
-  managed official session when the peer is running; sustained lowcmd streaming
-  still needs a watchdog-aware provider.
+- `LocoClient`, `ChannelPublisher("rt/lowcmd")`,
+  `ChannelPublisher("rt/user_lowcmd")`, and `ChannelSubscriber("rt/lowstate")`
+  now cross the same `UnitreeSession` boundary. DDS-mode locomotion is still a
+  local simulator compatibility fallback and is labeled that way in responses.
+  Official `rt/lowstate` reads and one-frame sanitized generic `rt/lowcmd` /
+  `rt/user_lowcmd` writes can flow through the managed official session when
+  the peer is running; sustained lowcmd streaming still needs a watchdog-aware
+  provider.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,
@@ -601,6 +605,10 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_arm_sdk_dds.py` mirrors Unitree's G1 arm SDK examples by
   publishing `unitree_hg` `LowCmd_` frames to `rt/arm_sdk` and setting motor
   command slot 29 to enable the arm SDK path.
+- `examples/g1_user_lowcmd_sdk.py` mirrors Unitree's C++
+  `g1_userctrl_dds_example.cpp` topic choice by publishing `unitree_hg`
+  `LowCmd_` frames to `rt/user_lowcmd` after switching `LocoClient` into
+  user-control mode.
 - `examples/g1_hand_sdk.py` mirrors Unitree's C++ `g1_hand_sdk_example.cpp` by
   publishing `unitree_go` `MotorCmds_` frames to `rt/hand_sdk`. This is
   simulator intent telemetry today: the runtime records weight, tau, and

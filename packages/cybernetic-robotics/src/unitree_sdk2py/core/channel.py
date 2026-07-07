@@ -64,7 +64,7 @@ class ChannelPublisher:
             )
             self.last_response = response
             return bool(response.get("ok"))
-        if self.name not in {"rt/lowcmd", "rt/arm_sdk"}:
+        if self.name not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
         response = _session_from_env(timeout or 5.0).publish_lowcmd(

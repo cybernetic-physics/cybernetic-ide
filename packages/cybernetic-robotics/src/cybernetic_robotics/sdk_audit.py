@@ -263,6 +263,7 @@ def _supported_topics() -> set[str]:
         "rt/lowcmd",
         "rt/lowstate",
         "rt/sportmodestate",
+        "rt/user_lowcmd",
         "rt/wirelesscontroller",
     }
 
