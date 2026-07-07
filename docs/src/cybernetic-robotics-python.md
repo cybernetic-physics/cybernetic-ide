@@ -487,12 +487,20 @@ Run the official-style hand SDK intent example:
 
 ```sh
 python3 examples/g1_hand_sdk.py
+python3 examples/g1_dex3_sdk.py --hand right --q 0.25
 ```
 
 `ChannelPublisher("rt/hand_sdk")` accepts Unitree's simple
 `unitree_go.msg.dds_.MotorCmds_` shape from the official C++ hand SDK example.
 The simulator records blend weight, mean tau, and open/close intent in
 `/status.simulation.hand_sdk`; it does not yet simulate full finger physics.
+
+`ChannelPublisher("rt/dex3/right/cmd")` accepts
+`unitree_hg.msg.dds_.HandCmd_`, and
+`ChannelSubscriber("rt/lf/dex3/right/state")` returns synthesized
+`HandState_` telemetry. This matches the topic/message shape of Unitree's C++
+`g1_dex3_example.cpp`; the current runtime records intent/state only and does
+not yet drive the G1 finger bodies with a Dex3 MuJoCo controller.
 
 ## Named Joint Targets
 
@@ -604,6 +612,7 @@ g1_lowstate
 g1_joint_state
 g1_apply_joint_targets
 g1_lowcmd
+g1_dex3_command
 ```
 
 `viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the

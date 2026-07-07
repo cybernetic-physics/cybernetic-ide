@@ -55,6 +55,15 @@ class ChannelPublisher:
             )
             self.last_response = response
             return bool(response.get("ok"))
+        if self.name in {"rt/dex3/left/cmd", "rt/dex3/right/cmd"}:
+            motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
+            response = _session_from_env(timeout or 5.0).publish_dex3(
+                self.name,
+                motor_cmd,
+                timeout=timeout or 5.0,
+            )
+            self.last_response = response
+            return bool(response.get("ok"))
         if self.name not in {"rt/lowcmd", "rt/arm_sdk"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
@@ -85,7 +94,15 @@ class ChannelSubscriber:
         self.inited = True
         self._closed = False
         self._thread: threading.Thread | None = None
-        if handler is not None and self.name in {"rt/lowstate", "rt/sportmodestate", "rt/wirelesscontroller"}:
+        if handler is not None and self.name in {
+            "rt/lowstate",
+            "rt/sportmodestate",
+            "rt/wirelesscontroller",
+            "rt/dex3/left/state",
+            "rt/dex3/right/state",
+            "rt/lf/dex3/left/state",
+            "rt/lf/dex3/right/state",
+        }:
             self._thread = threading.Thread(target=self._poll, name=f"cyber-{self.name.replace('/', '-')}", daemon=True)
             self._thread.start()
 
@@ -111,6 +128,15 @@ class ChannelSubscriber:
             return _sportmode_from_status(client.status().raw)
         if self.name == "rt/wirelesscontroller":
             return _wireless_from_lowstate(client.lowstate())
+        if self.name in {
+            "rt/dex3/left/state",
+            "rt/dex3/right/state",
+            "rt/lf/dex3/left/state",
+            "rt/lf/dex3/right/state",
+        }:
+            response = _session_from_env(float(timeout or 5.0)).read_dex3_state(self.name)
+            self.last_response = response
+            return _handstate_from_json(response.get("dex3") or {}, metadata=response)
         raise NotImplementedError(f"Cybernetic simulator channel subscriber does not support {self.name}")
 
     def _poll(self):
@@ -193,6 +219,35 @@ def _attach_metadata(state, metadata: dict | None) -> None:
     state.transport = metadata.get("transport")
     state.provider = metadata.get("provider")
     state.compatibility_fallback = bool(metadata.get("compatibility_fallback", False))
+
+
+def _handstate_from_json(value: dict, *, metadata: dict | None = None):
+    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandState_
+
+    state = unitree_hg_msg_dds__HandState_()
+    _attach_metadata(state, metadata)
+    for index, motor in enumerate(value.get("motor_state", [])):
+        if index >= len(state.motor_state):
+            break
+        target = state.motor_state[index]
+        target.mode = int(motor.get("mode", 0))
+        target.q = float(motor.get("q", 0.0))
+        target.dq = float(motor.get("dq", 0.0))
+        target.tau_est = float(motor.get("tau_est", 0.0))
+    for index, sensor in enumerate(value.get("press_sensor_state", [])):
+        if index >= len(state.press_sensor_state):
+            break
+        target = state.press_sensor_state[index]
+        pressure = sensor.get("pressure", target.pressure)
+        target.pressure[:] = [float(item) for item in list(pressure)[:3]]
+        target.temperature = float(sensor.get("temperature", 0.0))
+    state.power_v = float(value.get("power_v", 0.0))
+    state.power_a = float(value.get("power_a", 0.0))
+    state.system_v = float(value.get("system_v", 0.0))
+    state.device_v = float(value.get("device_v", 0.0))
+    state.hand = value.get("hand")
+    state.intent = value.get("intent")
+    return state
 
 
 def _sportmode_from_status(value: dict):

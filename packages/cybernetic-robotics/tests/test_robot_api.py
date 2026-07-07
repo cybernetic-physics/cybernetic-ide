@@ -30,9 +30,14 @@ from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action
 from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-from unitree_sdk2py.idl.default import unitree_go_msg_dds__MotorCmds_, unitree_go_msg_dds__SportModeState_, unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.default import (
+    unitree_go_msg_dds__MotorCmds_,
+    unitree_go_msg_dds__SportModeState_,
+    unitree_hg_msg_dds__HandCmd_,
+    unitree_hg_msg_dds__LowCmd_,
+)
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
-from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_, LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 
 
@@ -106,6 +111,25 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "intent": "idle",
         "cmds": [],
     }
+    dex3 = {
+        "hands": {
+            hand: {
+                "hand": hand,
+                "topic": f"rt/dex3/{hand}/cmd",
+                "state_topic": f"rt/lf/dex3/{hand}/state",
+                "motor_count": 0,
+                "intent": "idle",
+                "motor_state": [{"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0} for _ in range(7)],
+                "press_sensor_state": [{"pressure": [0.0, 0.0, 0.0], "temperature": 0.0} for _ in range(9)],
+                "power_v": 0.0,
+                "power_a": 0.0,
+                "system_v": 0.0,
+                "device_v": 0.0,
+                "commands": [],
+            }
+            for hand in ("left", "right")
+        }
+    }
     camera = {
         "cameraId": 0,
         "type": "free",
@@ -141,6 +165,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "loco": type(self).loco,
                         "render": {"camera": type(self).camera},
                         "hand_sdk": type(self).hand_sdk,
+                        "dex3": type(self).dex3,
                         "lowcmd": {
                             "motor_cmd_count": type(self).lowcmd_count,
                             **type(self).lowcmd_meta,
@@ -349,6 +374,40 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     "cmds": cmds,
                 }
                 return self._json({"ok": True, "command": command, "hand_sdk": type(self).hand_sdk})
+            elif command == "dex3":
+                hand = payload.get("hand", "left")
+                motor_cmd = payload.get("motor_cmd", [])
+                if hand not in {"left", "right"}:
+                    return self._json({"ok": False, "error": "dex3 requires hand"})
+                if not isinstance(motor_cmd, list):
+                    return self._json({"ok": False, "error": "motor_cmd must be a list"})
+                motor_state = [
+                    {
+                        "mode": int(item.get("mode", 0)),
+                        "q": float(item.get("q", 0.0)),
+                        "dq": float(item.get("dq", 0.0)),
+                        "tau_est": float(item.get("tau", 0.0)),
+                    }
+                    for item in motor_cmd
+                ]
+                while len(motor_state) < 7:
+                    motor_state.append({"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0})
+                intent = "grip" if any(abs(item["q"]) > 0.2 for item in motor_state) else "hold"
+                type(self).dex3["hands"][hand] = {
+                    "hand": hand,
+                    "topic": payload.get("topic", f"rt/dex3/{hand}/cmd"),
+                    "state_topic": f"rt/lf/dex3/{hand}/state",
+                    "motor_count": len(motor_cmd),
+                    "intent": intent,
+                    "motor_state": motor_state,
+                    "press_sensor_state": [{"pressure": [0.5, 0.5, 0.5], "temperature": 0.0} for _ in range(9)],
+                    "power_v": 12.0,
+                    "power_a": 0.1,
+                    "system_v": 1.0,
+                    "device_v": 1.0,
+                    "commands": motor_cmd,
+                }
+                return self._json({"ok": True, "command": command, "dex3": type(self).dex3["hands"][hand]})
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -417,6 +476,25 @@ class FakeServer:
             "tau": 0.0,
             "intent": "idle",
             "cmds": [],
+        }
+        FakeG1Handler.dex3 = {
+            "hands": {
+                hand: {
+                    "hand": hand,
+                    "topic": f"rt/dex3/{hand}/cmd",
+                    "state_topic": f"rt/lf/dex3/{hand}/state",
+                    "motor_count": 0,
+                    "intent": "idle",
+                    "motor_state": [{"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0} for _ in range(7)],
+                    "press_sensor_state": [{"pressure": [0.0, 0.0, 0.0], "temperature": 0.0} for _ in range(9)],
+                    "power_v": 0.0,
+                    "power_a": 0.0,
+                    "system_v": 0.0,
+                    "device_v": 0.0,
+                    "commands": [],
+                }
+                for hand in ("left", "right")
+            }
         }
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -1129,6 +1207,42 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(FakeG1Handler.hand_sdk["intent"], "close")
                 self.assertAlmostEqual(FakeG1Handler.hand_sdk["weight"], 1.0)
                 self.assertAlmostEqual(FakeG1Handler.hand_sdk["tau"], 0.3)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_dex3_channel_records_and_reads_hand_state(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                hand_cmd = unitree_hg_msg_dds__HandCmd_()
+                for index, cmd in enumerate(hand_cmd.motor_cmd):
+                    cmd.mode = 0x10 | index
+                    cmd.q = 0.25
+                    cmd.kp = 1.5
+                    cmd.kd = 0.1
+
+                publisher = ChannelPublisher("rt/dex3/right/cmd", HandCmd_)
+                publisher.Init()
+                self.assertTrue(publisher.Write(hand_cmd))
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertEqual(publisher.last_response["dex3"]["hand"], "right")
+                self.assertEqual(FakeG1Handler.dex3["hands"]["right"]["motor_count"], 7)
+                self.assertEqual(FakeG1Handler.dex3["hands"]["right"]["intent"], "grip")
+
+                subscriber = ChannelSubscriber("rt/lf/dex3/right/state", HandState_)
+                subscriber.Init()
+                hand_state = subscriber.Read()
+
+                self.assertEqual(hand_state.provider, "local_http_simulator")
+                self.assertEqual(hand_state.hand, "right")
+                self.assertEqual(hand_state.intent, "grip")
+                self.assertAlmostEqual(hand_state.motor_state[0].q, 0.25)
+                self.assertAlmostEqual(hand_state.press_sensor_state[0].pressure[0], 0.5)
+                self.assertAlmostEqual(hand_state.power_v, 12.0)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

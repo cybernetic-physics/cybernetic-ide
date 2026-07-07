@@ -1141,6 +1141,32 @@ const tools = [
     [],
     { readOnlyHint: false },
   ),
+  tool(
+    "g1_dex3_command",
+    "Publish a simulator-backed Unitree Dex3 HandCmd_ intent to rt/dex3/{left,right}/cmd.",
+    {
+      hand: {
+        type: "string",
+        enum: ["left", "right"],
+        default: "right",
+      },
+      q: {
+        type: "number",
+        default: 0.25,
+        description: "Target position for each of the seven Dex3 motors; clamped by simulator-side left/right URDF limits.",
+      },
+      kp: {
+        type: "number",
+        default: 1.5,
+      },
+      kd: {
+        type: "number",
+        default: 0.1,
+      },
+    },
+    [],
+    { readOnlyHint: false },
+  ),
   tool("safety_stop", "Release motion mode, damp locomotion, neutralize the G1 pose, and pause the simulator.", {}, [], {
     readOnlyHint: false,
     destructiveHint: true,
@@ -1478,6 +1504,8 @@ async function callTool(name, args) {
       return textResult(await executeG1Lowcmd(args));
     case "g1_hand_sdk":
       return textResult(await executeG1HandSdk(args));
+    case "g1_dex3_command":
+      return textResult(await executeG1Dex3Command(args));
     case "safety_stop":
       return textResult(await safetyStop());
     case "docker_logs":
@@ -2643,6 +2671,26 @@ async function executeG1HandSdk(args) {
   });
 }
 
+async function executeG1Dex3Command(args) {
+  const hand = args.hand === "left" ? "left" : "right";
+  const q = clampNumber(args.q, -1.75, 1.75, 0.25);
+  const kp = clampNumber(args.kp, 0, 20, 1.5);
+  const kd = clampNumber(args.kd, 0, 5, 0.1);
+  return command({
+    command: "dex3",
+    hand,
+    topic: `rt/dex3/${hand}/cmd`,
+    motor_cmd: Array.from({ length: 7 }, (_, index) => ({
+      mode: 0x10 | index,
+      q,
+      dq: 0,
+      tau: 0,
+      kp,
+      kd,
+    })),
+  });
+}
+
 async function executeG1JointTargets(args) {
   if (!args.targets || typeof args.targets !== "object" || Array.isArray(args.targets)) {
     throw new Error("g1_apply_joint_targets requires targets as an object");
@@ -2865,6 +2913,7 @@ function roboticsToolReference() {
       toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
       toolReference("g1_hand_sdk", "robot-motion-intent", "Publishes rt/hand_sdk open/close intent.", "Simulator running; records hand intent rather than full finger physics."),
+      toolReference("g1_dex3_command", "robot-motion-intent", "Publishes Dex3 HandCmd_ intent and records synthesized hand state.", "Simulator running; records hand telemetry rather than full finger physics."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),
       toolReference("g1_joint_state", "read", "Reads named joint mapping and limits.", "Simulator running."),
       toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),

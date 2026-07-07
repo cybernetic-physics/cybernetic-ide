@@ -605,6 +605,12 @@ The current repo has the first narrow version of that API boundary:
   publishing `unitree_go` `MotorCmds_` frames to `rt/hand_sdk`. This is
   simulator intent telemetry today: the runtime records weight, tau, and
   open/close intent, while full MuJoCo finger actuation remains future work.
+- `examples/g1_dex3_sdk.py` mirrors the topic/message shape of Unitree's C++
+  `g1_dex3_example.cpp`: publish `unitree_hg` `HandCmd_` to
+  `rt/dex3/{left,right}/cmd` and read synthesized `HandState_` from
+  `rt/lf/dex3/{left,right}/state`. This gives user code and agents the
+  official Dex3 surface while documenting that real finger physics remains
+  future work.
 - The channel shim also supports read-only `rt/sportmodestate` and
   `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
   synthesized from local simulator status and lowstate.

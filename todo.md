@@ -265,6 +265,12 @@ Tasks:
   accepts `unitree_go.msg.dds_.MotorCmds_`, records open/close hand intent in
   simulator status, and exposes MCP `g1_hand_sdk`. Full finger physics and Dex3
   `rt/dex3/*` topics remain future work.
+- Done: add the first simulator-backed Dex3 topic subset inspired by Unitree's
+  C++ `g1_dex3_example.cpp`. `ChannelPublisher("rt/dex3/{left,right}/cmd")`
+  accepts `unitree_hg.msg.dds_.HandCmd_`,
+  `ChannelSubscriber("rt/lf/dex3/{left,right}/state")` returns synthesized
+  `HandState_`, and MCP `g1_dex3_command` exposes the same command intent to
+  agents. Full MuJoCo finger actuation remains future work.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,
@@ -493,6 +499,8 @@ Tasks:
 - Done: add `g1_motion_switcher` and a simulator-backed
   `MotionSwitcherClient` state path for official-style `CheckMode`,
   `SelectMode`, `ReleaseMode`, `SetSilent`, and `GetSilent` workflows.
+- Done: expose `g1_dex3_command` so agents can publish a bounded Dex3
+  `HandCmd_` intent and inspect synthesized hand state after grasp scripts.
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.

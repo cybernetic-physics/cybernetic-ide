@@ -346,6 +346,36 @@ The local simulator records blend weight, mean torque, motor count, and
 open/close intent under `/status.simulation.hand_sdk`. It does not yet drive
 full finger joint physics. See `examples/g1_hand_sdk.py` for a close/open demo.
 
+Dex3 hand examples can use the HG `HandCmd_` / `HandState_` topics from
+Unitree's C++ `g1_dex3_example.cpp`:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+command = unitree_hg_msg_dds__HandCmd_()
+for index, motor in enumerate(command.motor_cmd):
+    motor.mode = 0x10 | index
+    motor.q = 0.25
+    motor.kp = 1.5
+    motor.kd = 0.1
+
+publisher = ChannelPublisher("rt/dex3/right/cmd", HandCmd_)
+publisher.Init()
+publisher.Write(command)
+
+subscriber = ChannelSubscriber("rt/lf/dex3/right/state", HandState_)
+subscriber.Init()
+print(subscriber.Read().motor_state[0].q)
+```
+
+The simulator records Dex3 intent and synthesizes `HandState_` telemetry under
+`/status.simulation.dex3`. Full MuJoCo finger actuation is still future work.
+See `examples/g1_dex3_sdk.py`.
+
 The simulator shim also exposes read-only approximations of Unitree MuJoCo's
 Go-family telemetry topics:
 

@@ -58,6 +58,12 @@ Simulator commands:
   and record the hand blend weight, mean torque, motor count, and open/close
   intent in `/status.simulation.hand_sdk`. This is intent telemetry for SDK
   parity; full finger joint physics is still a later model/control step.
+- `dex3` commands accept official-style `unitree_hg.HandCmd_` motor command
+  arrays for `rt/dex3/{left,right}/cmd`, clamp seven target positions using
+  the limits from Unitree's G1 Dex3 example, and expose synthesized
+  `/status.simulation.dex3.hands.{left,right}` telemetry compatible with
+  `rt/lf/dex3/{left,right}/state` readers. This is hand intent/state
+  telemetry, not MuJoCo finger actuation.
 - `yoga_policy` commands start, stop, or inspect the optional LocoMuJoCo-trained
   policy runtime. Set `UNITREE_G1_POLICY_BUNDLE` to a packed `g1-yoga-pack`
   bundle path inside the container; when the file is absent the command returns
@@ -88,6 +94,11 @@ curl -sS \
 curl -sS \
   -H 'content-type: application/json' \
   -d '{"command":"hand_sdk","topic":"rt/hand_sdk","cmds":[{"mode":100,"tau":0.3},{"tau":0.3},{"tau":0.3},{"tau":0.3}]}' \
+  http://127.0.0.1:38383/command
+
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{"command":"dex3","hand":"right","topic":"rt/dex3/right/cmd","motor_cmd":[{"mode":16,"q":0.25,"kp":1.5,"kd":0.1}]}' \
   http://127.0.0.1:38383/command
 ```
 

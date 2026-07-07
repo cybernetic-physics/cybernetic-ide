@@ -398,6 +398,7 @@ class G1MujocoState:
             "intent": "idle",
             "cmds": [],
         }
+        self.dex3_state = self.empty_dex3_state()
         self.lowcmd_state = {
             "topic": None,
             "received_at": None,
@@ -578,6 +579,7 @@ class G1MujocoState:
                 "intent": "idle",
                 "cmds": [],
             }
+            self.dex3_state = self.empty_dex3_state()
             self.data.ctrl[:] = 0.0
             self.paused = True
             self.last_step_wall_time = time.monotonic()
@@ -1156,6 +1158,129 @@ class G1MujocoState:
                 "hand_sdk": dict(self.hand_sdk_state),
             }
 
+    def empty_dex3_state(self):
+        def hand_state(hand):
+            return {
+                "hand": hand,
+                "topic": f"rt/dex3/{hand}/cmd",
+                "state_topic": f"rt/lf/dex3/{hand}/state",
+                "received_at": None,
+                "motor_count": 0,
+                "intent": "idle",
+                "motor_state": [
+                    {"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0}
+                    for _ in range(7)
+                ],
+                "press_sensor_state": [
+                    {"pressure": [0.0, 0.0, 0.0], "temperature": 0.0}
+                    for _ in range(9)
+                ],
+                "power_v": 0.0,
+                "power_a": 0.0,
+                "system_v": 0.0,
+                "device_v": 0.0,
+                "commands": [],
+            }
+
+        return {
+            "source": "unitree_hg.HandCmd_ simulator intent",
+            "hands": {"left": hand_state("left"), "right": hand_state("right")},
+        }
+
+    def handle_dex3_command(self, payload):
+        hand = str(payload.get("hand") or "").lower()
+        if hand not in {"left", "right"}:
+            topic = str(payload.get("topic") or "")
+            if "/left/" in topic or topic.endswith("/left/cmd"):
+                hand = "left"
+            elif "/right/" in topic or topic.endswith("/right/cmd"):
+                hand = "right"
+        if hand not in {"left", "right"}:
+            return {"ok": False, "error": "dex3 requires hand='left' or hand='right'"}
+
+        motor_cmd = payload.get("motor_cmd", [])
+        if not isinstance(motor_cmd, list):
+            return {"ok": False, "error": "motor_cmd must be a list"}
+        if len(motor_cmd) > 7:
+            return {"ok": False, "error": "dex3 supports at most 7 motor commands"}
+
+        limits = {
+            "left": {
+                "min": [-1.05, -0.724, 0.0, -1.57, -1.75, -1.57, -1.75],
+                "max": [1.05, 1.05, 1.75, 0.0, 0.0, 0.0, 0.0],
+            },
+            "right": {
+                "min": [-1.05, -1.05, -1.75, 0.0, 0.0, 0.0, 0.0],
+                "max": [1.05, 0.742, 0.0, 1.57, 1.75, 1.57, 1.75],
+            },
+        }[hand]
+        normalized = []
+        clamped = []
+        for index, command in enumerate(motor_cmd):
+            if not isinstance(command, dict):
+                return {"ok": False, "error": f"motor_cmd[{index}] must be an object"}
+            try:
+                raw_q = float(command.get("q", 0.0))
+                q = clamp(raw_q, limits["min"][index], limits["max"][index])
+                normalized.append(
+                    {
+                        "mode": int(command.get("mode", 0)),
+                        "q": q,
+                        "dq": float(command.get("dq", 0.0)),
+                        "tau": clamp(float(command.get("tau", 0.0)), -1.5, 1.5),
+                        "kp": clamp(float(command.get("kp", 0.0)), 0.0, 20.0),
+                        "kd": clamp(float(command.get("kd", 0.0)), 0.0, 5.0),
+                    }
+                )
+                if q != raw_q:
+                    clamped.append({"index": index, "requested": raw_q, "applied": q})
+            except (TypeError, ValueError) as error:
+                return {"ok": False, "error": f"motor_cmd[{index}] has non-numeric fields: {error}"}
+
+        motor_state = [
+            {
+                "mode": command["mode"],
+                "q": command["q"],
+                "dq": command["dq"],
+                "tau_est": command["tau"],
+            }
+            for command in normalized
+        ]
+        while len(motor_state) < 7:
+            motor_state.append({"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0})
+        average_q = sum(abs(command["q"]) for command in normalized) / len(normalized) if normalized else 0.0
+        average_tau = sum(command["tau"] for command in normalized) / len(normalized) if normalized else 0.0
+        intent = "grip" if average_q > 0.2 or average_tau > 0.03 else "open" if average_tau < -0.03 else "hold"
+        press = clamp(average_q, 0.0, 1.0)
+        hand_state = {
+            "hand": hand,
+            "topic": payload.get("topic", f"rt/dex3/{hand}/cmd"),
+            "state_topic": f"rt/lf/dex3/{hand}/state",
+            "received_at": time.time(),
+            "motor_count": len(normalized),
+            "intent": intent,
+            "motor_state": motor_state,
+            "press_sensor_state": [
+                {"pressure": [press, press, press], "temperature": 0.0}
+                for _ in range(9)
+            ],
+            "power_v": 12.0 if normalized else 0.0,
+            "power_a": abs(average_tau),
+            "system_v": 1.0,
+            "device_v": 1.0,
+            "commands": normalized,
+            "clamped": clamped,
+        }
+        with self.lock:
+            self.dex3_state["hands"][hand] = hand_state
+            self.frame_id += 1
+            return {
+                "ok": True,
+                "control_mode": "dex3",
+                "hand": hand,
+                "dex3": hand_state,
+            }
+
     def handle_loco_command(self, payload):
         action = payload.get("action", "state")
         with self.lock:
@@ -1510,6 +1635,7 @@ class G1MujocoState:
                 "loco": dict(self.loco_state),
                 "motion_switcher": dict(self.motion_switcher_state),
                 "hand_sdk": dict(self.hand_sdk_state),
+                "dex3": dict(self.dex3_state),
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
                 "all_robot_names": [self.robot_name],
@@ -1792,6 +1918,8 @@ class G1MujocoState:
             return self.handle_joint_targets_command(payload)
         if command == "hand_sdk":
             return self.handle_hand_sdk_command(payload)
+        if command == "dex3":
+            return self.handle_dex3_command(payload)
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}

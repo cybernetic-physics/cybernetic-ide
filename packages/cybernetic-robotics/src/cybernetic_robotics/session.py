@@ -593,6 +593,82 @@ class UnitreeSession:
             "official_dds_supported": False,
         }
 
+    def publish_dex3(
+        self,
+        topic: str,
+        motor_cmd: list[dict[str, Any]],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Publish official-style G1 Dex3 hand commands through the active provider."""
+
+        hand = _dex3_hand_from_topic(topic, suffix="/cmd")
+        if hand is None:
+            raise NotImplementedError(f"Cybernetic Unitree session Dex3 publisher does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree Dex3 publishing is locked until the real-hardware provider and safety gates are implemented",
+            }
+        if self.config.transport == DDS and self.config.mode == SIM:
+            return {
+                "ok": False,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "topic": topic,
+                "error": "managed official DDS Dex3 publishing is not wired yet; simulator Dex3 intent is available through local_http",
+                "compatibility_fallback": False,
+            }
+
+        previous_timeout = self.simulator.timeout
+        if timeout is not None:
+            self.simulator.timeout = float(timeout)
+        try:
+            response = self.simulator.dex3(hand, motor_cmd, topic=topic)
+        finally:
+            self.simulator.timeout = previous_timeout
+        return {
+            **response,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
+    def read_dex3_state(self, topic: str) -> dict[str, Any]:
+        """Read simulator-backed Dex3 hand telemetry for official state topics."""
+
+        hand = _dex3_hand_from_topic(topic, suffix="/state")
+        if hand is None:
+            raise NotImplementedError(f"Cybernetic Unitree session Dex3 subscriber does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree Dex3 state reading is locked until the real-hardware provider and safety gates are implemented",
+            }
+        status = self.simulator.status().raw
+        simulation = status.get("simulation") if isinstance(status.get("simulation"), dict) else {}
+        dex3 = simulation.get("dex3") if isinstance(simulation.get("dex3"), dict) else {}
+        hands = dex3.get("hands") if isinstance(dex3.get("hands"), dict) else {}
+        state = hands.get(hand) if isinstance(hands.get(hand), dict) else {}
+        return {
+            "ok": True,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "hand": hand,
+            "dex3": state,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
     def read_lowstate(self) -> dict[str, Any]:
         """Read lowstate telemetry through the active provider when possible."""
 
@@ -636,6 +712,19 @@ def _choice(value: str | None, allowed: set[str], default: str) -> str:
         return default
     normalized = value.strip().lower().replace("-", "_")
     return normalized if normalized in allowed else default
+
+
+def _dex3_hand_from_topic(topic: str, *, suffix: str) -> str | None:
+    if suffix == "/cmd":
+        prefixes = {"rt/dex3/left/cmd": "left", "rt/dex3/right/cmd": "right"}
+    else:
+        prefixes = {
+            "rt/dex3/left/state": "left",
+            "rt/dex3/right/state": "right",
+            "rt/lf/dex3/left/state": "left",
+            "rt/lf/dex3/right/state": "right",
+        }
+    return prefixes.get(topic)
 
 
 _LOCO_RPC_BRIDGE_METHODS = {

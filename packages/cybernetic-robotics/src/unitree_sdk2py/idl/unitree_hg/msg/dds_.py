@@ -29,6 +29,12 @@ class MotorState_:
 
 
 @dataclass
+class PressSensorState_:
+    pressure: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    temperature: float = 0.0
+
+
+@dataclass
 class IMUState_:
     quaternion: list[float] = field(default_factory=lambda: [1.0, 0.0, 0.0, 0.0])
     gyroscope: list[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
@@ -65,4 +71,34 @@ class LowState_:
     __idl_typename__: str = "unitree_hg.msg.dds_.LowState_"
 
 
-__all__ = ["IMUState_", "LowCmd_", "LowState_", "MotorCmd_", "MotorState_"]
+@dataclass
+class HandCmd_:
+    motor_cmd: list[MotorCmd_] = field(default_factory=lambda: [MotorCmd_() for _ in range(7)])
+    reserve: list[int] = field(default_factory=lambda: [0, 0, 0, 0])
+    __idl_typename__: str = "unitree_hg.msg.dds_.HandCmd_"
+
+
+@dataclass
+class HandState_:
+    motor_state: list[MotorState_] = field(default_factory=lambda: [MotorState_() for _ in range(7)])
+    press_sensor_state: list[PressSensorState_] = field(default_factory=lambda: [PressSensorState_() for _ in range(9)])
+    imu_state: IMUState_ = field(default_factory=IMUState_)
+    power_v: float = 0.0
+    power_a: float = 0.0
+    system_v: float = 0.0
+    device_v: float = 0.0
+    error: list[int] = field(default_factory=lambda: [0, 0])
+    reserve: list[int] = field(default_factory=lambda: [0, 0])
+    __idl_typename__: str = "unitree_hg.msg.dds_.HandState_"
+
+
+__all__ = [
+    "HandCmd_",
+    "HandState_",
+    "IMUState_",
+    "LowCmd_",
+    "LowState_",
+    "MotorCmd_",
+    "MotorState_",
+    "PressSensorState_",
+]
