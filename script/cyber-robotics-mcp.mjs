@@ -281,6 +281,31 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
+  tool(
+    "unitree_verify_rpc_bridge",
+    "Verify the managed Unitree sport/agv RPC bridge and summarize simulator readback/forwarding evidence.",
+    {
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.2,
+        maximum: 10,
+        default: 1,
+        description: "Per-RPC timeout used by the bridge clients.",
+      },
+      start_if_needed: {
+        type: "boolean",
+        default: true,
+        description: "Start the managed bridge if it is not already running and ready.",
+      },
+      stop_after: {
+        type: "boolean",
+        default: false,
+        description: "Stop the managed bridge after verification.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  ),
   tool("unitree_stop_rpc_bridge", "Stop and remove the managed Unitree sport/agv RPC bridge container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1186,6 +1211,8 @@ async function callTool(name, args) {
       return textResult(sdk2RpcBridgeStatus());
     case "unitree_probe_rpc_bridge_client":
       return textResult(sdk2ProbeRpcBridgeClient(args));
+    case "unitree_verify_rpc_bridge":
+      return textResult(sdk2VerifyRpcBridge(args));
     case "unitree_stop_rpc_bridge":
       return textResult(sdk2StopRpcBridge());
     case "unitree_stop_official_mujoco_session":
@@ -2516,6 +2543,12 @@ function roboticsToolReference() {
         "Calls the managed RPC bridge with official SDK clients.",
         "Managed Unitree RPC bridge running and ready.",
       ),
+      toolReference(
+        "unitree_verify_rpc_bridge",
+        "diagnostic",
+        "Starts if needed, calls the managed bridge, and summarizes simulator readback/forwarding evidence.",
+        "Official SDK2 sidecar prepared; simulator HTTP endpoint recommended for strong evidence.",
+      ),
       toolReference("unitree_stop_rpc_bridge", "service-stop", "Stops and removes the named sport/agv RPC bridge container.", "Bridge container exists."),
       toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
@@ -3186,6 +3219,108 @@ function sdk2ProbeRpcBridgeClient(options = {}) {
     stderr: result.stderr,
     report,
   };
+}
+
+function sdk2VerifyRpcBridge(options = {}) {
+  const startIfNeeded = options.start_if_needed !== false;
+  const stopAfter = options.stop_after === true;
+  let started = null;
+  let stopped = null;
+  const statusBefore = sdk2RpcBridgeStatus();
+  if ((!statusBefore.running || !statusBefore.ready) && startIfNeeded) {
+    started = sdk2StartRpcBridge();
+  }
+  const status = sdk2RpcBridgeStatus();
+  if (!status.running || !status.ready) {
+    const result = {
+      ok: false,
+      source: "managed_unitree_sdk2_rpc_bridge",
+      started,
+      status_before: statusBefore,
+      status,
+      error: "managed Unitree RPC bridge is not running and ready",
+      next_step: "Run unitree_start_rpc_bridge or inspect unitree_rpc_bridge_status before verifying.",
+    };
+    if (stopAfter && started) {
+      stopped = sdk2StopRpcBridge();
+      result.stopped = stopped;
+    }
+    return result;
+  }
+  const client = sdk2ProbeRpcBridgeClient(options);
+  const calls = client.report?.rpc_bridge_client?.calls ?? [];
+  const summary = summarizeRpcBridgeCalls(calls);
+  const result = {
+    ok: client.report?.rpc_bridge_client?.ok === true && summary.all_calls_ok,
+    source: "managed_unitree_sdk2_rpc_bridge",
+    started,
+    status_before: statusBefore,
+    status,
+    client,
+    summary,
+  };
+  if (stopAfter) {
+    stopped = sdk2StopRpcBridge();
+    result.stopped = stopped;
+  }
+  return result;
+}
+
+function summarizeRpcBridgeCalls(calls) {
+  const normalized = [];
+  const statusCounts = {};
+  for (const call of calls || []) {
+    const body = rpcCallBody(call);
+    const status = call?.rpc_status?.name ?? null;
+    if (status) {
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    }
+    const forward = body?.simulator_forward;
+    const readback = body?.simulator_readback;
+    normalized.push({
+      name: call?.name ?? null,
+      ok: call?.ok === true,
+      rpc_status: status,
+      data: body && Object.prototype.hasOwnProperty.call(body, "data") ? body.data : null,
+      forward_provider: forward?.provider ?? null,
+      forward_ok: typeof forward?.ok === "boolean" ? forward.ok : null,
+      readback_provider: readback?.provider ?? null,
+      readback_ok: typeof readback?.ok === "boolean" ? readback.ok : null,
+    });
+  }
+  const simulatorForwards = normalized.filter(
+    (call) => call.forward_provider === "cybernetic_game_control_http" && call.forward_ok === true,
+  );
+  const simulatorReadbacks = normalized.filter(
+    (call) => call.readback_provider === "cybernetic_game_control_http" && call.readback_ok === true,
+  );
+  const bridgeStateOnly = normalized.filter(
+    (call) => call.forward_provider === "bridge_state_only" || call.readback_provider === "bridge_state_only",
+  );
+  return {
+    call_count: normalized.length,
+    all_calls_ok: normalized.length > 0 && normalized.every((call) => call.ok),
+    rpc_status_counts: statusCounts,
+    simulator_forward_count: simulatorForwards.length,
+    simulator_readback_count: simulatorReadbacks.length,
+    bridge_state_only_count: bridgeStateOnly.length,
+    calls: normalized,
+    simulator_forwards: simulatorForwards,
+    simulator_readbacks: simulatorReadbacks,
+  };
+}
+
+function rpcCallBody(call) {
+  const value = call?.return;
+  if (!Array.isArray(value) || value.length < 2 || typeof value[1] !== "string") {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value[1]);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function sdk2ManagedJsonLogContainerStatus(container, readyAction, exitAction) {

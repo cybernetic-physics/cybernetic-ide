@@ -166,9 +166,12 @@ docker compose \
 
 The MCP lifecycle is `unitree_start_rpc_bridge`,
 `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`, and
-`unitree_stop_rpc_bridge`. Python users can call
+`unitree_verify_rpc_bridge`, then `unitree_stop_rpc_bridge`. Python users can call
 `OfficialG1Sim.start_rpc_bridge()`, `rpc_bridge_status()`,
-`rpc_bridge_client()`, and `stop_rpc_bridge()`. This first managed bridge keeps
+`rpc_bridge_client()`, `verify_rpc_bridge()`, and `stop_rpc_bridge()`. The
+verifier is the best agent-facing sanity check because it summarizes `RPC_OK`,
+simulator readback, simulator forwarding, and bridge-state-only fallback counts.
+This first managed bridge keeps
 `sport` and `agv` SDK2 servers alive and uses Cybernetic's simulator provider
 at `CYBER_SIMULATOR_GAME_CONTROL_URL` for safe read/write calls. Getter RPCs
 such as `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
@@ -177,10 +180,13 @@ when it is reachable and fall back to bridge state otherwise. Setter RPCs
 forward:
 `sport.SetFsmId`, `sport.SetBalanceMode`, `sport.SetSwingHeight`,
 `sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`, `agv.Move`, and
-`agv.HeightAdjust`. This also covers common `LocoClient` shortcuts including
-`Damp`, `StopMove`, `WaveHand`, and `ShakeHand`. If the simulator HTTP bridge
-is unavailable, the RPC still returns `RPC_OK` for SDK compatibility, but the
-JSON response marks `simulator_forward.provider` or
+`agv.HeightAdjust`. `HeightAdjust` is accepted for SDK compatibility but is
+reported as `bridge_state_only` until the local simulator has a modeled
+height-column actuator. This also covers common `LocoClient` shortcuts
+including `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`. If the simulator
+HTTP bridge is unavailable or the operation is unsupported, the RPC still
+returns `RPC_OK` for SDK compatibility, but the JSON response marks
+`simulator_forward.provider` or
 `simulator_readback.provider` as `bridge_state_only` so agents know the MuJoCo
 state was not updated or queried. The managed client probe includes raw getter
 debug calls plus

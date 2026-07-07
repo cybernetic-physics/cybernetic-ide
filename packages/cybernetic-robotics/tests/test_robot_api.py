@@ -718,6 +718,27 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(result["provider"], "bridge_state_only")
         self.assertIn("SDK RPC returned RPC_OK", result["note"])
 
+    def test_sidecar_rpc_bridge_marks_simulator_ok_false_as_failed_forward(self):
+        sidecar = load_sidecar_entrypoint_module()
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self):
+                return b'{"ok": false, "error": "unsupported"}'
+
+        with patch.object(sidecar, "urlopen", return_value=FakeResponse()):
+            result = sidecar._forward_simulator_command({"command": "loco", "action": "not_supported"})
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["provider"], "cybernetic_game_control_http")
+        self.assertEqual(result["response"]["ok"], False)
+        self.assertIn("ok=false", result["note"])
+
     def test_sidecar_rpc_bridge_reads_back_from_simulator_http(self):
         sidecar = load_sidecar_entrypoint_module()
         with FakeServer() as fake, patch.dict(
@@ -1894,6 +1915,91 @@ class RobotApiTests(unittest.TestCase):
         command = " ".join(captured["args"])
         self.assertIn("CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_client", command)
         self.assertIn("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=1.5", command)
+
+    def test_official_g1_sim_verifies_rpc_bridge_with_simulator_evidence(self):
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "rpc_bridge_client": {
+                            "ok": True,
+                            "calls": [
+                                {
+                                    "name": "sport.RawGetFsmIdDebug",
+                                    "ok": True,
+                                    "return": [
+                                        0,
+                                        json.dumps(
+                                            {
+                                                "data": 1,
+                                                "simulator_readback": {
+                                                    "ok": True,
+                                                    "provider": "cybernetic_game_control_http",
+                                                },
+                                            }
+                                        ),
+                                    ],
+                                    "rpc_status": {"name": "RPC_OK"},
+                                },
+                                {
+                                    "name": "sport.RawSetVelocityDebug",
+                                    "ok": True,
+                                    "return": [
+                                        0,
+                                        json.dumps(
+                                            {
+                                                "velocity": [0.0, 0.0, 0.0],
+                                                "simulator_forward": {
+                                                    "ok": True,
+                                                    "provider": "cybernetic_game_control_http",
+                                                },
+                                            }
+                                        ),
+                                    ],
+                                    "rpc_status": {"name": "RPC_OK"},
+                                },
+                            ],
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "inspect unitree-g1-rpc-bridge" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"Running": True, "Status": "running", "ExitCode": 0}),
+                    stderr="",
+                )
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"action": "serve_unitree_rpc_bridge", "ok": True}),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            result = official.verify_rpc_bridge(timeout=1.5, start_if_needed=False)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["summary"]["call_count"], 2)
+        self.assertEqual(result["summary"]["simulator_readback_count"], 1)
+        self.assertEqual(result["summary"]["simulator_forward_count"], 1)
+        self.assertEqual(result["summary"]["rpc_status_counts"]["RPC_OK"], 2)
 
 
 if __name__ == "__main__":

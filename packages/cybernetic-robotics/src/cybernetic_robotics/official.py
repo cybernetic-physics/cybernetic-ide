@@ -293,6 +293,54 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def verify_rpc_bridge(
+        self,
+        *,
+        timeout: float = 1.0,
+        start_if_needed: bool = True,
+        stop_after: bool = False,
+    ) -> dict[str, Any]:
+        """Verify the managed SDK2 RPC bridge and summarize simulator evidence."""
+
+        started = None
+        stopped = None
+        status_before = self.rpc_bridge_status()
+        ready_before = bool(status_before.get("running") and status_before.get("ready"))
+        if not ready_before and start_if_needed:
+            started = self.start_rpc_bridge(wait=True)
+        status_for_probe = self.rpc_bridge_status()
+        if not status_for_probe.get("running") or not status_for_probe.get("ready"):
+            result = {
+                "ok": False,
+                "source": "managed_unitree_sdk2_rpc_bridge",
+                "started": started,
+                "status_before": status_before,
+                "status": status_for_probe,
+                "error": "managed Unitree RPC bridge is not running and ready",
+                "next_step": "Call start_rpc_bridge() or inspect rpc_bridge_status() before verifying.",
+            }
+            if stop_after and started is not None:
+                stopped = self.stop_rpc_bridge()
+                result["stopped"] = stopped
+            return result
+
+        client = self.rpc_bridge_client(timeout=timeout)
+        summary = _summarize_rpc_bridge_calls(client.get("calls", []))
+        ok = bool(client.get("ok") and summary["all_calls_ok"])
+        result = {
+            "ok": ok,
+            "source": "managed_unitree_sdk2_rpc_bridge",
+            "started": started,
+            "status_before": status_before,
+            "status": status_for_probe,
+            "client": client,
+            "summary": summary,
+        }
+        if stop_after:
+            stopped = self.stop_rpc_bridge()
+            result["stopped"] = stopped
+        return result
+
     def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
         """Start the managed official Unitree MuJoCo DDS peer session.
 
@@ -627,6 +675,15 @@ class OfficialG1ManagedSession:
     def rpc_bridge_client(self, *, timeout: float = 1.0) -> dict[str, Any]:
         return self.sim.rpc_bridge_client(timeout=timeout)
 
+    def verify_rpc_bridge(
+        self,
+        *,
+        timeout: float = 1.0,
+        start_if_needed: bool = True,
+        stop_after: bool = False,
+    ) -> dict[str, Any]:
+        return self.sim.verify_rpc_bridge(timeout=timeout, start_if_needed=start_if_needed, stop_after=stop_after)
+
     def stop_rpc_bridge(self) -> dict[str, Any]:
         return self.sim.stop_rpc_bridge()
 
@@ -730,6 +787,71 @@ def _parse_json_objects(text: str) -> list[dict[str, Any]]:
         next_index = text.find("{", index + max(end, 1))
         index = next_index
     return reports
+
+
+def _summarize_rpc_bridge_calls(calls: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized_calls = []
+    forward_evidence = []
+    readback_evidence = []
+    status_counts: dict[str, int] = {}
+    for call in calls:
+        body = _rpc_call_body(call)
+        status = (call.get("rpc_status") or {}).get("name") if isinstance(call.get("rpc_status"), dict) else None
+        if status:
+            status_counts[status] = status_counts.get(status, 0) + 1
+        forward = body.get("simulator_forward") if isinstance(body, dict) else None
+        readback = body.get("simulator_readback") if isinstance(body, dict) else None
+        normalized = {
+            "name": call.get("name"),
+            "ok": bool(call.get("ok")),
+            "rpc_status": status,
+            "data": body.get("data") if isinstance(body, dict) else None,
+            "forward_provider": forward.get("provider") if isinstance(forward, dict) else None,
+            "forward_ok": forward.get("ok") if isinstance(forward, dict) else None,
+            "readback_provider": readback.get("provider") if isinstance(readback, dict) else None,
+            "readback_ok": readback.get("ok") if isinstance(readback, dict) else None,
+        }
+        normalized_calls.append(normalized)
+        if isinstance(forward, dict):
+            forward_evidence.append(normalized)
+        if isinstance(readback, dict):
+            readback_evidence.append(normalized)
+    simulator_forwards = [
+        item
+        for item in forward_evidence
+        if item.get("forward_provider") == "cybernetic_game_control_http" and item.get("forward_ok") is True
+    ]
+    simulator_readbacks = [
+        item
+        for item in readback_evidence
+        if item.get("readback_provider") == "cybernetic_game_control_http" and item.get("readback_ok") is True
+    ]
+    return {
+        "call_count": len(calls),
+        "all_calls_ok": all(bool(call.get("ok")) for call in calls) if calls else False,
+        "rpc_status_counts": status_counts,
+        "simulator_forward_count": len(simulator_forwards),
+        "simulator_readback_count": len(simulator_readbacks),
+        "bridge_state_only_count": sum(
+            1
+            for item in [*forward_evidence, *readback_evidence]
+            if item.get("forward_provider") == "bridge_state_only" or item.get("readback_provider") == "bridge_state_only"
+        ),
+        "calls": normalized_calls,
+        "simulator_forwards": simulator_forwards,
+        "simulator_readbacks": simulator_readbacks,
+    }
+
+
+def _rpc_call_body(call: dict[str, Any]) -> dict[str, Any]:
+    value = call.get("return")
+    if isinstance(value, (list, tuple)) and len(value) >= 2 and isinstance(value[1], str):
+        try:
+            parsed = json.loads(value[1])
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _normalize_joint_deltas(joint_deltas: dict[str, float] | None) -> dict[str, float]:

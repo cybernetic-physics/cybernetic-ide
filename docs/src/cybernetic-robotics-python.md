@@ -174,10 +174,17 @@ read/write RPCs to the local simulator provider when
 and include `simulator_readback` evidence in raw debug responses. Setter RPCs
 currently forwarded include `sport.SetFsmId`, `sport.SetBalanceMode`,
 `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
-`sport.SetTaskId`, `agv.Move`, and `agv.HeightAdjust`. That covers common
-`LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`;
-unreachable simulator calls are reported as `bridge_state_only` in the RPC JSON
+`sport.SetTaskId`, and `agv.Move`. `agv.HeightAdjust` is accepted for SDK
+compatibility but reported as `bridge_state_only` until the local simulator has
+a modeled height-column actuator. That covers common `LocoClient` shortcuts
+such as `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`; unreachable or
+unsupported simulator calls are reported as `bridge_state_only` in the RPC JSON
 response instead of being hidden.
+`official.verify_rpc_bridge()` is the preferred Python evidence check for this
+managed bridge: it can start the bridge if needed, call the official SDK
+clients, and return a compact summary with call counts, `RPC_OK` counts,
+simulator forward evidence, simulator readback evidence, and any
+`bridge_state_only` fallbacks.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
@@ -499,6 +506,7 @@ unitree_probe_rpc_bridge_smoke
 unitree_start_rpc_bridge
 unitree_rpc_bridge_status
 unitree_probe_rpc_bridge_client
+unitree_verify_rpc_bridge
 unitree_stop_rpc_bridge
 unitree_probe_official_mujoco_loco_rpc
 unitree_official_mujoco_evidence_bundle

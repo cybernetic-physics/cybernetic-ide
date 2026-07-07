@@ -321,21 +321,29 @@ Tasks:
   provider boundary instead of the in-memory smoke state.
 - Done: add the first managed RPC bridge lifecycle with
   `unitree_start_rpc_bridge`, `unitree_rpc_bridge_status`,
-  `unitree_probe_rpc_bridge_client`, and `unitree_stop_rpc_bridge`, plus Python
-  mirrors on `OfficialG1Sim`. This starts `unitree-g1-rpc-bridge` as a
-  long-running `sport`/`agv` SDK2 service for external clients.
+  `unitree_probe_rpc_bridge_client`, `unitree_verify_rpc_bridge`, and
+  `unitree_stop_rpc_bridge`, plus Python mirrors on `OfficialG1Sim`. This
+  starts `unitree-g1-rpc-bridge` as a long-running `sport`/`agv` SDK2 service
+  for external clients.
 - Done: map the first safe managed bridge handlers onto the simulator provider
   boundary. Getter RPCs (`GetFsmId`, `GetFsmMode`, `GetBalanceMode`,
   `GetSwingHeight`, `GetStandHeight`) now read back from
   `CYBER_SIMULATOR_GAME_CONTROL_URL` when the local MuJoCo/GameControl harness
   is reachable. Setter RPCs (`SetFsmId`, `SetBalanceMode`, `SetSwingHeight`,
   `SetStandHeight`, `SetVelocity`, `SetTaskId`, `agv.Move`,
-  `agv.HeightAdjust`) forward to the same provider. This covers common
-  high-level shortcuts including `Damp`, `StopMove`, `WaveHand`, and
-  `ShakeHand`. Raw debug probe responses include `simulator_readback` and
-  `simulator_forward`; if the simulator is unavailable, the official SDK call
-  remains `RPC_OK` but is marked `bridge_state_only` so agents do not
-  hallucinate visible motion.
+  `agv.HeightAdjust`) are accepted through the bridge; all but HeightAdjust
+  forward to the same provider today. HeightAdjust remains an explicit
+  `bridge_state_only` intent until the simulator has a modeled height actuator.
+  This covers common high-level shortcuts including `Damp`, `StopMove`,
+  `WaveHand`, and `ShakeHand`. Raw debug probe responses include
+  `simulator_readback` and `simulator_forward`; if the simulator is unavailable
+  or the operation is unsupported, the official SDK call remains `RPC_OK` but is
+  marked `bridge_state_only` so agents do not hallucinate visible motion.
+- Done: add `OfficialG1Sim.verify_rpc_bridge()` and MCP
+  `unitree_verify_rpc_bridge` as the agent-friendly evidence wrapper. It can
+  start the managed bridge if needed, run official SDK clients, and summarize
+  call count, `RPC_OK` count, simulator forwarding evidence, simulator readback
+  evidence, and bridge-state-only fallbacks.
 - Current managed-bridge evidence: live validation started
   `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,

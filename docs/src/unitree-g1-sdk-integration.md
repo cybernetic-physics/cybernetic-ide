@@ -646,20 +646,23 @@ The current repo has the first narrow version of that API boundary:
   `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
   and `agv.HeightAdjust` all returning `RPC_OK`.
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
-  `unitree_probe_rpc_bridge_client` / `unitree_stop_rpc_bridge` turn that smoke
-  into a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is
-  now the first live SDK-to-simulator adapter: it keeps `sport`/`agv` state and
-  routes safe read/write RPCs to Cybernetic's simulator HTTP provider when
+  `unitree_probe_rpc_bridge_client` / `unitree_verify_rpc_bridge` /
+  `unitree_stop_rpc_bridge` turn that smoke into a named managed bridge
+  container (`unitree-g1-rpc-bridge`). The bridge is now the first live
+  SDK-to-simulator adapter: it keeps `sport`/`agv` state and routes safe
+  read/write RPCs to Cybernetic's simulator HTTP provider when
   `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
   `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
   `sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the
   simulator and expose `simulator_readback` in raw debug responses. Forwarded
   setter calls are `sport.SetFsmId`, `sport.SetBalanceMode`,
   `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
-  `sport.SetTaskId`, `agv.Move`, and `agv.HeightAdjust`. That also covers
-  common high-level `LocoClient` shortcuts such as `Damp`, `StopMove`,
-  `WaveHand`, and `ShakeHand`. If the simulator is not reachable, the SDK call
-  still returns `RPC_OK`, but the JSON response marks
+  `sport.SetTaskId`, and `agv.Move`. `agv.HeightAdjust` is accepted for SDK
+  compatibility but reported as `bridge_state_only` until the local simulator
+  has a modeled height-column actuator. That also covers common high-level
+  `LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and
+  `ShakeHand`. If the simulator is not reachable or does not support the
+  operation, the SDK call still returns `RPC_OK`, but the JSON response marks
   `simulator_forward.provider` or `simulator_readback.provider` as
   `bridge_state_only`.
   `unitree_probe_rpc_bridge_client` also includes raw sport debug calls for
@@ -667,10 +670,15 @@ The current repo has the first narrow version of that API boundary:
   the parsed value or status code and hide the response body; the raw SDK client
   calls expose `simulator_forward` and `simulator_readback` for agent
   diagnostics.
+  `unitree_verify_rpc_bridge` is the agent-friendly wrapper: it can start the
+  bridge if needed, run the client probe, and summarize total calls, `RPC_OK`
+  counts, simulator forward evidence, simulator readback evidence, and
+  `bridge_state_only` fallbacks.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
-  `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
-  bridge container cleanly.
+  `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, with HeightAdjust
+  clearly marked as bridge-state-only, then removed the bridge container
+  cleanly.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

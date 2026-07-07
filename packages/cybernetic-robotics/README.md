@@ -134,7 +134,7 @@ with official.session() as sim:
     print(sim.rpc_discovery()["missing_request_readers"])
     print(sim.rpc_bridge_smoke()["services_started"])
     print(sim.start_rpc_bridge()["status"]["ready"])
-    print(sim.rpc_bridge_client()["calls"])
+    print(sim.verify_rpc_bridge()["summary"])
     sim.stop_rpc_bridge()
     print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
@@ -153,8 +153,11 @@ DDS routing. `rpc_bridge_smoke()` starts temporary `sport` and `agv` RPC
 servers and calls them with SDK clients, proving the bridge contract without
 commanding MuJoCo or hardware. `start_rpc_bridge()` keeps that service shell
 alive in a named `unitree-g1-rpc-bridge` container so external SDK clients can
-discover and call it; the current handlers are in-memory until the bridge is
-mapped onto simulator providers.
+discover and call it. Supported `sport`/`agv` handlers now read back from and
+forward into the local simulator HTTP provider when reachable. Use
+`verify_rpc_bridge()` when an agent or user needs the compact evidence summary:
+call count, `RPC_OK` count, simulator readbacks, simulator forwards, and
+bridge-state-only fallbacks.
 
 `cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
 Python examples with the local `unitree_sdk2py` shim. It reports import, class,

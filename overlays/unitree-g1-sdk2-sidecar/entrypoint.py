@@ -1909,14 +1909,15 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
     def agv_height_adjust(parameter: str):
         payload = _safe_json_loads(parameter)
         agv_state["height_velocity"] = float(payload.get("data", 0.0))
-        simulator_forward = _forward_simulator_command(
+        simulator_forward = _bridge_state_only_simulator_result(
             {
                 "command": "agv",
                 "action": "height_adjust",
                 "service": "agv",
                 "simulated": True,
                 "height_velocity": agv_state["height_velocity"],
-            }
+            },
+            "The local G1 MuJoCo harness records AGV height intent in bridge state; it has no height actuator endpoint yet.",
         )
         agv_state["last_simulator_forward"] = simulator_forward
         return 0, json.dumps({"data": agv_state["height_velocity"], "simulator_forward": simulator_forward})
@@ -2092,22 +2093,28 @@ def _forward_simulator_command(payload: dict) -> dict:
             value = json.loads(body.decode("utf-8"))
         except Exception:
             value = {"raw": body.decode("utf-8", errors="replace")[-2000:]}
+        ok = not (isinstance(value, dict) and value.get("ok") is False)
         return {
-            "ok": True,
+            "ok": ok,
             "provider": "cybernetic_game_control_http",
             "url": simulator_url,
             "payload": payload,
             "response": value,
+            "note": None if ok else "Simulator HTTP endpoint responded, but the simulator reported ok=false.",
         }
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        return {
-            "ok": False,
-            "provider": "bridge_state_only",
-            "url": simulator_url,
-            "payload": payload,
-            "error": str(exc),
-            "note": "SDK RPC returned RPC_OK, but the local simulator HTTP bridge was not updated.",
-        }
+        return _bridge_state_only_simulator_result(payload, str(exc), simulator_url=simulator_url)
+
+
+def _bridge_state_only_simulator_result(payload: dict, reason: str, *, simulator_url: str | None = None) -> dict:
+    return {
+        "ok": False,
+        "provider": "bridge_state_only",
+        "url": simulator_url or _simulator_game_control_url(),
+        "payload": payload,
+        "error": reason,
+        "note": "SDK RPC returned RPC_OK, but the local simulator HTTP bridge was not updated.",
+    }
 
 
 def _read_simulator_loco_value(action: str, response_key: str, fallback) -> tuple[object, dict]:
