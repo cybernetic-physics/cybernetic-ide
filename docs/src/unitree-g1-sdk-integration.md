@@ -354,7 +354,9 @@ The current repo has the first narrow version of that API boundary:
   low-level `rt/lowcmd` / `rt/lowstate` channel examples.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
-- `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface.
+- `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
+  including official-style FSM, balance, swing-height, and stand-height
+  getters/setters.
 - The shim exposes `unitree_sdk2py.g1.audio.g1_audio_client.AudioClient` for
   TTS, volume, LED, and stream method-shape compatibility. In MuJoCo this
   records intent only; real audio hardware still belongs to the future official

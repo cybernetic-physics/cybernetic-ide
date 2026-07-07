@@ -140,15 +140,21 @@ loco.SetTimeout(10.0)
 loco.Init()
 
 loco.Start()
+print(loco.GetFsmId())
+print(loco.GetFsmMode())
+loco.SetSwingHeight(0.08)
+print(loco.GetSwingHeight())
 loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
 loco.WaveHand()
 ```
 
-Supported methods include `GetFsmId`, `SetFsmId`, `Damp`, `Start`,
-`ZeroTorque`, `Move`, `StopMove`, `LowStand`, `HighStand`, `WaveHand`, and
-`ShakeHand`. `Move` is currently simulated with simple kinematic base motion;
-it is not yet Unitree's full locomotion controller.
+Supported methods include `GetFsmId`, `GetFsmMode`, `GetBalanceMode`,
+`GetSwingHeight`, `GetStandHeight`, `SetFsmId`, `SetBalanceMode`,
+`SetSwingHeight`, `SetStandHeight`, `Damp`, `Start`, `ZeroTorque`, `Move`,
+`StopMove`, `LowStand`, `HighStand`, `WaveHand`, and `ShakeHand`. `Move` is
+currently simulated with simple kinematic base motion; it is not yet Unitree's
+full locomotion controller.
 
 ## Unitree G1 AudioClient-Shaped Code
 

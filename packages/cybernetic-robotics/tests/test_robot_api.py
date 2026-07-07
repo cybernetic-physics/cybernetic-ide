@@ -161,6 +161,20 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     type(self).loco["fsm_mode"] = payload.get("mode")
                 elif action == "get_fsm_id":
                     return self._json({"ok": True, "fsm_id": type(self).loco["fsm_id"], "loco": type(self).loco})
+                elif action == "get_fsm_mode":
+                    return self._json({"ok": True, "fsm_mode": type(self).loco["fsm_mode"], "loco": type(self).loco})
+                elif action == "get_balance_mode":
+                    return self._json({"ok": True, "balance_mode": type(self).loco["balance_mode"], "loco": type(self).loco})
+                elif action == "get_swing_height":
+                    return self._json({"ok": True, "swing_height": type(self).loco["swing_height"], "loco": type(self).loco})
+                elif action == "get_stand_height":
+                    return self._json({"ok": True, "stand_height": type(self).loco["stand_height"], "loco": type(self).loco})
+                elif action == "set_balance_mode":
+                    type(self).loco["balance_mode"] = payload["balance_mode"]
+                elif action == "set_swing_height":
+                    type(self).loco["swing_height"] = payload["swing_height"]
+                elif action == "set_stand_height":
+                    type(self).loco["stand_height"] = payload["stand_height"]
                 elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
                     type(self).pose = "raise_right_hand"
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
@@ -345,11 +359,27 @@ class RobotApiTests(unittest.TestCase):
                 move_code = loco.Move(0.25, 0.0, 0.1)
                 fsm_code = loco.Start()
                 get_code, fsm_id = loco.GetFsmId()
+                mode_code, fsm_mode = loco.GetFsmMode()
+                self.assertEqual(loco.SetBalanceMode(2), 0)
+                balance_code, balance_mode = loco.GetBalanceMode()
+                self.assertEqual(loco.SetSwingHeight(0.09), 0)
+                swing_code, swing_height = loco.GetSwingHeight()
+                self.assertEqual(loco.SetStandHeight(0.18), 0)
+                stand_code, stand_height = loco.GetStandHeight()
 
                 self.assertEqual(move_code, 0)
                 self.assertEqual(fsm_code, 0)
                 self.assertEqual(get_code, 0)
+                self.assertEqual(mode_code, 0)
+                self.assertEqual(balance_code, 0)
+                self.assertEqual(swing_code, 0)
+                self.assertEqual(stand_code, 0)
                 self.assertEqual(fsm_id, 500)
+                self.assertEqual(fsm_mode, "start")
+                self.assertEqual(balance_mode, 2)
+                self.assertAlmostEqual(swing_height, 0.09)
+                self.assertAlmostEqual(stand_height, 0.18)
+                self.assertEqual(FakeG1Handler.loco["velocity"], [0.25, 0.0, 0.1])
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
             finally:
                 if previous is None:

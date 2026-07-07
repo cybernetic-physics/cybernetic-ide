@@ -149,11 +149,30 @@ class LocoClient:
         response = self._call_loco("get_fsm_id")
         return _code_and_data(response, response.get("fsm_id"))
 
+    def GetFsmMode(self):
+        response = self._call_loco("get_fsm_mode")
+        return _code_and_data(response, response.get("fsm_mode"))
+
+    def GetBalanceMode(self):
+        response = self._call_loco("get_balance_mode")
+        return _code_and_data(response, response.get("balance_mode"))
+
+    def GetSwingHeight(self):
+        response = self._call_loco("get_swing_height")
+        return _code_and_data(response, response.get("swing_height"))
+
+    def GetStandHeight(self):
+        response = self._call_loco("get_stand_height")
+        return _code_and_data(response, response.get("stand_height"))
+
     def SetFsmId(self, fsm_id: int):
         return self._code(self._call_loco("set_fsm_id", fsm_id=int(fsm_id), mode=_FSM_NAMES.get(int(fsm_id))))
 
     def SetBalanceMode(self, balance_mode: int):
         return self._code(self._call_loco("set_balance_mode", balance_mode=int(balance_mode)))
+
+    def SetSwingHeight(self, swing_height: float):
+        return self._code(self._call_loco("set_swing_height", swing_height=float(swing_height)))
 
     def SetStandHeight(self, stand_height: float):
         return self._code(self._call_loco("set_stand_height", stand_height=float(stand_height)))

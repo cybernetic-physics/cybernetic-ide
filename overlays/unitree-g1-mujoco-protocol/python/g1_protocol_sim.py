@@ -810,6 +810,14 @@ class G1MujocoState:
                 return {"ok": True, "loco": dict(self.loco_state), "control_mode": self.control_mode}
             if action == "get_fsm_id":
                 return {"ok": True, "fsm_id": self.loco_state["fsm_id"], "loco": dict(self.loco_state)}
+            if action == "get_fsm_mode":
+                return {"ok": True, "fsm_mode": self.loco_state["fsm_mode"], "loco": dict(self.loco_state)}
+            if action == "get_balance_mode":
+                return {"ok": True, "balance_mode": self.loco_state["balance_mode"], "loco": dict(self.loco_state)}
+            if action == "get_swing_height":
+                return {"ok": True, "swing_height": self.loco_state["swing_height"], "loco": dict(self.loco_state)}
+            if action == "get_stand_height":
+                return {"ok": True, "stand_height": self.loco_state["stand_height"], "loco": dict(self.loco_state)}
             if action == "set_fsm_id":
                 fsm_id = int(payload.get("fsm_id", 1))
                 self.loco_state["fsm_id"] = fsm_id

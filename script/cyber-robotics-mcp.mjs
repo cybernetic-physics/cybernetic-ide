@@ -278,9 +278,31 @@ const tools = [
     {
       command: {
         type: "string",
-        enum: ["state", "damp", "start", "zero_torque", "stop_move", "move", "low_stand", "high_stand", "wave_hand", "shake_hand"],
+        enum: [
+          "state",
+          "get_fsm_id",
+          "get_fsm_mode",
+          "get_balance_mode",
+          "get_swing_height",
+          "get_stand_height",
+          "set_balance_mode",
+          "set_swing_height",
+          "set_stand_height",
+          "damp",
+          "start",
+          "zero_torque",
+          "stop_move",
+          "move",
+          "low_stand",
+          "high_stand",
+          "wave_hand",
+          "shake_hand",
+        ],
         default: "state",
       },
+      balance_mode: { type: "integer", default: 0 },
+      swing_height: { type: "number", default: 0 },
+      stand_height: { type: "number", default: 0 },
       vx: { type: "number", default: 0 },
       vy: { type: "number", default: 0 },
       omega: { type: "number", default: 0 },
@@ -954,7 +976,21 @@ async function executeG1LocoCommand(args) {
       duration: Number(args.duration || 1.0),
     });
   }
+  if (commandName === "set_balance_mode") {
+    return command({ command: "loco", action: "set_balance_mode", balance_mode: toInt(args.balance_mode, 0) });
+  }
+  if (commandName === "set_swing_height") {
+    return command({ command: "loco", action: "set_swing_height", swing_height: Number(args.swing_height || 0) });
+  }
+  if (commandName === "set_stand_height") {
+    return command({ command: "loco", action: "set_stand_height", stand_height: Number(args.stand_height || 0) });
+  }
   const actionByCommand = {
+    get_fsm_id: { action: "get_fsm_id" },
+    get_fsm_mode: { action: "get_fsm_mode" },
+    get_balance_mode: { action: "get_balance_mode" },
+    get_swing_height: { action: "get_swing_height" },
+    get_stand_height: { action: "get_stand_height" },
     damp: { action: "set_fsm_id", fsm_id: 1, mode: "damp" },
     start: { action: "set_fsm_id", fsm_id: 500, mode: "start" },
     zero_torque: { action: "set_fsm_id", fsm_id: 0, mode: "zero_torque" },
