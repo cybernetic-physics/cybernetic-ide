@@ -376,18 +376,20 @@ ad hoc scripts first. The default tool surface includes:
   matched service-side DDS readers before an agent tries a request/response
   client;
 - official SDK2 bridge smoke: `unitree_probe_rpc_bridge_smoke`, which starts
-  temporary `sport` and `agv` Unitree RPC servers and verifies SDK clients can
-  call them before we promote the bridge into a long-running simulator service;
+  temporary `sport`, `agv`, and `arm` Unitree RPC servers and verifies SDK
+  clients can call them before we promote the bridge into a long-running
+  simulator service;
 - managed SDK2 bridge lifecycle: `unitree_start_rpc_bridge`,
   `unitree_rpc_bridge_status`, `unitree_probe_rpc_bridge_client`,
   `unitree_verify_rpc_bridge`, and `unitree_command_rpc_bridge`, plus
-  `unitree_stop_rpc_bridge`, which keep the first `sport`/`agv` RPC service
+  `unitree_stop_rpc_bridge`, which keep the first `sport`/`agv`/`arm` RPC service
   alive as a named container for external SDK clients, read simulator-backed
   sport state, forward supported setter/shortcut calls like `SetVelocity`,
-  `Damp`, `StopMove`, `WaveHand`, `ShakeHand`, and AGV move commands to the
-  simulator HTTP provider when it is reachable, record AGV height intent as
-  bridge-state-only until a height actuator exists, summarize that evidence for
-  agents, and let agents send one explicit SDK-shaped command such as
+  `Damp`, `StopMove`, `WaveHand`, `ShakeHand`, arm actions such as
+  `right hand up`, and AGV move commands to the simulator HTTP provider when it
+  is reachable, record AGV height intent as bridge-state-only until a height
+  actuator exists, summarize that evidence for agents, and let agents send one
+  explicit SDK-shaped command such as
   `service=sport method=move params={"vx":0.05,"duration":0.5}`;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
@@ -419,9 +421,10 @@ Useful environment variables:
 - `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
   `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
 - `CYBER_UNITREE_TRANSPORT`: `local_http` for the lightweight viewer harness,
-  `rpc_bridge` in simulator mode to route high-level `LocoClient`/`AgvClient`
-  sport/agv calls through the managed Unitree RPC bridge, or `dds` in simulator
-  mode for official SDK2/CycloneDDS lowcmd/lowstate sidecar probes.
+  `rpc_bridge` in simulator mode to route high-level `LocoClient`, `AgvClient`,
+  and `G1ArmActionClient` calls through the managed Unitree RPC bridge, or
+  `dds` in simulator mode for official SDK2/CycloneDDS lowcmd/lowstate sidecar
+  probes.
 - `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
 - `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
 - `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be

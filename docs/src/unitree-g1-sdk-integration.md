@@ -643,19 +643,20 @@ The current repo has the first narrow version of that API boundary:
   `rt/lowcmd`/`rt/lowstate` peer rather than a high-level Unitree RPC server.
 - `unitree_probe_rpc_bridge_smoke` proves the next architecture step without
   pretending it already drives the robot. It starts temporary Unitree SDK2
-  `Server("sport")` and `Server("agv")` instances, registers a small safe
-  subset of handlers, then calls them with `LocoClient` and a raw `Client("agv")`.
+  `Server("sport")`, `Server("agv")`, and `Server("arm")` instances, registers
+  a small safe subset of handlers, then calls them with `LocoClient`, raw
+  `Client("agv")`, and `G1ArmActionClient`.
   Passing this probe means Cybernetic can satisfy the official request/response
   contract; the remaining work is making that bridge long-lived and mapping
   handlers onto the simulator provider boundary. Live smoke evidence showed
   `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
-  and `agv.HeightAdjust` all returning `RPC_OK`.
+  `agv.HeightAdjust`, and `arm.ExecuteAction` all returning `RPC_OK`.
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
   `unitree_probe_rpc_bridge_client` / `unitree_verify_rpc_bridge` /
   `unitree_command_rpc_bridge` / `unitree_stop_rpc_bridge` turn that smoke into
   a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is now
   the first live
-  SDK-to-simulator adapter: it keeps `sport`/`agv` state and routes safe
+  SDK-to-simulator adapter: it keeps `sport`/`agv`/`arm` state and routes safe
   read/write RPCs to Cybernetic's simulator HTTP provider when
   `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
   `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
@@ -663,13 +664,15 @@ The current repo has the first narrow version of that API boundary:
   simulator and expose `simulator_readback` in raw debug responses. Forwarded
   setter calls are `sport.SetFsmId`, `sport.SetBalanceMode`,
   `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
-  `sport.SetTaskId`, and `agv.Move`. `agv.HeightAdjust` is accepted for SDK
-  compatibility but reported as `bridge_state_only` until the local simulator
-  has a modeled height-column actuator. That also covers common high-level
-  `LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and
-  `ShakeHand`. If the simulator is not reachable or does not support the
-  operation, the SDK call still returns `RPC_OK`, but the JSON response marks
-  `simulator_forward.provider` or `simulator_readback.provider` as
+  `sport.SetTaskId`, `arm.ExecuteAction`, and `agv.Move`. `agv.HeightAdjust`
+  is accepted for SDK compatibility but reported as `bridge_state_only` until
+  the local simulator has a modeled height-column actuator. That also covers
+  common high-level `LocoClient` shortcuts such as `Damp`, `StopMove`,
+  `WaveHand`, and `ShakeHand`, plus normal
+  `G1ArmActionClient.ExecuteAction(...)`. If the simulator is not reachable or
+  does not support the operation, the SDK call still returns `RPC_OK`, but the
+  JSON response marks `simulator_forward.provider` or
+  `simulator_readback.provider` as
   `bridge_state_only`.
   `unitree_probe_rpc_bridge_client` also includes raw sport debug calls for
   getters and setters because upstream `LocoClient` methods often return only
@@ -682,14 +685,15 @@ The current repo has the first narrow version of that API boundary:
   `bridge_state_only` fallbacks.
   `unitree_command_rpc_bridge` is the per-action path: it starts the bridge
   when requested, sends one raw official SDK2 RPC such as `sport.move`,
-  `sport.get_fsm_id`, `sport.wave_hand`, or `agv.height_adjust`, then returns
-  the raw call body plus the same evidence summary. This is the preferred agent
-  tool when the user asks for one small locomotion or high-level intent command
-  rather than a whole diagnostic sequence.
+  `sport.get_fsm_id`, `sport.wave_hand`, `arm.execute_action`, or
+  `agv.height_adjust`, then returns the raw call body plus the same evidence
+  summary. This is the preferred agent tool when the user asks for one small
+  locomotion or high-level intent command rather than a whole diagnostic
+  sequence.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
-  `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, with HeightAdjust
-  clearly marked as bridge-state-only, then removed the bridge container
+  `sport.SetVelocity`, `agv.Move`, `agv.HeightAdjust`, and `arm.ExecuteAction`,
+  with HeightAdjust clearly marked as bridge-state-only, then removed the bridge container
   cleanly.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
@@ -710,9 +714,10 @@ The current repo has the first narrow version of that API boundary:
   `local_http`, opt-in `rpc_bridge`, opt-in `dds`, sim/real mode, DDS
   domain/interface, simulator reachability, and topic freshness. With
   `CYBER_UNITREE_TRANSPORT=rpc_bridge` in simulator mode, high-level
-  `LocoClient` and `AgvClient` calls route through the managed SDK2-shaped
-  `sport`/`agv` RPC bridge and return simulator forward/readback evidence in
-  `last_response`. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both
+  `LocoClient`, `AgvClient`, and `G1ArmActionClient` calls route through the
+  managed SDK2-shaped `sport`/`agv`/`arm` RPC bridge and return simulator
+  forward/readback evidence in `last_response`. With
+  `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both
   Python diagnostics and the MCP tool call the official sidecar status probe
   and report SDK2 import, CycloneDDS domain, channel creation, and official
   MuJoCo peer readiness.
@@ -724,9 +729,9 @@ The current repo has the first narrow version of that API boundary:
 - `unitree_sdk_behavior_smoke` gives Agent-panel users a behavior-level smoke
   check for safe Unitree SDK-shaped calls after the simulator is running, and
   persists a JSON evidence report for later review. Its `transport` argument can
-  be set to `rpc_bridge` to prove that ordinary `LocoClient`/`AgvClient` code
-  is crossing the managed Unitree `sport`/`agv` RPC bridge rather than direct
-  local HTTP.
+  be set to `rpc_bridge` to prove that ordinary `LocoClient`, `AgvClient`, and
+  `G1ArmActionClient` code is crossing the managed Unitree `sport`/`agv`/`arm`
+  RPC bridge rather than direct local HTTP.
 - `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
   named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
   create editable Unitree-style starting points without guessing boilerplate.
@@ -738,8 +743,8 @@ The current repo has the first narrow version of that API boundary:
 - MCP now has `unitree_command_official_mujoco_arm_pose` for commanding that
   managed session, and the Python `G1ArmActionClient` routes `right hand up`
   through it when `CYBER_UNITREE_TRANSPORT=dds` is set in simulator mode.
-- The Python `LocoClient` and `AgvClient` now route supported high-level
-  commands through `OfficialG1Sim.rpc_bridge_command()` when
+- The Python `LocoClient`, `AgvClient`, and `G1ArmActionClient` now route
+  supported high-level commands through `OfficialG1Sim.rpc_bridge_command()` when
   `CYBER_UNITREE_TRANSPORT=rpc_bridge` is set in simulator mode. This gives
   normal user scripts the same SDK-shaped bridge path as
   `unitree_command_rpc_bridge` without asking beginners to manually manage the

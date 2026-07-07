@@ -148,9 +148,9 @@ docker compose \
 ```
 
 The MCP wrapper is `unitree_probe_rpc_bridge_smoke`. Python users can call
-`OfficialG1Sim.rpc_bridge_smoke()`. This starts temporary `sport` and `agv`
-Unitree RPC servers inside the sidecar and calls them with SDK clients. It does
-not command MuJoCo or hardware; it proves the request/response service bridge
+`OfficialG1Sim.rpc_bridge_smoke()`. This starts temporary `sport`, `agv`, and
+`arm` Unitree RPC servers inside the sidecar and calls them with SDK clients.
+It does not command hardware; it proves the request/response service bridge
 shape before a long-running bridge maps those APIs onto simulator providers.
 
 Start a managed Unitree-shaped RPC bridge:
@@ -187,19 +187,23 @@ docker compose \
   unitree-g1-sdk2-sidecar
 ```
 
-This first managed bridge keeps
-`sport` and `agv` SDK2 servers alive and uses Cybernetic's simulator provider
-at `CYBER_SIMULATOR_GAME_CONTROL_URL` for safe read/write calls. Getter RPCs
+This first managed bridge keeps `sport`, `agv`, and `arm` SDK2 servers alive
+for external SDK2 clients and uses Cybernetic's simulator provider at
+`CYBER_SIMULATOR_GAME_CONTROL_URL` for safe read/write calls.
+`arm.ExecuteAction` maps known official G1 action IDs such as `right hand up`
+to simulator poses, while unknown action IDs are recorded as bridge-state-only
+intent. Getter RPCs
 such as `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
 `sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the simulator
 when it is reachable and fall back to bridge state otherwise. Setter RPCs
 forward:
 `sport.SetFsmId`, `sport.SetBalanceMode`, `sport.SetSwingHeight`,
-`sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`, `agv.Move`, and
-`agv.HeightAdjust`. `HeightAdjust` is accepted for SDK compatibility but is
-reported as `bridge_state_only` until the local simulator has a modeled
-height-column actuator. This also covers common `LocoClient` shortcuts
-including `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`. If the simulator
+`sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`,
+`arm.ExecuteAction`, `agv.Move`, and `agv.HeightAdjust`. `HeightAdjust` is
+accepted for SDK compatibility but is reported as `bridge_state_only` until the
+local simulator has a modeled height-column actuator. This also covers common
+`LocoClient` shortcuts including `Damp`, `StopMove`, `WaveHand`, and
+`ShakeHand`. If the simulator
 HTTP bridge is unavailable or the operation is unsupported, the RPC still
 returns `RPC_OK` for SDK compatibility, but the JSON response marks
 `simulator_forward.provider` or

@@ -15,6 +15,44 @@ from urllib.request import Request, urlopen
 
 DEFAULT_SIMULATOR_GAME_CONTROL_URL = "http://127.0.0.1:38383"
 
+G1_ARM_ACTIONS = {
+    "release arm": 99,
+    "two-hand kiss": 11,
+    "left kiss": 12,
+    "right kiss": 13,
+    "hands up": 15,
+    "clap": 17,
+    "high five": 18,
+    "hug": 19,
+    "heart": 20,
+    "right heart": 21,
+    "reject": 22,
+    "right hand up": 23,
+    "x-ray": 24,
+    "face wave": 25,
+    "high wave": 26,
+    "shake hand": 27,
+}
+
+G1_ARM_POSES_BY_ACTION_ID = {
+    99: "neutral",
+    11: "two_hand_kiss",
+    12: "left_kiss",
+    13: "right_kiss",
+    15: "hands_up",
+    17: "clap",
+    18: "high_five",
+    19: "hug",
+    20: "heart",
+    21: "right_heart",
+    22: "reject",
+    23: "raise_right_hand",
+    24: "x_ray",
+    25: "face_wave",
+    26: "high_wave",
+    27: "shake_hand",
+}
+
 
 def exists(path: str) -> bool:
     return Path(path).exists()
@@ -1501,11 +1539,22 @@ def probe_unitree_rpc_bridge_smoke(domain: int, interface: str | None) -> dict:
                 "velocity": [0.0, 0.0, 0.0],
                 "height_velocity": 0.0,
             },
+            "arm": {
+                "last_action_id": None,
+                "last_pose": None,
+                "action_count": 0,
+            },
         },
     }
     try:
         sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
         from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+        from unitree_sdk2py.g1.arm.g1_arm_action_api import (
+            ARM_ACTION_API_VERSION,
+            ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION,
+            ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST,
+        )
+        from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
         from unitree_sdk2py.g1.loco.g1_loco_api import (
             LOCO_API_VERSION,
             ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
@@ -1596,6 +1645,39 @@ def probe_unitree_rpc_bridge_smoke(domain: int, interface: str | None) -> dict:
         agv.Start(False)
         report["services_started"].append("agv")
 
+        arm = Server("arm")
+        arm._SetApiVersion(ARM_ACTION_API_VERSION)
+        arm_state = report["bridge_state"]["arm"]
+
+        def arm_execute_action(parameter: str):
+            payload = _safe_json_loads(parameter)
+            action_id = int(payload.get("data", 0))
+            pose = G1_ARM_POSES_BY_ACTION_ID.get(action_id)
+            arm_state["last_action_id"] = action_id
+            arm_state["last_pose"] = pose
+            arm_state["action_count"] = int(arm_state.get("action_count", 0)) + 1
+            if pose:
+                simulator_forward = _forward_simulator_command({"command": "pose", "pose": pose, "unitree_action_id": action_id})
+            else:
+                simulator_forward = _bridge_state_only_simulator_result(
+                    {"command": "arm_action", "action_id": action_id},
+                    f"Unknown G1 arm action id {action_id}; bridge recorded intent only.",
+                )
+            arm_state["last_simulator_forward"] = simulator_forward
+            return 0, json.dumps({"data": action_id, "pose": pose, "simulator_forward": simulator_forward})
+
+        def arm_get_action_list(_parameter: str):
+            actions = [
+                {"name": name, "id": action_id, "simulated": action_id in G1_ARM_POSES_BY_ACTION_ID}
+                for name, action_id in sorted(G1_ARM_ACTIONS.items(), key=lambda item: item[1])
+            ]
+            return 0, json.dumps(actions)
+
+        arm._RegistHandler(ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION, arm_execute_action, False)
+        arm._RegistHandler(ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST, arm_get_action_list, False)
+        arm.Start(False)
+        report["services_started"].append("arm")
+
         time.sleep(0.3)
 
         loco = LocoClient()
@@ -1612,13 +1694,19 @@ def probe_unitree_rpc_bridge_smoke(domain: int, interface: str | None) -> dict:
         agv_client._RegistApi(1002, 0)
         _record_rpc_call(report["calls"], "agv.Move", lambda: agv_client._Call(1001, json.dumps({"vx": 0.0, "vy": 0.0, "vyaw": 0.0})))
         _record_rpc_call(report["calls"], "agv.HeightAdjust", lambda: agv_client._Call(1002, json.dumps({"data": 0.0})))
+
+        arm_client = G1ArmActionClient()
+        arm_client.SetTimeout(timeout)
+        arm_client.Init()
+        _record_rpc_call(report["calls"], "arm.GetActionList", arm_client.GetActionList)
+        _record_rpc_call(report["calls"], "arm.ExecuteAction", lambda: arm_client.ExecuteAction(action_map["right hand up"]))
     except Exception as exc:
         report["error"] = str(exc)
         report["traceback"] = traceback.format_exc()
 
     report["ok"] = bool(report.get("services_started") and report["calls"] and all(call.get("ok") for call in report["calls"]))
     if report["ok"]:
-        report["next_step"] = "Promote this temporary SDK2 RPC server pattern into a managed bridge that maps sport/agv requests onto the simulator provider boundary."
+        report["next_step"] = "Promote this temporary SDK2 RPC server pattern into a managed bridge that maps sport/agv/arm requests onto the simulator provider boundary."
     else:
         report["next_step"] = "Fix the temporary SDK2 RPC bridge before using it as the high-level Unitree service adapter."
     return report
@@ -1641,7 +1729,7 @@ def serve_unitree_rpc_bridge(domain: int, interface: str | None) -> int:
         services = _start_unitree_rpc_bridge_services(domain, interface, report["bridge_state"])
         report["services_started"] = services
         report["ok"] = True
-        report["next_step"] = "Keep this container running as the Unitree sport/agv RPC bridge; supported setter RPCs now forward to Cybernetic's simulator HTTP provider when it is reachable."
+        report["next_step"] = "Keep this container running as the Unitree sport/agv/arm RPC bridge; supported setter/action RPCs now forward to Cybernetic's simulator HTTP provider when it is reachable."
     except Exception as exc:
         report["error"] = str(exc)
         report["traceback"] = traceback.format_exc()
@@ -1766,12 +1854,22 @@ def _initial_rpc_bridge_state() -> dict:
             "velocity": [0.0, 0.0, 0.0],
             "height_velocity": 0.0,
         },
+        "arm": {
+            "last_action_id": None,
+            "last_pose": None,
+            "action_count": 0,
+        },
     }
 
 
 def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridge_state: dict) -> list[str]:
     sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
     from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+    from unitree_sdk2py.g1.arm.g1_arm_action_api import (
+        ARM_ACTION_API_VERSION,
+        ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION,
+        ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST,
+    )
     from unitree_sdk2py.g1.loco.g1_loco_api import (
         LOCO_API_VERSION,
         ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
@@ -1974,10 +2072,44 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
     agv.Start(False)
     started.append("agv")
 
+    arm = Server("arm")
+    arm._SetApiVersion(ARM_ACTION_API_VERSION)
+    arm_state = bridge_state["arm"]
+
+    def arm_execute_action(parameter: str):
+        payload = _safe_json_loads(parameter)
+        action_id = int(payload.get("data", 0))
+        pose = G1_ARM_POSES_BY_ACTION_ID.get(action_id)
+        arm_state["last_action_id"] = action_id
+        arm_state["last_pose"] = pose
+        arm_state["action_count"] = int(arm_state.get("action_count", 0)) + 1
+        if pose:
+            simulator_forward = _forward_simulator_command({"command": "pose", "pose": pose, "unitree_action_id": action_id})
+        else:
+            simulator_forward = _bridge_state_only_simulator_result(
+                {"command": "arm_action", "action_id": action_id},
+                f"Unknown G1 arm action id {action_id}; bridge recorded intent only.",
+            )
+        arm_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": action_id, "pose": pose, "simulator_forward": simulator_forward})
+
+    def arm_get_action_list(_parameter: str):
+        actions = [
+            {"name": name, "id": action_id, "simulated": action_id in G1_ARM_POSES_BY_ACTION_ID}
+            for name, action_id in sorted(G1_ARM_ACTIONS.items(), key=lambda item: item[1])
+        ]
+        return 0, json.dumps(actions)
+
+    arm._RegistHandler(ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION, arm_execute_action, False)
+    arm._RegistHandler(ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST, arm_get_action_list, False)
+    arm.Start(False)
+    started.append("arm")
+
     return started
 
 
 def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
+    from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
     from unitree_sdk2py.g1.loco.g1_loco_api import (
         LOCO_API_VERSION,
         ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
@@ -2082,6 +2214,12 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
     agv_client._RegistApi(1002, 0)
     _record_rpc_call(calls, "agv.Move", lambda: agv_client._Call(1001, json.dumps({"vx": 0.0, "vy": 0.0, "vyaw": 0.0})))
     _record_rpc_call(calls, "agv.HeightAdjust", lambda: agv_client._Call(1002, json.dumps({"data": 0.0})))
+
+    arm_client = G1ArmActionClient()
+    arm_client.SetTimeout(timeout)
+    arm_client.Init()
+    _record_rpc_call(calls, "arm.GetActionList", arm_client.GetActionList)
+    _record_rpc_call(calls, "arm.ExecuteAction", lambda: arm_client.ExecuteAction(action_map["right hand up"]))
 
 
 def _safe_json_loads(text: str) -> dict:
@@ -2202,6 +2340,11 @@ def _call_unitree_rpc_bridge_command(
     params: dict,
     timeout: float,
 ) -> dict:
+    from unitree_sdk2py.g1.arm.g1_arm_action_api import (
+        ARM_ACTION_API_VERSION,
+        ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION,
+        ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST,
+    )
     from unitree_sdk2py.g1.loco.g1_loco_api import (
         LOCO_API_VERSION,
         ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
@@ -2301,6 +2444,17 @@ def _call_unitree_rpc_bridge_command(
             lambda: {"data": float(_first_param(params, "vz", "z", "data", default=0.0))},
         ),
     }
+    arm_methods = {
+        "execute_action": (
+            "arm.ExecuteAction",
+            ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION,
+            lambda: {"data": int(_first_param(params, "action_id", "data", default=23))},
+        ),
+        "right_hand_up": ("arm.ExecuteAction", ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION, lambda: {"data": 23}),
+        "raise_right_hand": ("arm.ExecuteAction", ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION, lambda: {"data": 23}),
+        "release_arm": ("arm.ExecuteAction", ROBOT_API_ID_ARM_ACTION_EXECUTE_ACTION, lambda: {"data": 99}),
+        "get_action_list": ("arm.GetActionList", ROBOT_API_ID_ARM_ACTION_GET_ACTION_LIST, lambda: {}),
+    }
 
     if normalized_service == "sport":
         methods = sport_methods
@@ -2308,8 +2462,11 @@ def _call_unitree_rpc_bridge_command(
     elif normalized_service == "agv":
         methods = agv_methods
         api_version = "1.0.0.1"
+    elif normalized_service == "arm":
+        methods = arm_methods
+        api_version = ARM_ACTION_API_VERSION
     else:
-        raise ValueError("unsupported Unitree RPC bridge service; expected sport or agv")
+        raise ValueError("unsupported Unitree RPC bridge service; expected sport, agv, or arm")
     if normalized_method not in methods:
         raise ValueError(
             f"unsupported {normalized_service} bridge method {method!r}; "

@@ -314,11 +314,12 @@ Tasks:
   `agv` service servers in the sidecar and calls them with official-style
   clients. The goal is not motion yet; it proves the missing service bridge can
   be built using Unitree's own RPC server/client machinery.
-- Current bridge evidence: the live smoke started `sport` and `agv`, then
-  `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
-  and `agv.HeightAdjust` all returned `RPC_OK`. The next real implementation
-  should keep those servers running and map handlers onto the simulator
-  provider boundary instead of the in-memory smoke state.
+- Current bridge evidence: the live smoke started `sport`, `agv`, and `arm`,
+  then `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`,
+  `agv.Move`, `agv.HeightAdjust`, and `arm.ExecuteAction` all returned
+  `RPC_OK`. The next real implementation should keep those servers running
+  and map handlers onto the simulator provider boundary instead of the
+  in-memory smoke state.
 - Done: add the first managed RPC bridge lifecycle with
   `unitree_start_rpc_bridge`, `unitree_rpc_bridge_status`,
   `unitree_probe_rpc_bridge_client`, `unitree_verify_rpc_bridge`, and
@@ -358,12 +359,17 @@ Tasks:
   recorded intent.
 - Done: add `CYBER_UNITREE_TRANSPORT=rpc_bridge` as the first normal
   Unitree-shaped Python facade route through that managed service bridge.
-  `LocoClient` and `AgvClient` now keep their official-style method names, but
-  supported simulator-mode calls go through `UnitreeSession` ->
+  `LocoClient`, `AgvClient`, and `G1ArmActionClient` now keep their
+  official-style method names, but supported simulator-mode calls go through
+  `UnitreeSession` ->
   `OfficialG1Sim.rpc_bridge_command()` -> `unitree-g1-rpc-bridge` instead of
   direct local HTTP. This is still simulator-only and still a mapped subset, but
   it makes the bridge invisible for beginner scripts while preserving
   `last_response` evidence for power users and agents.
+- Done: add the managed RPC bridge `arm` service with official
+  `G1ArmActionClient.ExecuteAction()` / `GetActionList()` IDs. Known upstream
+  arm action IDs map to simulator poses through the same bridge evidence path;
+  unknown IDs remain explicit bridge-state-only intent.
 - Done: expand the bridge/facade mapping for upstream-style locomotion smoke:
   `HighStand` and `LowStand` now map through the bridge as official
   `SetStandHeight(UINT32_MAX/0)` semantics, and wave/shake hand task IDs match

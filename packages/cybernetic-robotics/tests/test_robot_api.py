@@ -707,6 +707,64 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_unitree_style_arm_action_client_can_use_rpc_bridge_transport(self):
+        previous = {
+            "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+            "CYBER_UNITREE_MODE": os.environ.get("CYBER_UNITREE_MODE"),
+        }
+        os.environ["CYBER_UNITREE_TRANSPORT"] = "rpc_bridge"
+        os.environ["CYBER_UNITREE_MODE"] = "sim"
+
+        class FakeOfficial:
+            calls: list[dict[str, object]] = []
+
+            @classmethod
+            def discover(cls, *, timeout: int = 300):
+                return cls()
+
+            def rpc_bridge_command(self, *, service, method, params=None, timeout=1.0, start_if_needed=False, stop_after=False):
+                type(self).calls.append(
+                    {
+                        "service": service,
+                        "method": method,
+                        "params": params or {},
+                        "start_if_needed": start_if_needed,
+                    }
+                )
+                body = {
+                    "data": (params or {}).get("action_id", 23),
+                    "pose": (params or {}).get("pose", "raise_right_hand"),
+                    "simulator_forward": {"ok": True, "provider": "cybernetic_game_control_http"},
+                }
+                return {
+                    "ok": True,
+                    "summary": {"call_count": 1, "all_calls_ok": True, "simulator_forward_count": 1},
+                    "calls": [{"name": "arm.ExecuteAction", "ok": True, "return": [0, json.dumps(body)]}],
+                }
+
+        try:
+            with patch("cybernetic_robotics.official.OfficialG1Sim", FakeOfficial):
+                arm = G1ArmActionClient()
+                arm.SetTimeout(2.0)
+                arm.Init()
+
+                code = arm.ExecuteAction(action_map["right hand up"])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(FakeOfficial.calls[0]["service"], "arm")
+            self.assertEqual(FakeOfficial.calls[0]["method"], "execute_action")
+            self.assertEqual(FakeOfficial.calls[0]["params"]["action_id"], action_map["right hand up"])
+            self.assertEqual(arm.last_response["transport"], "rpc_bridge")
+            self.assertEqual(arm.last_response["provider"], "unitree_rpc_bridge_simulator")
+            self.assertEqual(arm.last_response["pose"], "raise_right_hand")
+            self.assertFalse(arm.last_response["compatibility_fallback"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_unitree_style_g1_agv_client_uses_simulator_motion(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")

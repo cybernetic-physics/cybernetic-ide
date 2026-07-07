@@ -159,27 +159,28 @@ manual control instead of the context manager, use `official.start_session()`,
 whether official Unitree RPC request topics such as `rt/api/sport/request` and
 `rt/api/agv/request` have matched service-side readers before any RPC command
 is sent.
-`official.rpc_bridge_smoke()` starts temporary Unitree-shaped `sport` and
-`agv` RPC servers inside the SDK2 sidecar and calls them with SDK clients. This
-does not command MuJoCo or hardware; it proves the server/client bridge shape
-needed for a future long-running service bridge.
+`official.rpc_bridge_smoke()` starts temporary Unitree-shaped `sport`, `agv`,
+and `arm` RPC servers inside the SDK2 sidecar and calls them with SDK clients.
+This does not command hardware; it proves the server/client bridge shape needed
+for a future long-running service bridge.
 `official.start_rpc_bridge()` promotes that shape into a named
 `unitree-g1-rpc-bridge` container, while `official.rpc_bridge_client()` calls
 the running bridge with official SDK clients and `official.stop_rpc_bridge()`
-removes it. The managed bridge keeps `sport`/`agv` state and now forwards safe
-read/write RPCs to the local simulator provider when
+removes it. The managed bridge keeps `sport`/`agv`/`arm` state and now forwards
+safe read/write RPCs to the local simulator provider when
 `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
 `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
 `sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the simulator
 and include `simulator_readback` evidence in raw debug responses. Setter RPCs
 currently forwarded include `sport.SetFsmId`, `sport.SetBalanceMode`,
 `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
-`sport.SetTaskId`, and `agv.Move`. `agv.HeightAdjust` is accepted for SDK
-compatibility but reported as `bridge_state_only` until the local simulator has
-a modeled height-column actuator. That covers common `LocoClient` shortcuts
-such as `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`; unreachable or
-unsupported simulator calls are reported as `bridge_state_only` in the RPC JSON
-response instead of being hidden.
+`sport.SetTaskId`, `arm.ExecuteAction`, and `agv.Move`. `agv.HeightAdjust` is
+accepted for SDK compatibility but reported as `bridge_state_only` until the
+local simulator has a modeled height-column actuator. That covers common
+`LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and
+`ShakeHand`, plus normal `G1ArmActionClient.ExecuteAction(...)`; unreachable
+or unsupported simulator calls are reported as `bridge_state_only` in the RPC
+JSON response instead of being hidden.
 `official.verify_rpc_bridge()` is the preferred Python evidence check for this
 managed bridge: it can start the bridge if needed, call the official SDK
 clients, and return a compact summary with call counts, `RPC_OK` counts,
@@ -198,13 +199,15 @@ print(official.rpc_bridge_command(
 )["summary"])
 print(official.rpc_bridge_command(service="sport", method="get_fsm_id")["summary"])
 print(official.rpc_bridge_command(service="agv", method="height_adjust", params={"vz": 0.0})["summary"])
+print(official.rpc_bridge_command(service="arm", method="execute_action", params={"action_id": 23})["summary"])
 ```
 
 The Agent-panel MCP mirror is `unitree_command_rpc_bridge`; it accepts the same
 `service`, `method`, `params`, `timeout_seconds`, `start_if_needed`, and
 `stop_after` fields. Supported aliases include `get_fsm_id`, `move`,
 `stop_move`, `damp`, `stand_up`, `set_stand_height`, `set_swing_height`,
-`set_balance_mode`, `wave_hand`, `shake_hand`, and `agv.height_adjust`.
+`set_balance_mode`, `wave_hand`, `shake_hand`, `agv.height_adjust`,
+`arm.execute_action`, and `arm.get_action_list`.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
@@ -218,13 +221,14 @@ CycloneDDS reports loopback UDP write failures, so locomotion remains on the
 explicit local compatibility route until the sport RPC peer is proven. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
-With `CYBER_UNITREE_TRANSPORT=rpc_bridge`, high-level `LocoClient` and
-`AgvClient` methods use the managed `unitree-g1-rpc-bridge` service instead of
-direct local HTTP. That means normal Unitree-shaped calls such as
-`loco.Move(...)`, `loco.GetFsmId()`, `loco.WaveHand()`, `agv.Move(...)`, and
-`agv.HeightAdjust(...)` cross the same SDK2-shaped `sport`/`agv` RPC boundary
-as the MCP `unitree_command_rpc_bridge` tool, while still exposing simulator
-forward/readback evidence in `last_response`.
+With `CYBER_UNITREE_TRANSPORT=rpc_bridge`, high-level `LocoClient`,
+`AgvClient`, and `G1ArmActionClient` methods use the managed
+`unitree-g1-rpc-bridge` service instead of direct local HTTP. That means normal
+Unitree-shaped calls such as `loco.Move(...)`, `loco.GetFsmId()`,
+`loco.WaveHand()`, `agv.Move(...)`, `agv.HeightAdjust(...)`, and
+`arm.ExecuteAction(action_map["right hand up"])` cross the same SDK2-shaped
+RPC boundary as the MCP `unitree_command_rpc_bridge` tool, while still
+exposing simulator forward/readback evidence in `last_response`.
 
 ## Unitree SDK2-Shaped Code
 
@@ -257,7 +261,7 @@ CYBER_UNITREE_TRANSPORT=rpc_bridge python3 examples/g1_loco_sdk.py
 
 In that mode the shim keeps the same `LocoClient`/`AgvClient` method names, but
 the call path is `unitree_sdk2py` facade -> `UnitreeSession` ->
-`OfficialG1Sim.rpc_bridge_command()` -> managed SDK2 `sport`/`agv` bridge ->
+`OfficialG1Sim.rpc_bridge_command()` -> managed SDK2 `sport`/`agv`/`arm` bridge ->
 local MuJoCo simulator provider. It is still simulator-only and still a mapped
 subset, but it is much closer to the official Unitree request/response shape
 than direct local HTTP.
@@ -446,7 +450,8 @@ currently supported bounded hand-raise poses to the managed official Unitree
 MuJoCo + SDK2/CycloneDDS session. `LocoClient` and `AgvClient` delegate to
 `UnitreeSession.execute_loco_command()` / `execute_agv_command()`: by default
 they use local HTTP, while `CYBER_UNITREE_TRANSPORT=rpc_bridge` routes the
-supported high-level sport/agv subset through the managed Unitree RPC bridge.
+supported high-level sport/agv/arm subset through the managed Unitree RPC
+bridge.
 `ChannelPublisher("rt/lowcmd")` and `ChannelSubscriber("rt/lowstate")` also
 cross the same session boundary. Until generic lowcmd streaming is promoted
 into the managed official provider, DDS-mode locomotion and lowcmd calls are

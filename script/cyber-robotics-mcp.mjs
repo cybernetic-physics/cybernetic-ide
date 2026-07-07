@@ -248,7 +248,7 @@ const tools = [
   ),
   tool(
     "unitree_probe_rpc_bridge_smoke",
-    "Start temporary Unitree-shaped sport/agv RPC services in the SDK2 sidecar and call them with official SDK clients.",
+    "Start temporary Unitree-shaped sport/agv/arm RPC services in the SDK2 sidecar and call them with official SDK clients.",
     {
       timeout_seconds: {
         type: "number",
@@ -261,19 +261,19 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
-  tool("unitree_start_rpc_bridge", "Start a managed Unitree sport/agv RPC bridge container on the SDK2 DDS domain.", {}, [], {
+  tool("unitree_start_rpc_bridge", "Start a managed Unitree sport/agv/arm RPC bridge container on the SDK2 DDS domain.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
     openWorldHint: true,
   }),
-  tool("unitree_rpc_bridge_status", "Inspect the managed Unitree sport/agv RPC bridge container.", {}, [], {
+  tool("unitree_rpc_bridge_status", "Inspect the managed Unitree sport/agv/arm RPC bridge container.", {}, [], {
     readOnlyHint: true,
     idempotentHint: true,
     openWorldHint: true,
   }),
   tool(
     "unitree_probe_rpc_bridge_client",
-    "Call an already-running managed Unitree sport/agv RPC bridge with official SDK clients.",
+    "Call an already-running managed Unitree sport/agv/arm RPC bridge with official SDK clients.",
     {
       timeout_seconds: {
         type: "number",
@@ -288,7 +288,7 @@ const tools = [
   ),
   tool(
     "unitree_verify_rpc_bridge",
-    "Verify the managed Unitree sport/agv RPC bridge and summarize simulator readback/forwarding evidence.",
+    "Verify the managed Unitree sport/agv/arm RPC bridge and summarize simulator readback/forwarding evidence.",
     {
       timeout_seconds: {
         type: "number",
@@ -313,11 +313,11 @@ const tools = [
   ),
   tool(
     "unitree_command_rpc_bridge",
-    "Send one SDK-shaped Unitree sport/agv RPC through the managed bridge and summarize simulator forwarding/readback evidence.",
+    "Send one SDK-shaped Unitree sport/agv/arm RPC through the managed bridge and summarize simulator forwarding/readback evidence.",
     {
       service: {
         type: "string",
-        enum: ["sport", "agv"],
+        enum: ["sport", "agv", "arm"],
         default: "sport",
         description: "Unitree RPC service to call.",
       },
@@ -325,7 +325,7 @@ const tools = [
         type: "string",
         default: "get_fsm_id",
         description:
-          "Method alias such as get_fsm_id, move, stop_move, damp, wave_hand, shake_hand, set_stand_height, or height_adjust.",
+          "Method alias such as get_fsm_id, move, stop_move, damp, wave_hand, shake_hand, set_stand_height, height_adjust, execute_action, or get_action_list.",
       },
       params: {
         type: "object",
@@ -353,7 +353,7 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: false, openWorldHint: true },
   ),
-  tool("unitree_stop_rpc_bridge", "Stop and remove the managed Unitree sport/agv RPC bridge container.", {}, [], {
+  tool("unitree_stop_rpc_bridge", "Stop and remove the managed Unitree sport/agv/arm RPC bridge container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
     openWorldHint: true,
@@ -1679,7 +1679,7 @@ function providerStatusFromDiagnostics(diagnostics) {
         "No CycloneDDS transport is used.",
         "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
       ],
-      next_step: "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv tests, or dds for official lowcmd/lowstate sidecar probes.",
+      next_step: "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv/arm tests, or dds for official lowcmd/lowstate sidecar probes.",
       config,
       warnings: diagnostics.warnings || [],
       diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
@@ -1714,16 +1714,16 @@ function providerStatusFromDiagnostics(diagnostics) {
       ok: diagnostics.ok === true && officialOk,
       provider: officialOk ? "unitree_rpc_bridge_simulator" : "unitree_rpc_bridge_simulator_unready",
       implemented: officialOk,
-      command_path: "Official SDK2-shaped sport/agv RPC bridge backed by the local simulator provider.",
+      command_path: "Official SDK2-shaped sport/agv/arm RPC bridge backed by the local simulator provider.",
       telemetry_path: "Bridge command evidence plus simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames.",
       motion: {
-        arm_actions: "sport_set_arm_task_bridge_for_wave_shake_plus_local_arm_facade",
+        arm_actions: "managed_unitree_rpc_bridge_arm_service",
         locomotion: "managed_unitree_rpc_bridge_sport_agv",
         lowcmd: "local_http_simulator_until_generic_dds_streaming_lands",
       },
       limitations: [
         "This is a simulator-side service bridge, not physical robot DDS control.",
-        "Only the mapped sport/agv RPC subset is available; generic lowcmd streaming remains separate.",
+        "Only the mapped sport/agv/arm RPC subset is available; generic lowcmd streaming remains separate.",
       ],
       next_step: "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, then promote lowcmd streaming separately.",
       config,
@@ -2786,16 +2786,16 @@ function roboticsToolReference() {
       toolReference(
         "unitree_probe_rpc_bridge_smoke",
         "diagnostic",
-        "Starts temporary sport/agv RPC services and verifies official SDK clients can call them.",
+        "Starts temporary sport/agv/arm RPC services and verifies official SDK clients can call them.",
         "Official SDK2 sidecar prepared; does not command the robot.",
       ),
       toolReference(
         "unitree_start_rpc_bridge",
         "service-start",
-        "Starts a named sport/agv RPC bridge container.",
+        "Starts a named sport/agv/arm RPC bridge container.",
         "Official SDK2 sidecar prepared.",
       ),
-      toolReference("unitree_rpc_bridge_status", "read", "Inspects the named sport/agv RPC bridge container.", "Bridge may or may not be running."),
+      toolReference("unitree_rpc_bridge_status", "read", "Inspects the named sport/agv/arm RPC bridge container.", "Bridge may or may not be running."),
       toolReference(
         "unitree_probe_rpc_bridge_client",
         "diagnostic",
@@ -2811,10 +2811,10 @@ function roboticsToolReference() {
       toolReference(
         "unitree_command_rpc_bridge",
         "robot-motion",
-        "Sends one SDK-shaped sport/agv RPC through the managed bridge.",
+        "Sends one SDK-shaped sport/agv/arm RPC through the managed bridge.",
         "Managed Unitree RPC bridge running or start_if_needed enabled.",
       ),
-      toolReference("unitree_stop_rpc_bridge", "service-stop", "Stops and removes the named sport/agv RPC bridge container.", "Bridge container exists."),
+      toolReference("unitree_stop_rpc_bridge", "service-stop", "Stops and removes the named sport/agv/arm RPC bridge container.", "Bridge container exists."),
       toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
         "read-with-optional-stop",

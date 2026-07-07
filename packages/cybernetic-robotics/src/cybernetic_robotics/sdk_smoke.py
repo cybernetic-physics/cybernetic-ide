@@ -55,7 +55,7 @@ def run_official_g1_sdk_smoke(
             "agent_hints": [
                 "This is behavior-level smoke coverage for safe official-style calls, not full physical parity.",
                 "Use sdk-audit first for import/method coverage, then sdk-smoke for simulator behavior evidence.",
-                "Use transport=rpc_bridge to prove normal LocoClient/AgvClient calls cross the managed Unitree RPC bridge.",
+                "Use transport=rpc_bridge to prove normal LocoClient/AgvClient/G1ArmActionClient calls cross the managed Unitree RPC bridge.",
                 "Run safety_stop after manual experiments that leave locomotion or lowcmd active.",
             ],
         }

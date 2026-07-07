@@ -23,7 +23,7 @@ class UnitreeTransportConfig:
     `local_http` is the lightweight simulator bridge. `dds` targets the
     managed official Unitree MuJoCo sidecar for supported lowcmd/lowstate
     probes. `rpc_bridge` is the simulator-only Unitree RPC service adapter for
-    high-level sport/agv calls.
+    high-level sport/agv/arm calls.
     """
 
     transport: str = LOCAL_HTTP
@@ -210,20 +210,20 @@ class UnitreeSession:
                 "No CycloneDDS transport is used.",
                 "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
             ]
-            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv tests, or dds for official lowcmd/lowstate sidecar probes."
+            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv/arm tests, or dds for official lowcmd/lowstate sidecar probes."
         elif transport == RPC_BRIDGE and mode == SIM:
             provider = "unitree_rpc_bridge_simulator" if official_ok else "unitree_rpc_bridge_simulator_unready"
             implemented = official_ok
-            command_path = "Official SDK2-shaped sport/agv RPC bridge backed by the local simulator provider."
+            command_path = "Official SDK2-shaped sport/agv/arm RPC bridge backed by the local simulator provider."
             telemetry_path = "Bridge command evidence plus simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames."
             motion = {
-                "arm_actions": "sport_set_arm_task_bridge_for_wave_shake_plus_local_arm_facade",
+                "arm_actions": "managed_unitree_rpc_bridge_arm_service",
                 "locomotion": "managed_unitree_rpc_bridge_sport_agv",
                 "lowcmd": "local_http_simulator_until_generic_dds_streaming_lands",
             }
             limitations = [
                 "This is a simulator-side service bridge, not physical robot DDS control.",
-                "Only the mapped sport/agv RPC subset is available; generic lowcmd streaming remains separate.",
+                "Only the mapped sport/agv/arm RPC subset is available; generic lowcmd streaming remains separate.",
             ]
             next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, then promote lowcmd streaming separately."
         elif transport == DDS and mode == SIM:
@@ -280,15 +280,34 @@ class UnitreeSession:
         the managed official Unitree MuJoCo + SDK2/CycloneDDS session.
         """
 
-        if self.config.transport in {LOCAL_HTTP, RPC_BRIDGE} and self.config.mode == SIM:
+        if self.config.transport == RPC_BRIDGE and self.config.mode == SIM:
+            official = self._official(timeout=timeout)
+            result = official.rpc_bridge_command(
+                service="arm",
+                method="execute_action",
+                params={"action_id": int(action_id), "pose": pose},
+                timeout=float(timeout or 1.0),
+                start_if_needed=True,
+            )
+            response = _normalize_rpc_bridge_command_response(RPC_BRIDGE, "unitree_rpc_bridge_simulator", "execute_arm_action", result)
+            response.update(
+                {
+                    "unitree_action_id": int(action_id),
+                    "pose": pose,
+                    "compatibility_fallback": False,
+                }
+            )
+            return response
+
+        if self.config.transport == LOCAL_HTTP and self.config.mode == SIM:
             response = self.simulator.pose(pose)
             return {
                 **response,
                 "transport": self.config.transport,
-                "provider": "local_http_simulator" if self.config.transport == LOCAL_HTTP else "local_http_arm_facade_with_rpc_bridge_loco",
+                "provider": "local_http_simulator",
                 "unitree_action_id": int(action_id),
                 "pose": pose,
-                "compatibility_fallback": self.config.transport == RPC_BRIDGE,
+                "compatibility_fallback": False,
             }
 
         if self.config.transport == DDS and self.config.mode == SIM:
