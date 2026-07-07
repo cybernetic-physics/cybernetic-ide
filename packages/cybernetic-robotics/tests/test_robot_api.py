@@ -721,7 +721,10 @@ class RobotApiTests(unittest.TestCase):
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
             os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
             try:
-                report = run_official_g1_sdk_smoke("all", RobotEndpoints(game_control_url=fake.url))
+                with tempfile.TemporaryDirectory() as tmp:
+                    output = Path(tmp) / "sdk-smoke.json"
+                    report = run_official_g1_sdk_smoke("all", RobotEndpoints(game_control_url=fake.url), output)
+                    written = json.loads(output.read_text(encoding="utf-8"))
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
@@ -736,6 +739,10 @@ class RobotApiTests(unittest.TestCase):
         self.assertTrue(report["results"]["lowcmd"]["lowcmd_active"])
         self.assertTrue(report["status"]["lowcmd_active"])
         self.assertTrue(report["safety"]["safe_to_command"])
+        self.assertEqual(written["kind"], "all")
+        self.assertIn("lowcmd", written["results"])
+        self.assertEqual(written["output_path"], str(output))
+        self.assertEqual(report["output_path"], str(output))
 
     def test_official_g1_sdk_behavior_smoke_can_run_single_surface(self):
         with FakeServer() as fake:

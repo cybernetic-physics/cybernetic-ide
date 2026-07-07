@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     sdk_audit.add_argument("--upstream-root", default="/Users/cuboniks/wagmi/unitree_sdk2_python")
     sdk_smoke = subcommands.add_parser("sdk-smoke")
     sdk_smoke.add_argument("--kind", choices=["all", "arm", "loco", "lowcmd"], default="all")
+    sdk_smoke.add_argument("--output", type=Path)
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
@@ -88,7 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sdk-audit":
         return _print(audit_official_g1_examples(args.upstream_root))
     if args.command == "sdk-smoke":
-        return _print(run_official_g1_sdk_smoke(args.kind))
+        return _print(run_official_g1_sdk_smoke(args.kind, output_path=args.output))
 
     robot = G1Robot.connect(wait=args.command not in {"snapshot", "diagnostics"})
     if args.command == "status":

@@ -152,6 +152,11 @@ const tools = [
         default: "all",
         description: "Subset of official-style SDK behavior surfaces to smoke test.",
       },
+      output_path: {
+        type: "string",
+        default: ".runtime/sdk-smoke/latest.json",
+        description: "Workspace-relative JSON file for the smoke evidence report.",
+      },
     },
     [],
     {
@@ -1289,6 +1294,10 @@ function unitreeSdkCompatibilityAudit(args = {}) {
 
 function unitreeSdkBehaviorSmoke(args = {}) {
   const kind = ["all", "arm", "loco", "lowcmd"].includes(args.kind) ? args.kind : "all";
+  const outputPath = typeof args.output_path === "string" && args.output_path
+    ? args.output_path
+    : ".runtime/sdk-smoke/latest.json";
+  safeWorkspacePath(outputPath);
   const packageSrc = path.join(root, "packages/cybernetic-robotics/src");
   const env = {
     ...process.env,
@@ -1297,7 +1306,7 @@ function unitreeSdkBehaviorSmoke(args = {}) {
   };
   const result = runChecked(
     "python3",
-    ["-m", "cybernetic_robotics.cli", "sdk-smoke", "--kind", kind],
+    ["-m", "cybernetic_robotics.cli", "sdk-smoke", "--kind", kind, "--output", outputPath],
     { timeoutMs: 90_000, env },
   );
   let report = null;
@@ -1307,10 +1316,12 @@ function unitreeSdkBehaviorSmoke(args = {}) {
     report = null;
   }
   return {
-    command: `python3 -m cybernetic_robotics.cli sdk-smoke --kind ${kind}`,
+    command: `python3 -m cybernetic_robotics.cli sdk-smoke --kind ${kind} --output ${outputPath}`,
     stdout: result.stdout,
     stderr: result.stderr,
     report,
+    path: safeWorkspacePath(outputPath),
+    workspace_relative_path: outputPath,
   };
 }
 

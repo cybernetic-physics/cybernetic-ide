@@ -601,7 +601,10 @@ The current repo has the first narrow version of that API boundary:
   behavior-level checks through the same official-style imports: arm action,
   locomotion method calls, and lowcmd/lowstate channel publish/read. This proves
   the local simulator facade responds to safe SDK-shaped calls, but it still
-  does not prove whole-body balance or sim-to-real equivalence.
+  does not prove whole-body balance or sim-to-real equivalence. The CLI accepts
+  `--output .runtime/sdk-smoke/latest.json`; the MCP tool writes that same
+  workspace-relative JSON report path by default unless the agent passes a
+  different `output_path`.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the deeper transport boundary:
   `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
@@ -616,7 +619,8 @@ The current repo has the first narrow version of that API boundary:
 - `unitree_sdk_compatibility_audit` gives Agent-panel users the same
   official-example compatibility report before porting an upstream script.
 - `unitree_sdk_behavior_smoke` gives Agent-panel users a behavior-level smoke
-  check for safe Unitree SDK-shaped calls after the simulator is running.
+  check for safe Unitree SDK-shaped calls after the simulator is running, and
+  persists a JSON evidence report for later review.
 - `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
   named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
   create editable Unitree-style starting points without guessing boilerplate.

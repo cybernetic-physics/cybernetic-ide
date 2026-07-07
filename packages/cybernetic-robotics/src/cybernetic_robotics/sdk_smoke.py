@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from .config import RobotEndpoints
 from .g1 import G1Robot
 
 
-def run_official_g1_sdk_smoke(kind: str = "all", endpoints: RobotEndpoints | None = None) -> dict[str, Any]:
+def run_official_g1_sdk_smoke(
+    kind: str = "all",
+    endpoints: RobotEndpoints | None = None,
+    output_path: str | Path | None = None,
+) -> dict[str, Any]:
     """Run safe behavior-level smoke checks through Unitree SDK-shaped imports."""
 
     requested = _normalize_kind(kind)
@@ -21,7 +27,7 @@ def run_official_g1_sdk_smoke(kind: str = "all", endpoints: RobotEndpoints | Non
     robot = G1Robot.connect(endpoints=endpoints)
     status = robot.status()
     safety = robot.safety_check()
-    return {
+    report = {
         "ok": all(item.get("ok") for item in results.values()) and safety.get("safe_to_command", False),
         "kind": requested,
         "results": results,
@@ -41,6 +47,12 @@ def run_official_g1_sdk_smoke(kind: str = "all", endpoints: RobotEndpoints | Non
             "Run safety_stop after manual experiments that leave locomotion or lowcmd active.",
         ],
     }
+    if output_path is not None:
+        path = Path(output_path)
+        report["output_path"] = str(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
+    return report
 
 
 def _normalize_kind(kind: str) -> str:

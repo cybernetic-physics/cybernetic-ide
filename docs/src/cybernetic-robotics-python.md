@@ -421,12 +421,14 @@ cyber-g1 sdk-smoke --kind all
 cyber-g1 sdk-smoke --kind arm
 cyber-g1 sdk-smoke --kind loco
 cyber-g1 sdk-smoke --kind lowcmd
+cyber-g1 sdk-smoke --kind all --output .runtime/sdk-smoke/latest.json
 ```
 
 The smoke runner executes safe official-style `G1ArmActionClient`,
 `LocoClient`, and `ChannelPublisher` / `ChannelSubscriber` calls and returns
 status plus safety-check evidence. It intentionally avoids free-running
-official loops.
+official loops. Pass `--output` when you want a durable JSON artifact that an
+agent, bug report, or follow-up prompt can inspect without rerunning motion.
 
 ## Agent MCP Tools
 
@@ -492,6 +494,9 @@ generated-but-not-activated scene by passing its `scene_path`.
 `lowcmd_joint_target`, `scene_edit`, and `telemetry_monitor`. The generated
 scripts keep Unitree-style imports where possible, then use the local simulator
 bridge for evidence, snapshots, and safety stops.
+`unitree_sdk_behavior_smoke` runs the same SDK-shaped smoke path from the Agent
+panel and writes `.runtime/sdk-smoke/latest.json` by default, or a caller-chosen
+workspace-relative JSON path via `output_path`.
 
 ## Power User API
 

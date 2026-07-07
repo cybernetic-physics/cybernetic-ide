@@ -242,7 +242,8 @@ Tasks:
   behavior-level locomotion and balance parity are not proven.
 - Done: add `cyber-g1 sdk-smoke` and MCP `unitree_sdk_behavior_smoke` so agents
   and developers can run safe behavior-level checks through official-style arm,
-  loco, and lowcmd/lowstate imports against the simulator facade.
+  loco, and lowcmd/lowstate imports against the simulator facade, with optional
+  durable JSON evidence under `.runtime/sdk-smoke/`.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -391,7 +392,8 @@ Tasks:
 - Done: add `unitree_sdk_compatibility_audit` so agents can inspect official G1
   SDK example import and method coverage before adapting upstream scripts.
 - Done: add `unitree_sdk_behavior_smoke` so agents can validate safe
-  SDK-shaped simulator behavior before and after adapting scripts.
+  SDK-shaped simulator behavior before and after adapting scripts, and persist
+  the smoke report for follow-up inspection.
 
 Reasoning: MCP tools are how AI agents become robotics development partners.
 Good tools should be task-shaped, inspectable, and safe by default.
