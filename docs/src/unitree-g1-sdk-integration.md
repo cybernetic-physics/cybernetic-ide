@@ -359,6 +359,9 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_lowcmd_sdk.py` uses Unitree-shaped `ChannelPublisher`,
   `ChannelSubscriber`, `LowCmd_`, `LowState_`, `CRC`, and
   `MotionSwitcherClient` imports.
+- The channel shim also supports read-only `rt/sportmodestate` and
+  `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
+  synthesized from local simulator status and lowstate.
 - `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
   `/joint_state` and compiles joint-name targets back into simulator-backed
   lowcmd slots.

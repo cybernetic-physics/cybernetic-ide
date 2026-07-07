@@ -12,6 +12,7 @@ from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 
@@ -56,7 +57,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "pose": type(self).pose,
                         "paused": type(self).paused,
                         "actual_speed_factor": 0.0,
+                        "pelvis_height": 0.81,
                         "model_path": "/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml",
+                        "loco": type(self).loco,
+                        "render": {"camera": type(self).camera},
                     },
                 }
             )
@@ -81,6 +85,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         {"mode": 1, "q": 0.1 * index, "dq": 0.0, "tau_est": 0.0}
                         for index in range(35)
                     ],
+                    "wireless_remote": [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
                     "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
                 }
             )
@@ -350,6 +355,37 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(lowstate.mode_machine, 1)
                 self.assertEqual(lowstate.crc, 12345)
                 self.assertAlmostEqual(lowstate.motor_state[1].q, 0.1)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_go_telemetry_channels_use_same_simulator(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                loco = LocoClient()
+                loco.Init()
+                self.assertEqual(loco.Start(), 0)
+                self.assertEqual(loco.Move(0.2, -0.1, 0.3), 0)
+
+                sport_sub = ChannelSubscriber("rt/sportmodestate", SportModeState_)
+                sport_sub.Init()
+                sport = sport_sub.Read()
+
+                wireless_sub = ChannelSubscriber("rt/wirelesscontroller", WirelessController_)
+                wireless_sub.Init()
+                wireless = wireless_sub.Read()
+
+                self.assertEqual(sport.mode, 500 & 0xFF)
+                self.assertAlmostEqual(sport.body_height, 0.81)
+                self.assertEqual(sport.velocity, [0.2, -0.1, 0.3])
+                self.assertAlmostEqual(sport.yaw_speed, 0.3)
+                self.assertAlmostEqual(wireless.lx, 1.0)
+                self.assertAlmostEqual(wireless.rx, -1 / 127)
+                self.assertEqual(wireless.keys, 0x1234)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

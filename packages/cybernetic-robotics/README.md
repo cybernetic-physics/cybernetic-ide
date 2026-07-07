@@ -139,6 +139,26 @@ publisher.Write(command)
 See `examples/g1_lowcmd_sdk.py` for a conservative right-arm motion that uses
 the same channel shape.
 
+The simulator shim also exposes read-only approximations of Unitree MuJoCo's
+Go-family telemetry topics:
+
+```python
+from unitree_sdk2py.core.channel import ChannelSubscriber
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
+
+sport = ChannelSubscriber("rt/sportmodestate", SportModeState_)
+sport.Init()
+print(sport.Read().velocity)
+
+wireless = ChannelSubscriber("rt/wirelesscontroller", WirelessController_)
+wireless.Init()
+print(wireless.Read().keys)
+```
+
+These are synthesized from the local simulator status/lowstate endpoints. They
+are useful for import and topic-shape parity, not a replacement for full
+CycloneDDS telemetry.
+
 For named-joint control, use the higher-level package API:
 
 ```python
