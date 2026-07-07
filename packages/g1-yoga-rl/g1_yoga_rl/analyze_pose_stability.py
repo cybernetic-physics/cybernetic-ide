@@ -106,9 +106,9 @@ def main() -> None:
     parser.add_argument("--render-dir", type=Path, default=None, help="Optional directory for one PNG render per pose.")
     args = parser.parse_args()
 
-    from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
+    from .cyber_env import make_cyber_env
 
-    env = MjxUnitreeG1(headless=True)
+    env = make_cyber_env(headless=True)
     model = env.get_model()
     data = env.get_data()
 

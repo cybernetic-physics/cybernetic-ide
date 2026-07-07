@@ -20,7 +20,7 @@ from .yoga_traj import FULL_FLOW, ground_qpos, load_named_poses, project_pose
 # pose -> joint used to equalize the two feet's floor clearance
 REACH_JOINTS = {
     "warrior_one": "right_knee_joint",
-    "warrior_two": "left_knee_joint",
+    "warrior_two": "right_knee_joint",
 }
 PLANTED_CLEARANCE = 0.06  # feet starting within 6 cm of the floor are meant to plant
 SOLVE_POSES = ["forward_fold", "chair", "warrior_one", "warrior_two", "goddess"]
@@ -49,7 +49,7 @@ def foot_metrics(model, data, qpos, side: str):
     return pitch, roll, float(np.min(bottoms))
 
 
-def newton_zero(qpos, adr: int, model, data, measure, iterations: int = 4, step: float = 0.05):
+def newton_zero(qpos, adr: int, model, data, measure, iterations: int = 8, step: float = 0.05):
     """Adjust qpos[adr] until measure(qpos) ~ 0 using numeric derivatives."""
     for _ in range(iterations):
         value = measure(qpos)
@@ -66,9 +66,9 @@ def newton_zero(qpos, adr: int, model, data, measure, iterations: int = 4, step:
 
 
 def main() -> None:
-    from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
+    from .cyber_env import make_cyber_env
 
-    env = MjxUnitreeG1(headless=True)
+    env = make_cyber_env(headless=True)
     model, data = env.get_model(), env.get_data()
 
     named_poses = load_named_poses()
