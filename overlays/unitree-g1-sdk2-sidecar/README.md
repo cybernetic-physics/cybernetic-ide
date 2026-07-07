@@ -27,11 +27,15 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=launch_probe_official_mujoco`, launches the
   upstream peer briefly under Xvfb with the required `LD_LIBRARY_PATH` so the
   next gate can distinguish loader/display problems from DDS problems.
+- when `CYBER_UNITREE_ACTION=probe_official_mujoco_dds`, launches the upstream
+  G1 peer under Xvfb, subscribes to `rt/lowstate` with official Unitree HG IDL
+  types, and reports whether a sample was received from the simulator bridge.
 
-It does **not** yet launch official `unitree_mujoco` or prove data exchange
-with a simulator peer. That pub/sub probe is the next provider milestone.
-Keeping this scaffold honest is better than pretending the local HTTP shim is
-already the official transport.
+It still does **not** replace the local HTTP viewer/control bridge as the
+default transport. The sidecar has now proven official `rt/lowstate` sample
+exchange; the next provider milestone is publishing official `rt/lowcmd` while
+the peer is running and then routing the Cybernetic Python facade through that
+transport.
 
 Prepare sources:
 
@@ -67,3 +71,19 @@ docker compose \
   run --rm -e CYBER_UNITREE_ACTION=launch_probe_official_mujoco \
   unitree-g1-sdk2-sidecar
 ```
+
+Probe whether the official peer publishes SDK2 lowstate samples:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm -e CYBER_UNITREE_ACTION=probe_official_mujoco_dds \
+  unitree-g1-sdk2-sidecar
+```
+
+The current verified local result receives a `unitree_hg.msg.dds_.LowState_`
+sample from `rt/lowstate` with `motor_count=35` and `mode_machine=5`. The
+report intentionally keeps CycloneDDS loopback multicast warnings visible
+because they may matter when moving from local read probes to sustained
+publisher/subscriber control.

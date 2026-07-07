@@ -317,6 +317,9 @@ ad hoc scripts first. The default tool surface includes:
 - official MuJoCo launch probe: `unitree_probe_official_mujoco_launch`, which
   runs the upstream peer briefly under Xvfb with the required Unitree/MuJoCo
   runtime library path and reports loader/display readiness;
+- official SDK2 data probe: `unitree_probe_official_mujoco_dds`, which runs
+  the upstream G1 peer and verifies that SDK2/CycloneDDS can read an
+  `rt/lowstate` sample with Unitree HG IDL types;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

@@ -155,9 +155,10 @@ The same MCP server also exposes `unitree_prepare_sdk2_sidecar` and
 `unitree_sdk2_sidecar_status`. These tools prepare pinned official Unitree SDK2
 sources and run a diagnostic sidecar report. The report proves SDK2 Python
 imports, CycloneDDS domain initialization, Unitree HG IDL imports, and
-`rt/lowcmd`/`rt/lowstate` channel creation. It does not yet launch official
-`unitree_mujoco` or prove samples moving between two DDS peers; that is the
-next integration step before it becomes the default transport.
+`rt/lowcmd`/`rt/lowstate` channel creation. The follow-up
+`unitree_probe_official_mujoco_dds` tool now launches official
+`unitree_mujoco` under Xvfb and proves that the same SDK2 Python stack can read
+an `rt/lowstate` sample from the upstream G1 peer.
 
 `unitree_official_mujoco_plan` exposes the next native gate directly to agents.
 It reports whether the upstream C++ `simulate/build/unitree_mujoco` binary is
@@ -187,8 +188,18 @@ binary needs `LD_LIBRARY_PATH` pointed at Unitree SDK2's aarch64 DDS libraries
 and MuJoCo's release libraries, and upstream `simulate` needs a display because
 it initializes GLFW. The sidecar now installs Xvfb and runs a short
 `xvfb-run` startup probe. Passing that probe only proves the official peer can
-start headlessly; DDS `rt/lowstate`/`rt/lowcmd` sample exchange is still the
-next milestone.
+start headlessly.
+
+`unitree_probe_official_mujoco_dds` is the next probe in that chain. It starts
+the same upstream peer as a managed process, subscribes to `rt/lowstate` with
+`unitree_sdk2py.idl.unitree_hg.msg.dds_.LowState_`, waits for a sample, and
+returns a structured summary including motor count, `mode_machine`, IMU fields,
+stdout/stderr tails, and whether MuJoCo plus the SDK2 bridge started. On the
+current local runtime it has proven a 35-motor `LowState_` sample on DDS domain
+`1` using interface `lo`. CycloneDDS still warns that `lo` is not
+multicast-capable, so the warning is retained in the report; the next control
+milestone is publishing `rt/lowcmd` with official Unitree types while the peer
+is running, not merely suppressing the warning.
 
 Runtime environment knobs:
 

@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -229,6 +231,160 @@ def launch_probe_official_mujoco_peer(mujoco_root: str, domain: int, interface: 
     return report
 
 
+def summarize_lowstate(sample) -> dict:
+    motors = list(getattr(sample, "motor_state", []) or [])
+    imu = getattr(sample, "imu_state", None)
+    summary = {
+        "sample_type": type(sample).__name__,
+        "idl_typename": getattr(type(sample), "__idl_typename__", None),
+        "mode_machine": getattr(sample, "mode_machine", None),
+        "motor_count": len(motors),
+        "first_motors": [],
+    }
+    for index, motor in enumerate(motors[:6]):
+        summary["first_motors"].append(
+            {
+                "index": index,
+                "q": float(getattr(motor, "q", 0.0)),
+                "dq": float(getattr(motor, "dq", 0.0)),
+                "tau_est": float(getattr(motor, "tau_est", 0.0)),
+                "temperature": list(getattr(motor, "temperature", []) or []),
+            }
+        )
+    if imu is not None:
+        summary["imu"] = {
+            "rpy": [float(value) for value in list(getattr(imu, "rpy", []) or [])],
+            "quaternion": [float(value) for value in list(getattr(imu, "quaternion", []) or [])],
+            "gyroscope": [float(value) for value in list(getattr(imu, "gyroscope", []) or [])],
+            "accelerometer": [float(value) for value in list(getattr(imu, "accelerometer", []) or [])],
+        }
+    return summary
+
+
+def terminate_process(process: subprocess.Popen, timeout: float = 4.0) -> tuple[str, str, int | None]:
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except Exception:
+            process.terminate()
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except Exception:
+            process.kill()
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", ""
+    return stdout[-12000:], stderr[-12000:], process.returncode
+
+
+def probe_official_mujoco_dds_exchange(mujoco_root: str, domain: int, interface: str | None) -> dict:
+    plan = official_mujoco_plan(mujoco_root, domain, interface)
+    simulate_root = Path(plan["simulate_root"])
+    executable = Path(plan["binary_path"])
+    report = {
+        "action": "probe_official_mujoco_dds",
+        "plan": plan,
+        "binary_exists": executable.exists(),
+        "library_path": runtime_library_path(),
+        "used_xvfb": True,
+        "topic": "rt/lowstate",
+        "domain": domain,
+        "interface": interface or None,
+        "peer_started": False,
+        "lowstate_sample_received": False,
+        "read_attempts": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_DDS_PROBE_TIMEOUT", "10")),
+    }
+    if not executable.exists():
+        report["ok"] = False
+        report["error"] = "missing official unitree_mujoco binary; run build_official_mujoco first"
+        return report
+
+    command = [
+        "xvfb-run",
+        "-a",
+        str(executable),
+        "-r",
+        plan["robot"],
+        "-s",
+        plan["scene"],
+        "-i",
+        str(domain),
+    ]
+    if interface:
+        command.extend(["-n", interface])
+
+    process = subprocess.Popen(
+        command,
+        cwd=str(simulate_root),
+        env=runtime_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    report["peer_started"] = True
+    report["peer_pid"] = process.pid
+    report["command"] = " ".join(command)
+
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelSubscriber
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                report["peer_exited_before_sample"] = True
+                break
+            report["read_attempts"] += 1
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary"] = summarize_lowstate(sample)
+                break
+        subscriber.Close()
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+    finally:
+        stdout_tail, stderr_tail, returncode = terminate_process(process)
+
+    output = f"{stdout_tail}\n{stderr_tail}"
+    report["stdout_tail"] = stdout_tail
+    report["stderr_tail"] = stderr_tail
+    report["returncode"] = returncode
+    report["startup_reached_mujoco"] = "MuJoCo version" in output
+    report["bridge_started"] = "Mujoco data is prepared" in output or "Try to start sdk2 thread" in output
+    report["loader_error"] = "error while loading shared libraries" in output
+    report["glfw_error"] = "could not initialize GLFW" in output
+    report["cyclonedds_warning"] = "selected interface" in output or "ddsi_udp_conn_write" in output
+    report["ok"] = (
+        report["peer_started"]
+        and report["startup_reached_mujoco"]
+        and report["lowstate_sample_received"]
+        and not report["loader_error"]
+        and not report["glfw_error"]
+    )
+    if report["ok"]:
+        report["next_step"] = "Publish rt/lowcmd with official SDK2 types while this peer is running, then map the Cybernetic SDK facade onto that transport."
+    elif report["cyclonedds_warning"]:
+        report["next_step"] = "Retry with a multicast-capable CYBER_UNITREE_NETWORK_INTERFACE or a CycloneDDS unicast config; the peer launched but DDS discovery/sample exchange did not prove out."
+    else:
+        report["next_step"] = "Inspect stdout/stderr tails and retry after confirming the official peer reaches the SDK2 bridge before the read deadline."
+    return report
+
+
 def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
     report = {
         "python_path_inserted": False,
@@ -358,6 +514,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "launch_probe_official_mujoco":
         report["launch_probe"] = launch_probe_official_mujoco_peer(mujoco_root, domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_official_mujoco_dds":
+        report["dds_probe"] = probe_official_mujoco_dds_exchange(mujoco_root, domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action != "status":
         report["status"] = "error"

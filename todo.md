@@ -175,12 +175,19 @@ Tasks:
   missing DDS library path and GLFW display requirement, and the sidecar now
   uses Xvfb plus explicit Unitree/MuJoCo library paths for a headless startup
   probe.
+- Done: add and verify `unitree_probe_official_mujoco_dds`; it launches the
+  official G1 peer under Xvfb, subscribes to `rt/lowstate` with official
+  Unitree HG IDL types, and received a 35-motor `LowState_` sample on DDS
+  domain `1` with `mode_machine=5`. The report still surfaces CycloneDDS
+  loopback multicast warnings so the next sustained-control work does not hide
+  transport risk.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
   mounting for deploy bundles.
-- Launch official `unitree_mujoco` in sim mode with a known DDS domain and
-  loopback interface.
+- Remaining: publish `rt/lowcmd` with official Unitree SDK2 types while the
+  official peer is running, then map the Cybernetic Python facade onto that
+  transport.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,
@@ -260,6 +267,9 @@ Tasks:
   profile so agents can inspect the native official simulator launch gate.
 - Done: expose `unitree_build_official_mujoco_peer` in the default Robotics
   Agent profile so agents can build the native official simulator peer.
+- Done: expose `unitree_probe_official_mujoco_dds` in the default Robotics
+  Agent profile so agents can prove official SDK2 lowstate sample exchange
+  before attempting lowcmd control.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command
