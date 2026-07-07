@@ -618,7 +618,12 @@ The current repo has the first narrow version of that API boundary:
 - `unitree_probe_official_mujoco_loco_rpc` is the first official sport-RPC
   probe. It uses Unitree's own Python `LocoClient` against the managed official
   MuJoCo session and reports whether any `rt/api/sport/*` call receives a
-  response.
+  response. The probe annotates Unitree RPC codes: `3102` is
+  `RPC_ERR_CLIENT_SEND`, which the upstream Python SDK returns when the request
+  writer cannot publish, usually because `rt/api/sport/request` has no matched
+  service-side reader before timeout or because DDS write failed. That is
+  materially different from `3104` (`RPC_ERR_CLIENT_API_TIMEOUT`), where a
+  request was written but no response arrived.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

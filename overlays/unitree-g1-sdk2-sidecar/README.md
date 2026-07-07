@@ -132,7 +132,11 @@ The MCP wrapper is `unitree_probe_official_mujoco_loco_rpc`. Python users can
 call `OfficialG1Sim.loco_rpc_session()`. This is deliberately a probe before a
 provider: it proves whether the official G1 peer serves
 `rt/api/sport/request` / `rt/api/sport/response` before the local `LocoClient`
-facade routes locomotion there.
+facade routes locomotion there. Each call includes a Unitree `rpc_status`
+annotation when the SDK returns a numeric code. `RPC_ERR_CLIENT_SEND` (`3102`)
+means the request could not be written to DDS, typically because the
+`rt/api/sport/request` writer did not match a service-side reader before the
+timeout or because the DDS write failed.
 
 Command the managed official session with a bounded arm pose:
 

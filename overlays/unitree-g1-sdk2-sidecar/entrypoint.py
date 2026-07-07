@@ -1333,6 +1333,10 @@ def probe_official_mujoco_loco_rpc(domain: int, interface: str | None) -> dict:
                 value = fn()
                 entry["ok"] = _loco_call_ok(value)
                 entry["return"] = _jsonable_return(value)
+                code = _loco_return_code(value)
+                if code is not None:
+                    entry["rpc_code"] = code
+                    entry["rpc_status"] = _unitree_rpc_status(code)
             except Exception as exc:
                 entry["ok"] = False
                 entry["error"] = str(exc)
@@ -1350,7 +1354,8 @@ def probe_official_mujoco_loco_rpc(domain: int, interface: str | None) -> dict:
     if report["ok"]:
         report["next_step"] = "Route CYBER_UNITREE_TRANSPORT=dds LocoClient calls to this official sport RPC path with safety gating."
     elif report["client_initialized"]:
-        report["next_step"] = "The official LocoClient initialized but no sport RPC call succeeded; official unitree_mujoco may not serve rt/api/sport on this peer."
+        report["diagnosis"] = _diagnose_loco_rpc_calls(report["calls"])
+        report["next_step"] = report["diagnosis"]["next_step"]
     else:
         report["next_step"] = "Fix official Unitree SDK2 Python LocoClient initialization before promoting locomotion to DDS."
     return report
@@ -1362,6 +1367,99 @@ def _loco_call_ok(value) -> bool:
     if isinstance(value, int):
         return value == 0
     return value is None
+
+
+def _loco_return_code(value) -> int | None:
+    if isinstance(value, tuple) and value and isinstance(value[0], int):
+        return value[0]
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _unitree_rpc_status(code: int) -> dict:
+    statuses = {
+        0: {
+            "name": "RPC_OK",
+            "meaning": "Unitree RPC call succeeded.",
+        },
+        3001: {
+            "name": "RPC_ERR_UNKNOWN",
+            "meaning": "Unitree RPC client reported an unknown failure.",
+        },
+        3102: {
+            "name": "RPC_ERR_CLIENT_SEND",
+            "meaning": "The Unitree RPC request could not be written to DDS. In unitree_sdk2_python this happens when the request writer has no matched reader before the timeout or the DDS write fails.",
+        },
+        3103: {
+            "name": "RPC_ERR_CLIENT_API_NOT_REG",
+            "meaning": "The API ID was not registered on the client.",
+        },
+        3104: {
+            "name": "RPC_ERR_CLIENT_API_TIMEOUT",
+            "meaning": "The request was written, but no matching response arrived before the timeout.",
+        },
+        3105: {
+            "name": "RPC_ERR_CLIENT_API_NOT_MATCH",
+            "meaning": "The response API ID did not match the request API ID.",
+        },
+        3106: {
+            "name": "RPC_ERR_CLIENT_API_DATA",
+            "meaning": "The client could not decode or validate returned API data.",
+        },
+        3107: {
+            "name": "RPC_ERR_CLIENT_LEASE_INVALID",
+            "meaning": "The client lease is invalid.",
+        },
+        3201: {
+            "name": "RPC_ERR_SERVER_SEND",
+            "meaning": "The server could not publish the response.",
+        },
+        3202: {
+            "name": "RPC_ERR_SERVER_INTERNAL",
+            "meaning": "The server reported an internal failure.",
+        },
+        3203: {
+            "name": "RPC_ERR_SERVER_API_NOT_IMPL",
+            "meaning": "The server does not implement the requested API.",
+        },
+        3204: {
+            "name": "RPC_ERR_SERVER_API_PARAMETER",
+            "meaning": "The server rejected the request parameters.",
+        },
+        3205: {
+            "name": "RPC_ERR_SERVER_LEASE_DENIED",
+            "meaning": "The server denied the requested lease.",
+        },
+    }
+    return statuses.get(
+        code,
+        {
+            "name": "RPC_ERR_UNMAPPED",
+            "meaning": "Unitree RPC returned a code that Cybernetic IDE has not mapped yet.",
+        },
+    )
+
+
+def _diagnose_loco_rpc_calls(calls: list[dict]) -> dict:
+    codes = [call.get("rpc_code") for call in calls if isinstance(call.get("rpc_code"), int)]
+    if 3102 in codes:
+        return {
+            "likely_cause": "no_matched_sport_request_reader_or_dds_write_failure",
+            "evidence": "Unitree LocoClient returned RPC_ERR_CLIENT_SEND before any response wait; unitree_sdk2_python only returns this when Channel.Write() fails.",
+            "next_step": "Treat the official sport RPC service as absent on this managed unitree_mujoco peer; inspect DDS discovery/network interface or add a real sport service bridge before routing LocoClient to DDS.",
+        }
+    if 3104 in codes:
+        return {
+            "likely_cause": "sport_request_written_but_no_response",
+            "evidence": "Unitree LocoClient returned RPC_ERR_CLIENT_API_TIMEOUT, which means the request was sent but no matching response arrived.",
+            "next_step": "Inspect rt/api/sport/response discovery and whether the peer implements the requested G1 Loco API.",
+        }
+    return {
+        "likely_cause": "unknown_sport_rpc_failure",
+        "evidence": "The official LocoClient initialized but no sport RPC call returned success.",
+        "next_step": "Inspect each call rpc_status and compare the managed peer against Unitree SDK2's sport service expectations.",
+    }
 
 
 def _jsonable_return(value):

@@ -289,9 +289,12 @@ Tasks:
   `OfficialG1Sim.loco_rpc_session(timeout=1.0)` initializes the official
   `LocoClient` request/response topics but `GetFsmId` returns `[3102, null]`
   after about 1.1s while CycloneDDS reports loopback UDP write failures. Treat
-  official sport RPC as not proven; keep the normal `LocoClient` facade on the
-  explicit local compatibility route until the upstream peer is shown to answer
-  `rt/api/sport/request`.
+  official sport RPC as not proven. Upstream `unitree_sdk2_python` defines
+  `3102` as `RPC_ERR_CLIENT_SEND`, not a response timeout, and returns it when
+  the DDS request writer fails to publish, commonly because no service-side
+  reader matched `rt/api/sport/request` before timeout. Keep the normal
+  `LocoClient` facade on the explicit local compatibility route until the
+  upstream peer is shown to answer `rt/api/sport/request`.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;
