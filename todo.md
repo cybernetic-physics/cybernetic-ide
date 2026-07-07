@@ -252,6 +252,11 @@ Tasks:
   `unitree_sdk2py` shim. The current static audit reports import/class/method
   coverage for all five official G1 examples, while still documenting that
   behavior-level locomotion and balance parity are not proven.
+- Done: add Go-family 20-motor `unitree_go.msg.dds_.LowCmd_` and
+  `LowState_` dataclasses plus default factories, and make
+  `ChannelSubscriber("rt/lowstate")` preserve the requested Go versus G1/HG
+  lowstate type. This covers Unitree's public
+  `unitree_mujoco/simulate_python/test/test_unitree_sdk2.py` import shape.
 - Done: add `cyber-g1 sdk-smoke` and MCP `unitree_sdk_behavior_smoke` so agents
   and developers can run safe behavior-level checks through official-style arm,
   loco, and lowcmd/lowstate imports against the simulator facade, with optional

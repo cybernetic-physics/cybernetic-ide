@@ -26,6 +26,11 @@ surfaces a developer is likely to reach for first:
   for the G1 C++ user-control example topic.
 - `unitree_sdk2py.core.channel.ChannelSubscriber("rt/lowstate", LowState_)`
 
+Cybernetic now carries both low-level IDL families used by these upstream
+materials: G1/HG `LowCmd_`/`LowState_` for the 35-slot humanoid control path,
+and Go-family `LowCmd_`/`LowState_` for Unitree's public
+`unitree_mujoco/simulate_python/test/test_unitree_sdk2.py` sample.
+
 The arm action shim supports `ExecuteAction(action_map["right hand up"])` and
 `ExecuteAction(action_map["release arm"])`.
 

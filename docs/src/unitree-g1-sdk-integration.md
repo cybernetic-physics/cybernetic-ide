@@ -556,6 +556,10 @@ The current repo has the first narrow version of that API boundary:
   the peer is running. Lease-limited sustained lowcmd streams now flow through
   the same managed official session via `ChannelPublisher.WriteStream(...)`;
   unbounded watchdog-renewed control still needs a long-lived DDS provider.
+- The low-level IDL shim now includes Unitree's Go-family 20-motor
+  `LowCmd_`/`LowState_` in addition to the G1/HG 35-motor types. That covers
+  the public `unitree_mujoco/simulate_python/test/test_unitree_sdk2.py` import
+  shape while preserving G1/HG as the default for the 29-DOF G1 runtime.
 - `OfficialG1Sim.telemetry_session()`, `cyber-g1 official telemetry-session`,
   and MCP `unitree_read_official_mujoco_telemetry` add a read-only
   managed-session path for `rt/sportmodestate`, `rt/lf/sportmodestate`, and

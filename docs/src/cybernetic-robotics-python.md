@@ -470,6 +470,17 @@ same safe provider boundary while preserving the topic used by Unitree's C++
 CRC, accepted command count, applied position target count, clamped joint
 targets, and ignored motor slots in the `lowcmd` field of `/status` and
 `/lowstate`.
+
+The low-level shim includes both Unitree lowstate families used by the public
+simulator material. `unitree_hg_msg_dds__LowCmd_` /
+`unitree_hg_msg_dds__LowState_` expose the 35-motor G1/HG layout, while
+`unitree_go_msg_dds__LowCmd_` / `unitree_go_msg_dds__LowState_` expose the
+20-motor Go-family layout imported by
+`unitree_mujoco/simulate_python/test/test_unitree_sdk2.py`.
+`ChannelSubscriber("rt/lowstate", LowState_)` preserves the requested message
+family, so Go-shaped examples receive Go-shaped `LowState_` objects instead of
+being silently converted to the G1/HG type.
+
 The bridge intentionally preserves Unitree method names and import paths, but
 it is still simulator-only and does not replace Unitree's full CycloneDDS
 transport or a real whole-body balance controller.

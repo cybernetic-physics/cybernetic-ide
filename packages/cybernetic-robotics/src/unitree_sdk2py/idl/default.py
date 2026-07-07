@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from .unitree_go.msg.dds_ import MotorCmd_ as GoMotorCmd_, MotorCmds_, SportModeState_
+from .unitree_go.msg.dds_ import (
+    BmsCmd_,
+    BmsState_,
+    LowCmd_ as GoLowCmd_,
+    LowState_ as GoLowState_,
+    MotorCmd_ as GoMotorCmd_,
+    MotorCmds_,
+    MotorState_ as GoMotorState_,
+    SportModeState_,
+    WirelessController_,
+)
 from .unitree_hg.msg.dds_ import (
     HandCmd_,
     HandState_,
@@ -49,9 +59,33 @@ def unitree_go_msg_dds__SportModeState_() -> SportModeState_:
     return SportModeState_()
 
 
+def unitree_go_msg_dds__LowCmd_() -> GoLowCmd_:
+    return GoLowCmd_()
+
+
+def unitree_go_msg_dds__LowState_() -> GoLowState_:
+    return GoLowState_()
+
+
 def unitree_go_msg_dds__MotorCmd_() -> GoMotorCmd_:
     return GoMotorCmd_()
 
 
 def unitree_go_msg_dds__MotorCmds_() -> MotorCmds_:
     return MotorCmds_()
+
+
+def unitree_go_msg_dds__MotorState_() -> GoMotorState_:
+    return GoMotorState_()
+
+
+def unitree_go_msg_dds__BmsCmd_() -> BmsCmd_:
+    return BmsCmd_()
+
+
+def unitree_go_msg_dds__BmsState_() -> BmsState_:
+    return BmsState_()
+
+
+def unitree_go_msg_dds__WirelessController_() -> WirelessController_:
+    return WirelessController_()

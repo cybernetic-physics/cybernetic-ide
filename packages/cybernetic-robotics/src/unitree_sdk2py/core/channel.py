@@ -171,9 +171,9 @@ class ChannelSubscriber:
             response = _session_from_env(float(timeout or 5.0)).read_lowstate()
             self.last_response = response
             if isinstance(response.get("lowstate"), dict):
-                return _lowstate_from_json(response["lowstate"], metadata=response)
+                return _lowstate_from_json(response["lowstate"], message_type=self.message_type, metadata=response)
             if isinstance(response.get("lowstate_summary"), dict):
-                return _lowstate_from_summary(response["lowstate_summary"], metadata=response)
+                return _lowstate_from_summary(response["lowstate_summary"], message_type=self.message_type, metadata=response)
             raise RuntimeError(response.get("error") or "lowstate unavailable through active Unitree provider")
         if self.name in {"rt/sportmodestate", "rt/lf/sportmodestate"}:
             response = _session_from_env(float(timeout or 5.0)).read_sportmodestate(self.name)
@@ -228,23 +228,29 @@ def _session_from_env(timeout: float) -> UnitreeSession:
     return session
 
 
-def _lowstate_from_json(value: dict, *, metadata: dict | None = None):
-    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
-
-    state = unitree_hg_msg_dds__LowState_()
+def _lowstate_from_json(value: dict, *, message_type=None, metadata: dict | None = None):
+    state = _lowstate_factory(message_type)
     _attach_metadata(state, metadata)
-    state.mode_pr = int(value.get("mode_pr", 0))
-    state.mode_machine = int(value.get("mode_machine", 0))
+    if hasattr(state, "mode_pr"):
+        state.mode_pr = int(value.get("mode_pr", 0))
+    if hasattr(state, "mode_machine"):
+        state.mode_machine = int(value.get("mode_machine", 0))
     state.crc = int(value.get("crc", 0))
     lowcmd = value.get("lowcmd") if isinstance(value.get("lowcmd"), dict) else {}
-    state.lowcmd_active = bool(lowcmd.get("active"))
-    state.lowcmd_stale = bool(lowcmd.get("stale"))
-    state.lowcmd_age_seconds = float(lowcmd.get("age_seconds") or 0.0)
-    state.lowcmd_watchdog_seconds = float(lowcmd.get("watchdog_seconds") or 0.0)
+    if hasattr(state, "lowcmd_active"):
+        state.lowcmd_active = bool(lowcmd.get("active"))
+    if hasattr(state, "lowcmd_stale"):
+        state.lowcmd_stale = bool(lowcmd.get("stale"))
+    if hasattr(state, "lowcmd_age_seconds"):
+        state.lowcmd_age_seconds = float(lowcmd.get("age_seconds") or 0.0)
+    if hasattr(state, "lowcmd_watchdog_seconds"):
+        state.lowcmd_watchdog_seconds = float(lowcmd.get("watchdog_seconds") or 0.0)
     imu = value.get("imu_state") or {}
     state.imu_state.quaternion[:] = list(imu.get("quaternion", state.imu_state.quaternion))[:4]
     state.imu_state.gyroscope[:] = list(imu.get("gyroscope", state.imu_state.gyroscope))[:3]
     state.imu_state.accelerometer[:] = list(imu.get("accelerometer", state.imu_state.accelerometer))[:3]
+    if isinstance(value.get("wireless_remote"), list):
+        state.wireless_remote[:] = [int(item) & 0xFF for item in value.get("wireless_remote", [])[: len(state.wireless_remote)]]
     for index, motor in enumerate(value.get("motor_state", [])):
         if index >= len(state.motor_state):
             break
@@ -253,15 +259,15 @@ def _lowstate_from_json(value: dict, *, metadata: dict | None = None):
         target.q = float(motor.get("q", 0.0))
         target.dq = float(motor.get("dq", 0.0))
         target.tau_est = float(motor.get("tau_est", 0.0))
+        _assign_temperature(target, motor.get("temperature"))
     return state
 
 
-def _lowstate_from_summary(value: dict, *, metadata: dict | None = None):
-    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
-
-    state = unitree_hg_msg_dds__LowState_()
+def _lowstate_from_summary(value: dict, *, message_type=None, metadata: dict | None = None):
+    state = _lowstate_factory(message_type)
     _attach_metadata(state, metadata)
-    state.mode_machine = int(value.get("mode_machine") or 0)
+    if hasattr(state, "mode_machine"):
+        state.mode_machine = int(value.get("mode_machine") or 0)
     for motor in value.get("first_motors", []):
         index = int(motor.get("index", -1))
         if 0 <= index < len(state.motor_state):
@@ -269,12 +275,35 @@ def _lowstate_from_summary(value: dict, *, metadata: dict | None = None):
             target.q = float(motor.get("q", 0.0))
             target.dq = float(motor.get("dq", 0.0))
             target.tau_est = float(motor.get("tau_est", 0.0))
-            target.temperature[:] = list(motor.get("temperature", target.temperature))[:2]
+            _assign_temperature(target, motor.get("temperature"))
     imu = value.get("imu") if isinstance(value.get("imu"), dict) else {}
     state.imu_state.quaternion[:] = list(imu.get("quaternion", state.imu_state.quaternion))[:4]
     state.imu_state.gyroscope[:] = list(imu.get("gyroscope", state.imu_state.gyroscope))[:3]
     state.imu_state.accelerometer[:] = list(imu.get("accelerometer", state.imu_state.accelerometer))[:3]
     return state
+
+
+def _lowstate_factory(message_type=None):
+    from unitree_sdk2py.idl.default import unitree_go_msg_dds__LowState_, unitree_hg_msg_dds__LowState_
+
+    module = getattr(message_type, "__module__", "") if message_type is not None else ""
+    typename = getattr(message_type, "__idl_typename__", "") if message_type is not None else ""
+    if "unitree_go" in module or "unitree_go" in typename:
+        return unitree_go_msg_dds__LowState_()
+    return unitree_hg_msg_dds__LowState_()
+
+
+def _assign_temperature(target, temperature) -> None:
+    if temperature is None:
+        return
+    current = getattr(target, "temperature", None)
+    if isinstance(current, list):
+        values = temperature if isinstance(temperature, list) else [temperature]
+        target.temperature[:] = [int(item) for item in (list(values) + current)[: len(current)]]
+    else:
+        values = temperature if isinstance(temperature, list) else [temperature]
+        if values:
+            target.temperature = int(values[0])
 
 
 def _attach_metadata(state, metadata: dict | None) -> None:

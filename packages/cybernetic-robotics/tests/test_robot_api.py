@@ -31,11 +31,15 @@ from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.idl.default import (
+    unitree_go_msg_dds__LowCmd_,
+    unitree_go_msg_dds__LowState_,
     unitree_go_msg_dds__MotorCmds_,
     unitree_go_msg_dds__SportModeState_,
     unitree_hg_msg_dds__HandCmd_,
     unitree_hg_msg_dds__LowCmd_,
 )
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowCmd_ as GoLowCmd_
+from unitree_sdk2py.idl.unitree_go.msg.dds_ import LowState_ as GoLowState_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_, LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
@@ -1567,6 +1571,52 @@ class RobotApiTests(unittest.TestCase):
         self.assertAlmostEqual(lowstate.motor_state[0].q, 0.12)
         self.assertEqual(lowstate.motor_state[0].temperature, [31, 32])
         self.assertEqual(lowstate.imu_state.quaternion, [1.0, 0.0, 0.0, 0.0])
+
+    def test_unitree_go_lowcmd_and_lowstate_match_official_mujoco_example_shape(self):
+        low_cmd = unitree_go_msg_dds__LowCmd_()
+        low_state = unitree_go_msg_dds__LowState_()
+
+        self.assertIsInstance(low_cmd, GoLowCmd_)
+        self.assertIsInstance(low_state, GoLowState_)
+        self.assertEqual(low_cmd.head, [0xFE, 0xEF])
+        self.assertEqual(len(low_cmd.motor_cmd), 20)
+        self.assertEqual(len(low_state.motor_state), 20)
+        self.assertEqual(len(low_state.wireless_remote), 40)
+
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                low_cmd.level_flag = 0xFF
+                low_cmd.gpio = 0
+                for index, cmd in enumerate(low_cmd.motor_cmd):
+                    cmd.mode = 0x01
+                    cmd.q = 0.0
+                    cmd.kp = 0.0
+                    cmd.dq = 0.0
+                    cmd.kd = 0.0
+                    cmd.tau = 1.0 if index < 12 else 0.0
+
+                publisher = ChannelPublisher("rt/lowcmd", GoLowCmd_)
+                publisher.Init()
+                self.assertTrue(publisher.Write(low_cmd))
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertEqual(FakeG1Handler.lowcmd_count, 20)
+
+                subscriber = ChannelSubscriber("rt/lowstate", GoLowState_)
+                subscriber.Init()
+                state = subscriber.Read()
+
+                self.assertIsInstance(state, GoLowState_)
+                self.assertEqual(state.provider, "local_http_simulator")
+                self.assertEqual(len(state.motor_state), 20)
+                self.assertAlmostEqual(state.motor_state[1].q, 0.1)
+                self.assertEqual(state.motor_state[0].temperature, 35)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
     def test_unitree_sportmode_channel_can_read_official_dds_summary(self):
         class FakeOfficial:
