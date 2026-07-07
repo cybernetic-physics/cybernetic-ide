@@ -345,6 +345,8 @@ viewer_snapshot_file
 viewer_snapshot_series
 sim_validate_behavior
 unitree_session_status
+robotics_tool_reference
+unitree_sdk_scaffold_python
 scene_add_object
 scene_list_objects
 scene_remove_object
@@ -368,12 +370,21 @@ fresh the `rt/lowcmd` / `rt/lowstate` surfaces are. With
 `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, it also runs the official
 sidecar status probe and reports SDK2 import, CycloneDDS domain, channel
 creation, and official MuJoCo peer readiness to Agent-panel MCP clients.
+`robotics_tool_reference` returns a compact safety map for the default robotics
+tools: safety level, side effects, and expected simulator state. Agents should
+read it before choosing between read-only inspection, scene edits, deliberate
+robot motion, script execution, and safety-stop workflows.
 `scene_add_object`, `scene_list_objects`, and `scene_remove_object` let agents
 iterate on simple MuJoCo scene objects. Scene edits write new MJCF copies under
 `.runtime/unitree-g1-mujoco/unitree_mujoco/cybernetic_scenes/`; the simulator
 container is only recreated when the tool call sets `activate` to true.
 `scene_remove_object` defaults to the active scene, or can remove from a
 generated-but-not-activated scene by passing its `scene_path`.
+`unitree_sdk_scaffold_python` can return or write beginner-friendly scripts for
+`raise_hand`, `release_arm`, `arm_action`, `locomotion`,
+`lowcmd_joint_target`, `scene_edit`, and `telemetry_monitor`. The generated
+scripts keep Unitree-style imports where possible, then use the local simulator
+bridge for evidence, snapshots, and safety stops.
 
 ## Power User API
 

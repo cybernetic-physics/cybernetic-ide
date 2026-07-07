@@ -1203,6 +1203,7 @@
               "scene_list_objects": true,
               "scene_remove_object": true,
               "unitree_sdk_scaffold_python": true,
+              "robotics_tool_reference": true,
               "g1_list_actions": true,
               "g1_execute_action": true,
               "g1_loco_command": true,

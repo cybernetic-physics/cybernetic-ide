@@ -552,6 +552,12 @@ The current repo has the first narrow version of that API boundary:
   the MCP tool now call the official sidecar status probe and report SDK2
   import, CycloneDDS domain, channel creation, and official MuJoCo peer
   readiness.
+- `robotics_tool_reference` gives Agent-panel users a machine-readable safety
+  map for the robotics tools: safety level, side effects, and expected
+  simulator state.
+- `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
+  named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
+  create editable Unitree-style starting points without guessing boilerplate.
 - MCP now has managed official peer lifecycle tools for starting, inspecting,
   and stopping the `unitree-g1-sdk2-session` container that runs upstream
   `unitree_mujoco` under Xvfb as a sustained DDS peer.

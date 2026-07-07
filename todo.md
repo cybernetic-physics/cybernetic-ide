@@ -341,10 +341,10 @@ Tasks:
 - Done: expose `sim_policy_status`, `sim_policy_start`, and `sim_policy_stop`
   in the default Robotics Agent profile so agents can inspect or run the
   optional learned-policy runtime when a deploy bundle is mounted.
-- Add `unitree_example_scaffold` variants for arm action, locomotion,
-  low-level joint target, scene edit, and telemetry monitor.
-- Add tool docs that list safety level, side effects, and expected simulator
-  state for each tool.
+- Done: extend `unitree_sdk_scaffold_python` with arm action, locomotion,
+  low-level joint target, scene edit, and telemetry monitor variants.
+- Done: add `robotics_tool_reference` so agents can read safety level, side
+  effects, and expected simulator state for the default robotics tools.
 
 Reasoning: MCP tools are how AI agents become robotics development partners.
 Good tools should be task-shaped, inspectable, and safe by default.

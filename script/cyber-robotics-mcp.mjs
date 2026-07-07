@@ -591,11 +591,31 @@ const tools = [
     "Generate or write a Unitree SDK-shaped Python control script for the local G1 simulator.",
     {
       path: { type: "string", description: "Optional workspace-relative file path to write." },
-      action: { type: "string", enum: ["raise_hand", "release_arm"], default: "raise_hand" },
+      action: {
+        type: "string",
+        enum: [
+          "raise_hand",
+          "release_arm",
+          "arm_action",
+          "locomotion",
+          "lowcmd_joint_target",
+          "scene_edit",
+          "telemetry_monitor",
+        ],
+        default: "raise_hand",
+      },
+      sdk_action: {
+        type: "string",
+        default: "right hand up",
+        description: "Arm action name for action=arm_action, for example 'right hand up' or 'release arm'.",
+      },
     },
     [],
     { readOnlyHint: false },
   ),
+  tool("robotics_tool_reference", "List robotics MCP tools with safety level, side effects, and expected simulator state.", {}, [], {
+    readOnlyHint: true,
+  }),
   tool("g1_list_actions", "List supported high-level G1 SDK facade actions.", {}, [], {
     readOnlyHint: true,
   }),
@@ -988,6 +1008,8 @@ async function callTool(name, args) {
       return textResult(await removeObjectFromScene(args));
     case "unitree_sdk_scaffold_python":
       return textResult(await scaffoldPython(args));
+    case "robotics_tool_reference":
+      return textResult(roboticsToolReference());
     case "g1_list_actions":
       return textResult({
         actions: Object.entries(G1_ACTION_POSES).map(([action, value]) => ({ action, ...value })),
@@ -1811,16 +1833,76 @@ async function removeObjectFromScene(args) {
 }
 
 async function scaffoldPython(args) {
-  const action = args.action === "release_arm" ? "release_arm" : "raise_hand";
-  const code = sdkPythonTemplate(action);
+  const action = typeof args.action === "string" ? args.action : "raise_hand";
+  const code = sdkPythonTemplate(action, args);
   if (!args.path) {
-    return { code };
+    return { action, code };
   }
 
   const target = safeWorkspacePath(args.path);
   await fsp.mkdir(path.dirname(target), { recursive: true });
   await fsp.writeFile(target, code);
-  return { path: target, code };
+  return { action, path: target, code };
+}
+
+function roboticsToolReference() {
+  return {
+    version: 1,
+    notes: [
+      "Read tools first when unsure; prefer safety_stop after deliberate motion.",
+      "Scene edit tools write copied MJCF scenes under the runtime asset tree instead of mutating pinned upstream Unitree assets.",
+      "Official SDK2/CycloneDDS tools require the opt-in sidecar assets prepared by unitree_prepare_sdk2_sidecar.",
+    ],
+    tools: [
+      toolReference("sim_status", "read", "none", "Simulator may be stopped or running."),
+      toolReference("sim_start", "lifecycle", "Starts Docker MuJoCo harness.", "Docker available and assets prepared."),
+      toolReference("sim_stop", "lifecycle", "Stops Docker MuJoCo harness.", "Simulator container exists."),
+      toolReference("sim_reset", "state-changing", "Resets MuJoCo state.", "Simulator HTTP endpoint reachable."),
+      toolReference(
+        "sim_validate_behavior",
+        "read-with-evidence",
+        "May write a snapshot file.",
+        "Simulator running after a behavior.",
+      ),
+      toolReference(
+        "viewer_camera_control",
+        "viewer-state",
+        "Moves only the viewer camera.",
+        "Simulator HTTP camera endpoint reachable.",
+      ),
+      toolReference("viewer_snapshot", "read", "Returns an MCP image result.", "Renderer has a cached camera frame."),
+      toolReference("viewer_snapshot_file", "evidence-write", "Writes a workspace image file.", "Renderer has a cached camera frame."),
+      toolReference("viewer_snapshot_series", "evidence-write", "Moves camera and writes multiple images.", "Simulator running with render frames."),
+      toolReference("scene_add_object", "scene-write", "Writes copied MJCF and may restart container when activated.", "Mounted Unitree G1 MJCF assets."),
+      toolReference("scene_remove_object", "scene-write", "Writes copied MJCF and may restart container when activated.", "Generated Cybernetic scene object exists."),
+      toolReference(
+        "unitree_sdk_scaffold_python",
+        "file-write",
+        "Optionally writes a Python script.",
+        "Workspace writable; simulator not required until script execution.",
+      ),
+      toolReference("g1_execute_action", "robot-motion", "Applies a high-level G1 pose.", "Simulator running; use safety_stop afterward."),
+      toolReference("g1_loco_command", "robot-motion", "Changes locomotion FSM or velocity.", "Simulator running; prefer small velocities and safety_stop afterward."),
+      toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
+      toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
+      toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),
+      toolReference("g1_joint_state", "read", "Reads named joint mapping and limits.", "Simulator running."),
+      toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),
+      toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
+      toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),
+      toolReference("protocol_probe_http", "read", "Probes GameControl HTTP endpoint.", "Simulator HTTP endpoint reachable."),
+      toolReference("protocol_probe_ws", "read", "Opens physics WebSocket and samples one topic.", "Physics WebSocket reachable."),
+    ],
+  };
+}
+
+function toolReference(name, safetyLevel, sideEffects, expectedSimulatorState) {
+  return {
+    name,
+    safety_level: safetyLevel,
+    side_effects: sideEffects,
+    expected_simulator_state: expectedSimulatorState,
+  };
 }
 
 async function executeG1Action(action) {
@@ -2568,8 +2650,26 @@ function safeWorkspacePath(userPath) {
   return absolute;
 }
 
-function sdkPythonTemplate(action) {
-  const actionName = action === "release_arm" ? "release arm" : "right hand up";
+function sdkPythonTemplate(action, args = {}) {
+  if (action === "locomotion") {
+    return locomotionPythonTemplate();
+  }
+  if (action === "lowcmd_joint_target") {
+    return lowcmdJointTargetPythonTemplate();
+  }
+  if (action === "scene_edit") {
+    return sceneEditPythonTemplate();
+  }
+  if (action === "telemetry_monitor") {
+    return telemetryMonitorPythonTemplate();
+  }
+
+  const actionName =
+    action === "release_arm"
+      ? "release arm"
+      : action === "arm_action"
+        ? String(args.sdk_action || "right hand up")
+        : "right hand up";
   return `#!/usr/bin/env python3
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
@@ -2585,6 +2685,121 @@ def main():
     if result != 0:
         raise SystemExit(f"G1 action failed with status {result}")
     print("G1 action complete: ${actionName}")
+
+
+if __name__ == "__main__":
+    main()
+`;
+}
+
+function locomotionPythonTemplate() {
+  return `#!/usr/bin/env python3
+import time
+
+from cybernetic_robotics import G1Robot
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+
+def main():
+    ChannelFactoryInitialize(0, "cyber-sim")
+    loco = LocoClient()
+    loco.SetTimeout(10.0)
+    loco.Init()
+
+    with G1Robot.connect() as robot:
+        robot.reset()
+        robot.reset_camera()
+        robot.snapshot(".runtime/scaffolded-locomotion-before.jpg")
+
+        assert loco.Start() == 0
+        assert loco.Move(0.2, 0.0, 0.0) == 0
+        time.sleep(0.75)
+        assert loco.StopMove() == 0
+
+        robot.snapshot(".runtime/scaffolded-locomotion-after.jpg")
+        robot.safety_stop()
+
+    print("G1 locomotion scaffold complete")
+
+
+if __name__ == "__main__":
+    main()
+`;
+}
+
+function lowcmdJointTargetPythonTemplate() {
+  return `#!/usr/bin/env python3
+from cybernetic_robotics import G1Robot
+
+
+def main():
+    targets = {
+        "right_shoulder_pitch_joint": -1.05,
+        "right_shoulder_roll_joint": -0.25,
+        "right_elbow_joint": 0.85,
+    }
+
+    with G1Robot.connect() as robot:
+        robot.reset()
+        result = robot.apply_joint_targets(targets, kp=38.0, kd=1.4)
+        robot.snapshot(".runtime/scaffolded-joint-targets.jpg")
+        print(result)
+        robot.safety_stop()
+
+
+if __name__ == "__main__":
+    main()
+`;
+}
+
+function sceneEditPythonTemplate() {
+  return `#!/usr/bin/env python3
+from cybernetic_robotics import SceneWorkspace
+
+
+def main():
+    scene = SceneWorkspace.discover()
+    host_path, container_path = scene.add_box(
+        "agent_box",
+        position=(0.85, 0.0, 0.08),
+        size=(0.12, 0.12, 0.08),
+        rgba=(0.9, 0.18, 0.1, 1.0),
+        activate=False,
+    )
+    print({"host_path": str(host_path), "container_path": container_path})
+    print("Set activate=True and restart the simulator when you are ready to boot this scene.")
+
+
+if __name__ == "__main__":
+    main()
+`;
+}
+
+function telemetryMonitorPythonTemplate() {
+  return `#!/usr/bin/env python3
+import json
+import time
+
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelSubscriber
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_
+
+
+def main():
+    ChannelFactoryInitialize(0, "cyber-sim")
+    sub = ChannelSubscriber("rt/lowstate", LowState_)
+    sub.Init()
+
+    for index in range(5):
+        lowstate = sub.Read()
+        sample = {
+            "sample": index,
+            "mode_machine": lowstate.mode_machine,
+            "imu_quaternion": list(lowstate.imu_state.quaternion),
+            "first_motor_q": lowstate.motor_state[0].q if lowstate.motor_state else None,
+        }
+        print(json.dumps(sample))
+        time.sleep(0.25)
 
 
 if __name__ == "__main__":
