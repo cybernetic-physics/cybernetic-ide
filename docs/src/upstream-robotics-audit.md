@@ -46,10 +46,10 @@ task commands map to local named poses. This makes official-shaped user code
 runnable now while keeping the deeper DDS backend boundary explicit.
 
 The low-level channel shim synthesizes `LowState_` from MuJoCo joint and IMU
-state, and translates `LowCmd_` motor commands into MuJoCo actuator torques.
-It also provides the compatibility imports used by Unitree's official low-level
-example: `unitree_hg` IDL dataclasses, `CRC`, `RecurrentThread`, and
-`MotionSwitcherClient`.
+state, applies `LowCmd_` joint targets into a held MuJoCo frame, and records
+torque estimates for telemetry. It also provides the compatibility imports used
+by Unitree's official low-level example: `unitree_hg` IDL dataclasses, `CRC`,
+`RecurrentThread`, and `MotionSwitcherClient`.
 
 ## What Is Still Not Full SDK2 Parity
 

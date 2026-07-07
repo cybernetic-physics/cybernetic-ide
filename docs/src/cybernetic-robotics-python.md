@@ -186,11 +186,11 @@ lowcmd_pub.Write(low_cmd)
 
 `ChannelSubscriber("rt/lowstate", LowState_)` reads synthesized MuJoCo motor
 position, velocity, estimated torque, IMU quaternion, and mode-machine fields
-from the local simulator. `ChannelPublisher("rt/lowcmd", LowCmd_)` converts
-motor commands to MuJoCo actuator torques. The bridge intentionally preserves
-Unitree method names and import paths, but it is still simulator-only and does
-not replace Unitree's full CycloneDDS transport or a real whole-body balance
-controller.
+from the local simulator. `ChannelPublisher("rt/lowcmd", LowCmd_)` applies
+commanded joint position targets into a held MuJoCo frame and records torque
+estimates for telemetry. The bridge intentionally preserves Unitree method
+names and import paths, but it is still simulator-only and does not replace
+Unitree's full CycloneDDS transport or a real whole-body balance controller.
 
 Run the full example:
 
