@@ -3,11 +3,87 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import traceback
 from pathlib import Path
 
 
 def exists(path: str) -> bool:
     return Path(path).exists()
+
+
+def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
+    report = {
+        "python_path_inserted": False,
+        "imports": {},
+        "domain_initialized": False,
+        "channels": {},
+        "errors": [],
+    }
+    if not Path(sdk2_python_root).exists():
+        report["errors"].append(f"missing SDK2 Python root: {sdk2_python_root}")
+        return report
+
+    sys.path.insert(0, sdk2_python_root)
+    report["python_path_inserted"] = True
+
+    try:
+        import cyclonedds  # type: ignore
+
+        report["imports"]["cyclonedds"] = getattr(cyclonedds, "__version__", "available")
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["imports"]["cyclonedds"] = False
+        report["errors"].append(f"import cyclonedds failed: {exc}")
+        report["traceback"] = traceback.format_exc()
+        return report
+
+    try:
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+        from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["imports"]["unitree_sdk2py"] = False
+        report["errors"].append(f"import unitree_sdk2py failed: {exc}")
+        report["traceback"] = traceback.format_exc()
+        return report
+
+    report["imports"]["unitree_sdk2py"] = True
+    report["imports"]["unitree_hg_lowcmd_type"] = getattr(LowCmd_, "__idl_typename__", "unitree_hg.msg.dds_.LowCmd_")
+    report["imports"]["unitree_hg_lowstate_type"] = getattr(LowState_, "__idl_typename__", "unitree_hg.msg.dds_.LowState_")
+
+    try:
+        ChannelFactoryInitialize(domain, interface)
+        report["domain_initialized"] = True
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["errors"].append(f"ChannelFactoryInitialize failed: {exc}")
+        report["traceback"] = traceback.format_exc()
+        return report
+
+    try:
+        lowcmd = unitree_hg_msg_dds__LowCmd_()
+        publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+        publisher.Init()
+        publisher.Close()
+        report["channels"]["rt/lowcmd"] = {
+            "role": "publisher",
+            "created": True,
+            "sample_motor_count": len(lowcmd.motor_cmd),
+        }
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["channels"]["rt/lowcmd"] = {"role": "publisher", "created": False, "error": str(exc)}
+        report["errors"].append(f"rt/lowcmd publisher failed: {exc}")
+
+    try:
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        subscriber.Close()
+        report["channels"]["rt/lowstate"] = {"role": "subscriber", "created": True}
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["channels"]["rt/lowstate"] = {"role": "subscriber", "created": False, "error": str(exc)}
+        report["errors"].append(f"rt/lowstate subscriber failed: {exc}")
+
+    return report
 
 
 def main() -> int:
@@ -21,7 +97,7 @@ def main() -> int:
 
     report = {
         "status": "ready",
-        "implemented": False,
+        "implemented": "diagnostic_only",
         "purpose": "SDK2/CycloneDDS sidecar scaffold for the future Unitree G1 provider",
         "mode": mode,
         "transport": transport,
@@ -55,8 +131,11 @@ def main() -> int:
             "rt/api/arm/request",
             "rt/api/arm/response",
         ],
-        "next_step": "Install/build CycloneDDS and unitree_sdk2_python here, then run SDK2 probes against official unitree_mujoco on domain 1 interface lo.",
+        "next_step": f"Install/build CycloneDDS and unitree_sdk2_python here, then run SDK2 probes against official unitree_mujoco on domain {domain} interface {interface or 'auto'}.",
     }
+    report["sdk2_probe"] = probe_official_sdk2(sdk2_python_root, domain, interface or None)
+    if report["sdk2_probe"]["domain_initialized"]:
+        report["next_step"] = f"Launch official unitree_mujoco with -r g1 on DDS domain {domain} interface {interface or 'auto'}, then run lowstate/lowcmd pub-sub probes."
     print(json.dumps(report, indent=2), flush=True)
     return 0
 

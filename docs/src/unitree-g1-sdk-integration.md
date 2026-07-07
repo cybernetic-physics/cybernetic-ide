@@ -34,9 +34,11 @@ The implemented features are:
 - `packages/cybernetic-robotics/`, an installable Python package with a
   beginner `G1Robot` API, `cyber-g1` CLI, raw simulator clients, MJCF scene
   helpers, and packaged `unitree_sdk2py` compatibility modules.
-- An opt-in SDK2 sidecar scaffold under `overlays/unitree-g1-sdk2-sidecar/`
-  that mounts pinned official `unitree_sdk2_python`, `unitree_sdk2`, and
-  `unitree_mujoco` checkouts and reports the intended DDS topic boundary.
+- An opt-in SDK2 sidecar under `overlays/unitree-g1-sdk2-sidecar/` that mounts
+  pinned official `unitree_sdk2_python`, `unitree_sdk2`, and `unitree_mujoco`
+  checkouts, installs CycloneDDS, imports official Unitree HG IDL types,
+  initializes the DDS domain, and creates probe `rt/lowcmd`/`rt/lowstate`
+  channel objects.
 
 ## End User Guide {#end-user-guide}
 
@@ -151,9 +153,11 @@ show what changed after a Python control script or scene edit.
 
 The same MCP server also exposes `unitree_prepare_sdk2_sidecar` and
 `unitree_sdk2_sidecar_status`. These tools prepare pinned official Unitree SDK2
-sources and run a diagnostic sidecar report. They do not yet publish or
-subscribe CycloneDDS samples; they make the official SDK2 integration boundary
-inspectable before it becomes the default transport.
+sources and run a diagnostic sidecar report. The report proves SDK2 Python
+imports, CycloneDDS domain initialization, Unitree HG IDL imports, and
+`rt/lowcmd`/`rt/lowstate` channel creation. It does not yet launch official
+`unitree_mujoco` or prove samples moving between two DDS peers; that is the
+next integration step before it becomes the default transport.
 
 Runtime environment knobs:
 
@@ -402,9 +406,11 @@ policies.
 
 1. Partially done: add a `unitree-g1-runtime` image or sidecar with SDK2
    Python, CycloneDDS, and the official Unitree G1 examples available. The
-   current sidecar prepares pinned official SDK2 Python/C++ and MuJoCo sources
-   and reports the planned DDS topic boundary; remaining work is installing
-   CycloneDDS and running real SDK2 examples inside the sidecar.
+   current sidecar prepares pinned official SDK2 Python/C++ and MuJoCo sources,
+   builds the CycloneDDS Python binding, initializes a DDS domain, imports
+   Unitree HG IDL, and creates `rt/lowcmd`/`rt/lowstate` probe channels.
+   Remaining work is launching official `unitree_mujoco` and proving real
+   lowstate/lowcmd sample exchange against that peer.
 2. Add session config for `mode=sim|real`, DDS domain, network interface, G1
    model variant, and safety profile.
 3. Replace the current local HTTP approximation for `rt/lowcmd` and

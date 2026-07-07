@@ -158,11 +158,13 @@ local HTTP.
 
 Tasks:
 
-- Partial: build an opt-in sidecar scaffold with pinned official
+- Partial: build an opt-in sidecar with pinned official
   `unitree_sdk2_python`, `unitree_sdk2`, and `unitree_mujoco` sources mounted
-  read-only plus a JSON diagnostics entrypoint.
-- Remaining: install/build CycloneDDS in that sidecar, run official G1 SDK2
-  examples, and prove DDS pub/sub against official `unitree_mujoco`.
+  read-only, Debian CycloneDDS installed, the official Python CycloneDDS
+  binding built, and a JSON diagnostics entrypoint that initializes a DDS
+  domain and creates `rt/lowcmd`/`rt/lowstate` SDK2 channel objects.
+- Remaining: launch official `unitree_mujoco`, run official G1 SDK2 examples,
+  and prove DDS pub/sub against that simulator peer.
 - Launch official `unitree_mujoco` in sim mode with a known DDS domain and
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.

@@ -9,15 +9,19 @@ The sidecar currently:
 
 - mounts pinned official `unitree_sdk2_python`, `unitree_sdk2`, and
   `unitree_mujoco` checkouts prepared under `.runtime/unitree-g1-sdk2/`;
+- installs Debian CycloneDDS plus the official Python `cyclonedds==0.10.2`
+  binding expected by `unitree_sdk2_python`;
 - carries Cybernetic's selected `CYBER_UNITREE_MODE`,
   `CYBER_UNITREE_TRANSPORT`, `CYBER_UNITREE_DDS_DOMAIN`, and
   `CYBER_UNITREE_NETWORK_INTERFACE`;
-- prints a structured diagnostic report with source revisions and expected
-  Unitree topics/services.
+- prints a structured diagnostic report with source revisions, expected Unitree
+  topics/services, official SDK2 import status, DDS domain initialization, and
+  probe channel creation for `rt/lowcmd` and `rt/lowstate`.
 
-It does **not** yet install CycloneDDS or publish DDS samples. That is the next
-provider milestone. Keeping this scaffold honest is better than pretending the
-local HTTP shim is already the official transport.
+It does **not** yet launch official `unitree_mujoco` or prove data exchange
+with a simulator peer. That pub/sub probe is the next provider milestone.
+Keeping this scaffold honest is better than pretending the local HTTP shim is
+already the official transport.
 
 Prepare sources:
 

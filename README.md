@@ -41,7 +41,7 @@ making the user think about the transport layer.
 | `crates/cyber_robot_viewer/` | Cybernetic IDE workspace item that embeds the Robot Viewer and manages the local Docker/MuJoCo harness. |
 | `overlays/unitree-g1-mujoco-protocol/` | Python MuJoCo renderer/control server packaged as `cyber/unitree-g1-mujoco-protocol:0.1.0`. |
 | `overlays/unitree-g1-mujoco-container/` | Docker Compose wrapper that mounts the Unitree G1 MuJoCo assets and exposes `8788`/`38383`. |
-| `overlays/unitree-g1-sdk2-sidecar/` | Opt-in diagnostic sidecar scaffold for pinned official `unitree_sdk2_python`, `unitree_sdk2`, and `unitree_mujoco` sources. |
+| `overlays/unitree-g1-sdk2-sidecar/` | Opt-in diagnostic sidecar for pinned official Unitree SDK2/MuJoCo sources, CycloneDDS, and SDK2 channel probes. |
 | `overlays/unitree-g1-sdk-shim/` | Bootstrap `unitree_sdk2py` compatibility package for simulator-backed Unitree-shaped code. |
 | `packages/cybernetic-robotics/` | Installable Python package for beginner-friendly G1 control, power-user protocol access, MJCF scene helpers, and Unitree SDK2-shaped imports. |
 | `packages/g1-yoga-rl/` | LocoMuJoCo research utilities for projecting Cybernetic G1 yoga poses into training trajectories. |
@@ -301,9 +301,10 @@ ad hoc scripts first. The default tool surface includes:
   Unitree transport, sim/real mode, DDS domain/interface, simulator
   reachability, and topic freshness;
 - official SDK2 sidecar prep: `unitree_prepare_sdk2_sidecar` and
-  `unitree_sdk2_sidecar_status`, which fetch pinned official Unitree sources
-  and run the opt-in diagnostic container before the DDS bridge is promoted to
-  the default runtime;
+  `unitree_sdk2_sidecar_status`, which fetch pinned official Unitree sources,
+  run the opt-in diagnostic container, initialize CycloneDDS, and create
+  official SDK2 `rt/lowcmd`/`rt/lowstate` channel objects before the DDS bridge
+  is promoted to the default runtime;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
