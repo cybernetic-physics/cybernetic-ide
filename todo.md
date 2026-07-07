@@ -158,8 +158,11 @@ local HTTP.
 
 Tasks:
 
-- Build a sidecar/runtime image with official `unitree_sdk2_python`,
-  `unitree_sdk2`, CycloneDDS config, and the official G1 examples.
+- Partial: build an opt-in sidecar scaffold with pinned official
+  `unitree_sdk2_python`, `unitree_sdk2`, and `unitree_mujoco` sources mounted
+  read-only plus a JSON diagnostics entrypoint.
+- Remaining: install/build CycloneDDS in that sidecar, run official G1 SDK2
+  examples, and prove DDS pub/sub against official `unitree_mujoco`.
 - Launch official `unitree_mujoco` in sim mode with a known DDS domain and
   loopback interface.
 - Implement a provider that can choose `transport=local_http|dds`.
@@ -234,6 +237,9 @@ Tasks:
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.
+- Done: expose `unitree_prepare_sdk2_sidecar` and
+  `unitree_sdk2_sidecar_status` in the default Robotics Agent profile so
+  agents can inspect the official SDK2 bridge scaffold.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command

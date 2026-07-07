@@ -41,10 +41,12 @@ making the user think about the transport layer.
 | `crates/cyber_robot_viewer/` | Cybernetic IDE workspace item that embeds the Robot Viewer and manages the local Docker/MuJoCo harness. |
 | `overlays/unitree-g1-mujoco-protocol/` | Python MuJoCo renderer/control server packaged as `cyber/unitree-g1-mujoco-protocol:0.1.0`. |
 | `overlays/unitree-g1-mujoco-container/` | Docker Compose wrapper that mounts the Unitree G1 MuJoCo assets and exposes `8788`/`38383`. |
+| `overlays/unitree-g1-sdk2-sidecar/` | Opt-in diagnostic sidecar scaffold for pinned official `unitree_sdk2_python`, `unitree_sdk2`, and `unitree_mujoco` sources. |
 | `overlays/unitree-g1-sdk-shim/` | Bootstrap `unitree_sdk2py` compatibility package for simulator-backed Unitree-shaped code. |
 | `packages/cybernetic-robotics/` | Installable Python package for beginner-friendly G1 control, power-user protocol access, MJCF scene helpers, and Unitree SDK2-shaped imports. |
 | `packages/g1-yoga-rl/` | LocoMuJoCo research utilities for projecting Cybernetic G1 yoga poses into training trajectories. |
 | `script/prepare-unitree-g1-mujoco-container.mjs` | Fetches the pinned public `unitreerobotics/unitree_mujoco` G1 assets into `.runtime/` and writes `compose.env`. |
+| `script/prepare-unitree-g1-sdk2-sidecar.mjs` | Fetches pinned official Unitree SDK2 Python/C++ and MuJoCo sources into `.runtime/` for sidecar diagnostics. |
 | `script/probe-unitree-g1-mujoco-protocol.mjs` | CLI probe for the reversed Booster-like simulator envelope. |
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
@@ -91,6 +93,17 @@ docker compose \
   --env-file .runtime/unitree-g1-mujoco/compose.env \
   -f overlays/unitree-g1-mujoco-container/compose.yaml \
   up -d
+```
+
+Prepare the optional official SDK2 sidecar sources and run its diagnostic
+report:
+
+```sh
+node script/prepare-unitree-g1-sdk2-sidecar.mjs
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm unitree-g1-sdk2-sidecar
 ```
 
 Launch Cybernetic IDE on the example:
@@ -287,6 +300,10 @@ ad hoc scripts first. The default tool surface includes:
 - session diagnostics: `unitree_session_status`, which reports the selected
   Unitree transport, sim/real mode, DDS domain/interface, simulator
   reachability, and topic freshness;
+- official SDK2 sidecar prep: `unitree_prepare_sdk2_sidecar` and
+  `unitree_sdk2_sidecar_status`, which fetch pinned official Unitree sources
+  and run the opt-in diagnostic container before the DDS bridge is promoted to
+  the default runtime;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
@@ -354,6 +371,9 @@ robotics work should stay behind narrow product boundaries:
   `overlays/unitree-g1-mujoco-protocol`.
 - Container lifecycle lives in `overlays/unitree-g1-mujoco-container` plus
   `script/prepare-unitree-g1-mujoco-container.mjs`.
+- Official SDK2/CycloneDDS bridge scaffolding lives in
+  `overlays/unitree-g1-sdk2-sidecar` plus
+  `script/prepare-unitree-g1-sdk2-sidecar.mjs`.
 - Unitree-shaped Python APIs live in `overlays/unitree-g1-sdk-shim`.
 - Beginner-friendly and power-user Python APIs live in
   `packages/cybernetic-robotics`.
@@ -386,6 +406,12 @@ python3 -m py_compile \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py
 
 cargo test -p cyber_robot_viewer
+
+node --check script/prepare-unitree-g1-sdk2-sidecar.mjs
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  config >/tmp/cyber-unitree-g1-sdk2-sidecar.compose.yaml
 ```
 
 ## Roadmap
@@ -394,9 +420,9 @@ The first demo proves the Cybernetic product boundary: Unitree-shaped user
 code can control a MuJoCo G1 through an invisible simulator bridge. Next
 milestones:
 
-1. Replace the simulator-backed local channel approximation with official
-   `unitree_mujoco` plus CycloneDDS SDK2 topics (`rt/arm_sdk`, `rt/lowcmd`,
-   `rt/lowstate`).
+1. Promote the SDK2 sidecar scaffold into the default sim runtime by launching
+   official `unitree_mujoco` plus CycloneDDS SDK2 topics (`rt/arm_sdk`,
+   `rt/lowcmd`, `rt/lowstate`).
 2. Add real/sim session selection with explicit safety gates.
 3. Stream low-state telemetry into Robot Viewer panels.
 4. Add safe high-level locomotion controls before low-level joint control.

@@ -34,6 +34,9 @@ The implemented features are:
 - `packages/cybernetic-robotics/`, an installable Python package with a
   beginner `G1Robot` API, `cyber-g1` CLI, raw simulator clients, MJCF scene
   helpers, and packaged `unitree_sdk2py` compatibility modules.
+- An opt-in SDK2 sidecar scaffold under `overlays/unitree-g1-sdk2-sidecar/`
+  that mounts pinned official `unitree_sdk2_python`, `unitree_sdk2`, and
+  `unitree_mujoco` checkouts and reports the intended DDS topic boundary.
 
 ## End User Guide {#end-user-guide}
 
@@ -146,6 +149,12 @@ as `current`, `front`, `right`, and `three_quarter` into
 `.runtime/robot-viewer-snapshots/`. This is the preferred way for agents to
 show what changed after a Python control script or scene edit.
 
+The same MCP server also exposes `unitree_prepare_sdk2_sidecar` and
+`unitree_sdk2_sidecar_status`. These tools prepare pinned official Unitree SDK2
+sources and run a diagnostic sidecar report. They do not yet publish or
+subscribe CycloneDDS samples; they make the official SDK2 integration boundary
+inspectable before it becomes the default transport.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
@@ -171,6 +180,7 @@ Keep robotics changes behind the Cybernetic extension boundaries:
 | Workspace item and UI | `crates/cyber_robot_viewer/` |
 | MuJoCo renderer/control service | `overlays/unitree-g1-mujoco-protocol/` |
 | Container lifecycle | `overlays/unitree-g1-mujoco-container/` and `script/prepare-unitree-g1-mujoco-container.mjs` |
+| Official SDK2 sidecar scaffold | `overlays/unitree-g1-sdk2-sidecar/` and `script/prepare-unitree-g1-sdk2-sidecar.mjs` |
 | Unitree-shaped Python facade | `overlays/unitree-g1-sdk-shim/` |
 | Installable Python package | `packages/cybernetic-robotics/` |
 | End-user demos | `examples/` |
@@ -390,8 +400,11 @@ official `unitree_mujoco` + SDK2 DDS topics.
 Build the safe official-SDK runtime path before real hardware or learned
 policies.
 
-1. Add a `unitree-g1-runtime` image or sidecar with SDK2 Python, CycloneDDS,
-   and the official Unitree G1 examples available.
+1. Partially done: add a `unitree-g1-runtime` image or sidecar with SDK2
+   Python, CycloneDDS, and the official Unitree G1 examples available. The
+   current sidecar prepares pinned official SDK2 Python/C++ and MuJoCo sources
+   and reports the planned DDS topic boundary; remaining work is installing
+   CycloneDDS and running real SDK2 examples inside the sidecar.
 2. Add session config for `mode=sim|real`, DDS domain, network interface, G1
    model variant, and safety profile.
 3. Replace the current local HTTP approximation for `rt/lowcmd` and

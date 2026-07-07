@@ -104,6 +104,16 @@ const tools = [
   tool("unitree_session_status", "Read Unitree G1 session transport, DDS, simulator, and topic diagnostics.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("unitree_prepare_sdk2_sidecar", "Prepare pinned official Unitree SDK2 Python, SDK2 C++, and Unitree MuJoCo sources for the opt-in SDK2 sidecar.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool("unitree_sdk2_sidecar_status", "Run the opt-in Unitree SDK2 sidecar diagnostic container and return its source, topic, and transport report.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -567,6 +577,10 @@ async function callTool(name, args) {
       return textResult(await simStatus());
     case "unitree_session_status":
       return textResult(await unitreeSessionStatus());
+    case "unitree_prepare_sdk2_sidecar":
+      return textResult(runChecked("node", ["script/prepare-unitree-g1-sdk2-sidecar.mjs"], { timeoutMs: 240000 }));
+    case "unitree_sdk2_sidecar_status":
+      return textResult(sdk2SidecarStatus());
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -1394,6 +1408,42 @@ function composeArgs() {
 
 function composeEnvPath() {
   return path.join(root, ".runtime/unitree-g1-mujoco/compose.env");
+}
+
+function sdk2ComposeEnvPath() {
+  return path.join(root, ".runtime/unitree-g1-sdk2/compose.env");
+}
+
+function sdk2ComposeArgs() {
+  return ["compose", "--env-file", sdk2ComposeEnvPath(), "-f", path.join(root, "overlays/unitree-g1-sdk2-sidecar/compose.yaml")];
+}
+
+function sdk2SidecarStatus() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const result = runChecked("docker", [...sdk2ComposeArgs(), "run", "--rm", "unitree-g1-sdk2-sidecar"], { timeoutMs: 180000 });
+  let report = null;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    const jsonStart = result.stdout.indexOf("{");
+    const jsonEnd = result.stdout.lastIndexOf("}");
+    if (jsonStart !== -1 && jsonEnd > jsonStart) {
+      try {
+        report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+      } catch {
+        report = null;
+      }
+    }
+  }
+  return {
+    command: `docker ${[...sdk2ComposeArgs(), "run", "--rm", "unitree-g1-sdk2-sidecar"].join(" ")}`,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
 }
 
 function readComposeEnv() {

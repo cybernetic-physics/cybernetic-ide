@@ -1165,6 +1165,8 @@
               "sim_restart": true,
               "sim_status": true,
               "unitree_session_status": true,
+              "unitree_prepare_sdk2_sidecar": true,
+              "unitree_sdk2_sidecar_status": true,
               "sim_pause": true,
               "sim_resume": true,
               "sim_reset": true,
