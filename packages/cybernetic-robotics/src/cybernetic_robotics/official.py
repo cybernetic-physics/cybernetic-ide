@@ -405,6 +405,44 @@ class OfficialG1ManagedSession:
     def raise_left_hand(self, **kwargs: Any) -> dict[str, Any]:
         return self.sim.raise_left_hand_session(**kwargs)
 
+    def arm_pose_evidence(
+        self,
+        preset: str = "raise_right_hand",
+        *,
+        output_path: str | Path | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Run a bounded arm pose and collect before/after official lowstate."""
+
+        before = self.lowstate()
+        command = self.arm_pose(preset, **kwargs)
+        after = self.lowstate()
+        bundle = {
+            "ok": bool(before.get("ok") and command.get("ok") and after.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "preset": preset,
+            "started": self.started,
+            "before": before.get("lowstate_summary"),
+            "command": {
+                "ok": command.get("ok"),
+                "parameters": command.get("parameters"),
+                "moved_joints": command.get("moved_joints", []),
+                "lowcmd_write_successes": command.get("lowcmd_write_successes"),
+            },
+            "after": after.get("lowstate_summary"),
+            "agent_hints": [
+                "Use before/after lowstate as the source of truth for official SDK2 motion verification.",
+                "The managed official session is simulator-only; it is not a real hardware unlock.",
+                "If ok is false, inspect command.command_result and the sidecar stdout/stderr tails.",
+            ],
+        }
+        if output_path is not None:
+            path = Path(output_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(bundle, indent=2, default=str) + "\n", encoding="utf-8")
+            bundle["output_path"] = str(path)
+        return bundle
+
     def stop(self) -> dict[str, Any]:
         self.stopped = self.sim.stop_session()
         return self.stopped

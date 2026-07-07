@@ -24,29 +24,17 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--preset", choices=["raise_right_hand", "raise_left_hand"], default="raise_right_hand")
     parser.add_argument("--frames", type=int, default=180)
+    parser.add_argument("--out", default=".runtime/official-mujoco-evidence/latest.json")
     parser.add_argument("--keep-running", action="store_true")
     args = parser.parse_args()
 
     official = OfficialG1Sim.discover()
     stopped = None
     with official.session(keep_running=args.keep_running) as session:
-        before = session.lowstate()
-        command = session.arm_pose(args.preset, frames=args.frames)
-        after = session.lowstate()
-        started = session.started
+        report = session.arm_pose_evidence(args.preset, frames=args.frames, output_path=args.out)
     stopped = session.stopped
 
-    report = {
-        "ok": bool(started and started["ok"] and before["ok"] and command["ok"] and after["ok"]),
-        "session_ready": started["status"].get("ready"),
-        "preset": args.preset,
-        "before": before.get("lowstate_summary"),
-        "moved_joints": command.get("moved_joints", []),
-        "lowcmd_write_successes": command.get("lowcmd_write_successes"),
-        "after": after.get("lowstate_summary"),
-        "kept_running": args.keep_running,
-        "stopped": stopped,
-    }
+    report = {**report, "kept_running": args.keep_running, "stopped": stopped}
     print(json.dumps(report, indent=2, default=str))
     return 0 if report["ok"] else 1
 

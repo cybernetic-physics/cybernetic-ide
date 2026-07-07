@@ -130,10 +130,13 @@ official = OfficialG1Sim.discover()
 with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
     print(sim.raise_right_hand()["moved_joints"])
+    sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
 ```
 
 Pass `keep_running=True` to leave the Docker peer up for follow-up MCP or CLI
-commands.
+commands. `arm_pose_evidence()` writes a reviewable JSON bundle with before and
+after official `rt/lowstate` summaries, the bounded command parameters, moved
+joints, and agent hints.
 
 ## Unitree SDK2-Shaped API
 

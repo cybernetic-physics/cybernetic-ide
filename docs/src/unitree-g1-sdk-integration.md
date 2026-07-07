@@ -266,6 +266,7 @@ automatically:
 with OfficialG1Sim.discover().session() as sim:
     print(sim.lowstate()["lowstate_summary"])
     print(sim.arm_pose("raise_right_hand")["moved_joints"])
+    sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
 ```
 
 ```sh
@@ -612,6 +613,11 @@ The current repo has the first narrow version of that API boundary:
 - MCP now has `unitree_command_official_mujoco_arm_pose` for commanding that
   managed session, and the Python `G1ArmActionClient` routes `right hand up`
   through it when `CYBER_UNITREE_TRANSPORT=dds` is set in simulator mode.
+- MCP now has `unitree_official_mujoco_evidence_bundle` for the agent-native
+  version of that workflow: ensure the managed official peer is available, read
+  official `rt/lowstate` before the pose, command a bounded arm pose over
+  `rt/lowcmd`, read `rt/lowstate` again, and write a JSON evidence artifact
+  under `.runtime/official-mujoco-evidence/`.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

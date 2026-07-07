@@ -371,6 +371,56 @@ const tools = [
       openWorldHint: true,
     },
   ),
+  tool(
+    "unitree_official_mujoco_evidence_bundle",
+    "Run a bounded arm pose against the managed official Unitree MuJoCo G1 DDS session and write before/after rt/lowstate evidence.",
+    {
+      output_path: {
+        type: "string",
+        default: ".runtime/official-mujoco-evidence/latest.json",
+        description: "Workspace-relative JSON file for the evidence bundle.",
+      },
+      preset: {
+        type: "string",
+        enum: OFFICIAL_G1_ARM_POSE_PRESETS,
+        default: "raise_right_hand",
+        description: "Built-in bounded arm pose to publish when joint_deltas is omitted.",
+      },
+      joint_deltas: {
+        type: "object",
+        additionalProperties: { type: "number", minimum: -0.5, maximum: 0.5 },
+        description: "Optional map of official G1 arm joint name to target offset in radians. Values are clamped to +/-0.5.",
+      },
+      frames: {
+        type: "integer",
+        minimum: 20,
+        maximum: 600,
+        default: 180,
+        description: "Number of lowcmd frames to publish.",
+      },
+      kp: { type: "number", minimum: 0, maximum: 80, default: 30.0 },
+      kd: { type: "number", minimum: 0, maximum: 5, default: 1.0 },
+      hold_kp: { type: "number", minimum: 0, maximum: 80, default: 18.0 },
+      hold_kd: { type: "number", minimum: 0, maximum: 5, default: 0.8 },
+      min_moved_joints: { type: "integer", minimum: 1, maximum: 8, default: 2 },
+      start_if_needed: {
+        type: "boolean",
+        default: true,
+        description: "Start the managed official session if it is not already running and ready.",
+      },
+      stop_after: {
+        type: "boolean",
+        default: false,
+        description: "Stop the managed session after the bundle only when this tool started it.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  ),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -1012,6 +1062,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoArmPose(args));
     case "unitree_command_official_mujoco_arm_pose":
       return textResult(sdk2CommandOfficialMujocoArmPose(args));
+    case "unitree_official_mujoco_evidence_bundle":
+      return textResult(await sdk2OfficialMujocoEvidenceBundle(args));
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -2228,6 +2280,12 @@ function roboticsToolReference() {
       toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),
       toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
       toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),
+      toolReference(
+        "unitree_official_mujoco_evidence_bundle",
+        "robot-motion-with-evidence",
+        "May start official MuJoCo session, commands a bounded arm pose, and writes JSON lowstate evidence.",
+        "Official SDK2 sidecar prepared; managed official session running or start_if_needed true.",
+      ),
       toolReference("protocol_probe_http", "read", "Probes GameControl HTTP endpoint.", "Simulator HTTP endpoint reachable."),
       toolReference("protocol_probe_ws", "read", "Opens physics WebSocket and samples one topic.", "Physics WebSocket reachable."),
     ],
@@ -2866,6 +2924,71 @@ function sdk2CommandOfficialMujocoArmPose(options = {}) {
     stdout: result.stdout,
     stderr: result.stderr,
     report,
+  };
+}
+
+async function sdk2OfficialMujocoEvidenceBundle(options = {}) {
+  let session = sdk2OfficialMujocoSessionStatus();
+  let startedByTool = false;
+  let startResult = null;
+  if ((!session.running || !session.ready) && options.start_if_needed !== false) {
+    startResult = sdk2StartOfficialMujocoSession();
+    startedByTool = true;
+    session = startResult.status;
+  }
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+
+  const before = sdk2ReadOfficialMujocoLowstate();
+  const commandResult = sdk2CommandOfficialMujocoArmPose(options);
+  const after = sdk2ReadOfficialMujocoLowstate();
+  let stopResult = null;
+  if (startedByTool && options.stop_after === true) {
+    stopResult = sdk2StopOfficialMujocoSession();
+  }
+
+  const bundle = {
+    ok: Boolean(
+      before.report?.lowstate_read?.ok === true &&
+      commandResult.report?.arm_pose_command?.ok === true &&
+      after.report?.lowstate_read?.ok === true
+    ),
+    source: "official_unitree_mujoco_managed_session",
+    started_by_tool: startedByTool,
+    start_result: startResult,
+    session_before_command: session,
+    preset: commandResult.parameters.preset,
+    parameters: commandResult.parameters,
+    before: before.report?.lowstate_read?.lowstate_summary ?? null,
+    command: {
+      ok: commandResult.report?.arm_pose_command?.ok === true,
+      moved_joints: commandResult.report?.arm_pose_command?.moved_joints ?? [],
+      lowcmd_write_successes: commandResult.report?.arm_pose_command?.lowcmd_write_successes ?? null,
+      report: commandResult.report?.arm_pose_command ?? null,
+    },
+    after: after.report?.lowstate_read?.lowstate_summary ?? null,
+    stopped_after: stopResult,
+    agent_hints: [
+      "Use before/after official rt/lowstate summaries as the primary motion evidence.",
+      "This tool commands the official Unitree MuJoCo simulator over SDK2/CycloneDDS; it does not unlock physical hardware.",
+      "If ok is false, inspect command.report and the sidecar stdout/stderr returned by the lower-level tools.",
+    ],
+  };
+  const outputPath = safeWorkspacePath(options.output_path || ".runtime/official-mujoco-evidence/latest.json");
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  await fsp.writeFile(outputPath, `${JSON.stringify(bundle, null, 2)}\n`);
+  return {
+    ok: bundle.ok,
+    path: outputPath,
+    workspace_relative_path: path.relative(root, outputPath),
+    preset: bundle.preset,
+    moved_joints: bundle.command.moved_joints,
+    lowcmd_write_successes: bundle.command.lowcmd_write_successes,
+    before: bundle.before,
+    after: bundle.after,
+    started_by_tool: startedByTool,
+    stopped_after: stopResult?.removed === true,
   };
 }
 

@@ -231,6 +231,10 @@ Tasks:
 - Done: add `OfficialG1Sim.session()` as a context-managed SDK helper so Python
   scripts can start the official MuJoCo DDS peer, read `rt/lowstate`, command
   bounded arm poses, and clean up the Docker session automatically.
+- Done: add Python `OfficialG1ManagedSession.arm_pose_evidence()` and MCP
+  `unitree_official_mujoco_evidence_bundle` so humans and agents can run a
+  bounded official DDS arm pose and persist before/after `rt/lowstate` evidence
+  as a single JSON artifact.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -374,6 +378,8 @@ Tasks:
   low-level joint target, scene edit, and telemetry monitor variants.
 - Done: add `robotics_tool_reference` so agents can read safety level, side
   effects, and expected simulator state for the default robotics tools.
+- Done: add `unitree_official_mujoco_evidence_bundle` for official-DDS
+  before/after lowstate artifacts after bounded arm-pose commands.
 
 Reasoning: MCP tools are how AI agents become robotics development partners.
 Good tools should be task-shaped, inspectable, and safe by default.

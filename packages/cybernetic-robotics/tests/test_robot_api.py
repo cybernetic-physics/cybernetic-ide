@@ -1147,6 +1147,65 @@ class RobotApiTests(unittest.TestCase):
             2,
         )
 
+    def test_official_g1_managed_session_writes_arm_pose_evidence(self):
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "CYBER_UNITREE_ACTION=read_official_mujoco_lowstate" in command:
+                stdout = {
+                    "lowstate_read": {
+                        "ok": True,
+                        "lowstate_summary": {
+                            "mode_machine": 5,
+                            "motor_count": 35,
+                            "first_motors": [{"index": 0, "q": 0.0, "dq": 0.0}],
+                        },
+                    }
+                }
+            elif "CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose" in command:
+                stdout = {
+                    "arm_pose_command": {
+                        "ok": True,
+                        "moved_joints": ["right_shoulder_pitch", "right_elbow"],
+                        "lowcmd_write_successes": 180,
+                    }
+                }
+            else:
+                stdout = "container-id\n"
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(stdout) if isinstance(stdout, dict) else stdout,
+                stderr="",
+            )
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "inspect unitree-g1-sdk2-session" in command:
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"Running": True, "Status": "running"}), stderr="")
+            if "logs --tail" in command:
+                return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"ok": True, "peer_started": True}), stderr="")
+            return subprocess.CompletedProcess(args, 0, stdout="unitree-g1-sdk2-session\n", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            output_path = root / ".runtime/official-mujoco-evidence/test.json"
+            official = OfficialG1Sim(root, _runner=fake_runner, _unchecked_runner=fake_unchecked_runner)
+
+            with official.session() as session:
+                bundle = session.arm_pose_evidence(output_path=output_path)
+
+            written = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(bundle["ok"])
+        self.assertEqual(bundle["command"]["moved_joints"], ["right_shoulder_pitch", "right_elbow"])
+        self.assertEqual(bundle["before"]["motor_count"], 35)
+        self.assertEqual(written["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(written["command"]["lowcmd_write_successes"], 180)
+
     def test_official_g1_sim_can_command_managed_session(self):
         captured = {}
 

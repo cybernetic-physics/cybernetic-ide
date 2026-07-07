@@ -135,6 +135,7 @@ official = OfficialG1Sim.discover()
 with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
     print(sim.raise_right_hand()["moved_joints"])
+    sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
 ```
 
 The matching CLI flow is:
@@ -146,8 +147,9 @@ cyber-g1 official raise-hand --session
 cyber-g1 official stop-session
 ```
 
-`examples/g1_official_managed_session.py` wraps that whole lifecycle and leaves
-the session running only when `--keep-running` is passed. If a script needs
+`examples/g1_official_managed_session.py` wraps that whole lifecycle, writes
+the evidence bundle, and leaves the session running only when `--keep-running`
+is passed. If a script needs
 manual control instead of the context manager, use `official.start_session()`,
 `official.session_status()`, `official.lowstate_session()`, and
 `official.stop_session()`. With
@@ -409,6 +411,7 @@ sim_validate_behavior
 unitree_provider_status
 unitree_session_status
 unitree_read_official_mujoco_lowstate
+unitree_official_mujoco_evidence_bundle
 robotics_tool_reference
 unitree_sdk_scaffold_python
 scene_add_object
