@@ -198,7 +198,7 @@ pub fn init(cx: &mut App) {
     })
     .detach();
 
-    // When Zed logs to stdout rather than the log file, avoid registering
+    // When Cybernetic IDE logs to stdout rather than the log file, avoid registering
     // handlers for both `OpenLog` and `RevealLogInFileManager`, as the log file
     // does not exist in that scenario and these actions would error.
     if !crate::stdout_is_a_pty() {
@@ -377,7 +377,7 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
         focus: false,
         show: false,
         kind: WindowKind::Normal,
-        // On macOS, Zed handles window movement itself, so disable AppKit's titlebar dragging.
+        // On macOS, Cybernetic IDE handles window movement itself, so disable AppKit's titlebar dragging.
         // On other platforms, `is_movable` gates native window dragging (e.g. Windows'
         // `HTCAPTION` hit test), so it must remain `true`.
         is_movable: cfg!(not(target_os = "macos")),
@@ -716,7 +716,7 @@ fn show_software_emulation_warning_if_needed(
         };
         let message = format!(
             db::indoc! {r#"
-            Zed uses {} for rendering and requires a compatible GPU.
+            Cybernetic IDE uses {} for rendering and requires a compatible GPU.
 
             Currently you are using a software emulated GPU ({}) which
             will result in awful performance.
@@ -1619,7 +1619,7 @@ fn open_about_window(cx: &mut App) {
     cx.open_window(
         WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some("About Zed".into()),
+                title: Some("About Cybernetic IDE".into()),
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(12.), px(12.))),
             }),

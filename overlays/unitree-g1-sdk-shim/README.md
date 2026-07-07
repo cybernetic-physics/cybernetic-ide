@@ -22,3 +22,18 @@ command to the G1 MuJoCo protocol container. That keeps the user API aligned
 with Unitree SDK2 while the backend moves toward the official SDK2/CycloneDDS
 transport used by `unitree_mujoco`.
 
+Run the checked-in demo from the repo root:
+
+```sh
+python3 examples/g1_raise_hand_sdk.py
+```
+
+The supported simulated action set is intentionally tiny:
+
+| Unitree action | Action ID | Simulator command |
+| --- | ---: | --- |
+| `right hand up` | `23` | `{"command":"pose","pose":"raise_right_hand"}` |
+| `release arm` | `99` | `{"command":"pose","pose":"neutral"}` |
+
+Unsupported action IDs return a non-zero code. That makes missing simulator
+coverage obvious while preserving the high-level Unitree client shape.

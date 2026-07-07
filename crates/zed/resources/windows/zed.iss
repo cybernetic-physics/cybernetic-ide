@@ -2,10 +2,10 @@
 AppId={#AppId}
 AppName={#AppName}
 AppVerName={#AppDisplayName}
-AppPublisher=Zed Industries
-AppPublisherURL=https://www.zed.dev/
-AppSupportURL=https://www.zed.dev/
-AppUpdatesURL=https://www.zed.dev/
+AppPublisher=Cybernetic Physics
+AppPublisherURL=https://cyberneticphysics.com/
+AppSupportURL=https://github.com/cybernetic-physics/cybernetic-ide/issues
+AppUpdatesURL=https://github.com/cybernetic-physics/cybernetic-ide
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableReadyPage=yes

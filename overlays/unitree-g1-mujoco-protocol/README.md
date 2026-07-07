@@ -1,8 +1,8 @@
 # Unitree G1 MuJoCo Protocol Container
 
-This overlay is a separate, explicit runtime for a Unitree G1 MuJoCo scene.
-It follows the Booster simulator client shape instead of inventing a Zed-only
-API:
+This overlay is Cybernetic IDE's separate, explicit runtime for a Unitree G1
+MuJoCo scene. It follows the Booster simulator client shape instead of
+inventing an editor-only API:
 
 - MuJoCo runs inside Docker.
 - The IDE/client connects to a physics WebSocket on `8788`.
@@ -48,6 +48,17 @@ Simulator commands:
   simulator command, not the official SDK2/DDS arm-control path.
 - `POST /command` accepts the same command JSON over HTTP for simple probes.
 
+Direct HTTP examples:
+
+```sh
+curl -sS http://127.0.0.1:38383/status
+
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{"command":"pose","pose":"raise_right_hand"}' \
+  http://127.0.0.1:38383/command
+```
+
 The Unitree assets are not vendored in this repo. The prepare script fetches
 the official `unitreerobotics/unitree_mujoco` repository at a pinned commit
 into `.runtime/unitree-g1-mujoco/unitree_mujoco` and mounts it read-only.
@@ -58,3 +69,7 @@ Probe the live Booster-style envelope from this repo with:
 node script/probe-unitree-g1-mujoco-protocol.mjs --topic simulation_state
 node script/probe-unitree-g1-mujoco-protocol.mjs --topic visual_frame
 ```
+
+The embedded Cybernetic Robot Viewer consumes the HTTP status/frame endpoints
+for responsiveness and keeps the WebSocket protocol available for parity with
+the reversed Booster Studio simulator contract.

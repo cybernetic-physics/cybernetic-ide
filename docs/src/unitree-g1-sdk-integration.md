@@ -15,6 +15,155 @@ official Unitree SDK2 control surface, does not publish or subscribe Unitree
 DDS topics, and does not let a user send G1 locomotion, posture, arm, hand, or
 low-level joint commands.
 
+The implemented features are:
+
+- `cyber: open robot viewer`: open the embedded Robot Viewer in the active
+  workspace pane.
+- `cyber: open robot viewer beside`: open or move the Robot Viewer beside the
+  active code pane.
+- Automatic local runtime preparation through
+  `script/prepare-unitree-g1-mujoco-container.mjs`.
+- Docker image build for `cyber/unitree-g1-mujoco-protocol:0.1.0`.
+- Docker Compose lifecycle for the `unitree-g1-mujoco` container.
+- HTTP status, scene, camera, frame, and command endpoints on `38383`.
+- Booster-like physics WebSocket subscriptions on `8788`.
+- Interactive camera orbit, zoom, pan, reset, pause/resume, refresh, and step
+  controls in the embedded viewer.
+- Python examples for protocol probing and simulator control.
+- A Unitree SDK2-shaped Python facade for the first G1 arm-action demo.
+
+## End User Guide {#end-user-guide}
+
+Build Cybernetic IDE:
+
+```sh
+cargo build -p zed
+```
+
+Prepare the pinned public Unitree MuJoCo G1 assets:
+
+```sh
+node script/prepare-unitree-g1-mujoco-container.mjs
+```
+
+Build the simulator protocol image:
+
+```sh
+docker build -t cyber/unitree-g1-mujoco-protocol:0.1.0 overlays/unitree-g1-mujoco-protocol
+```
+
+Start the simulator:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-mujoco/compose.env \
+  -f overlays/unitree-g1-mujoco-container/compose.yaml \
+  up -d
+```
+
+Open an example in Cybernetic IDE:
+
+```sh
+./target/debug/zed examples/control_g1_sim.py
+```
+
+Open the Command Palette and run `cyber: open robot viewer beside`. The viewer
+will place the G1 MuJoCo viewport next to the active code pane.
+
+Run the general simulator probe:
+
+```sh
+python3 examples/control_g1_sim.py --steps 20 --run-seconds 1.2
+```
+
+Run the first Unitree-shaped SDK demo:
+
+```sh
+python3 examples/g1_raise_hand_sdk.py
+```
+
+The task picker also contains:
+
+- `run Unitree G1 sim control demo`
+- `raise Unitree G1 hand`
+- `raise Unitree G1 hand via Unitree SDK facade`
+
+## Robot Viewer Controls {#robot-viewer-controls}
+
+The Robot Viewer renders cached MuJoCo camera frames and sends lightweight
+camera commands separately from rendering. This keeps mouse interaction
+responsive even when MuJoCo frame generation is slower than the UI.
+
+| Control | Behavior |
+| --- | --- |
+| Drag | Orbit the MuJoCo free camera around the G1. |
+| Scroll | Zoom the camera in or out. |
+| Refresh button | Reconnect and reprobe the simulator. |
+| Cube button | Reset the camera to the default G1 framing. |
+| Play/Pause button | Resume or pause simulation stepping. |
+| Crosshair button | Step or recenter viewer state depending on current state. |
+
+Default endpoints:
+
+- `http://127.0.0.1:38383/status`
+- `http://127.0.0.1:38383/visual_scene`
+- `http://127.0.0.1:38383/visual_frame`
+- `http://127.0.0.1:38383/camera`
+- `http://127.0.0.1:38383/camera_frame_0.jpg`
+- `ws://127.0.0.1:8788`
+
+Runtime environment knobs:
+
+- `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
+- `CYBER_ROBOT_IMAGE`: simulator image, default
+  `cyber/unitree-g1-mujoco-protocol:0.1.0`.
+- `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
+  `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
+- `CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP=1`: auto-open Robot Viewer in debug
+  sessions.
+- `CYBER_G1_GAME_CONTROL_URL`: GameControl base URL for Python examples.
+- `CYBER_G1_WS_HOST` and `CYBER_G1_WS_PORT`: WebSocket host/port for
+  `examples/control_g1_sim.py`.
+
+## Developer Guide {#developer-guide}
+
+Keep robotics changes behind the Cybernetic extension boundaries:
+
+| Area | Code |
+| --- | --- |
+| Workspace item and UI | `crates/cyber_robot_viewer/` |
+| MuJoCo renderer/control service | `overlays/unitree-g1-mujoco-protocol/` |
+| Container lifecycle | `overlays/unitree-g1-mujoco-container/` and `script/prepare-unitree-g1-mujoco-container.mjs` |
+| Unitree-shaped Python facade | `overlays/unitree-g1-sdk-shim/` |
+| End-user demos | `examples/` |
+| Long-form docs | `docs/src/unitree-g1-sdk-integration.md` |
+
+Focused validation:
+
+```sh
+python3 -m py_compile \
+  examples/control_g1_sim.py \
+  examples/g1_raise_hand_sdk.py \
+  overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
+  overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
+  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
+  overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_client.py
+
+cargo test -p cyber_robot_viewer
+```
+
+Manual runtime validation:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-mujoco/compose.env \
+  -f overlays/unitree-g1-mujoco-container/compose.yaml \
+  up -d --force-recreate unitree-g1-mujoco
+
+node script/probe-unitree-g1-mujoco-protocol.mjs --topic simulation_state
+python3 examples/g1_raise_hand_sdk.py
+```
+
 ## Missing Booster Studio Features {#missing-booster-studio-features}
 
 These are the largest missing feature groups compared with the real Booster

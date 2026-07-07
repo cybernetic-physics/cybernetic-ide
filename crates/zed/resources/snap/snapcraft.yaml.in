@@ -1,18 +1,19 @@
-name: zed
-title: Zed
+name: cybernetic-ide
+title: Cybernetic IDE
 base: core24
 version: "$RELEASE_VERSION"
-summary: The editor for what's next
+summary: Robotics IDE with an embedded Unitree G1 MuJoCo viewer
 description: |
-  Zed is a modern open-source code editor, built from the ground up in Rust with
-  a GPU-accelerated renderer. We help you build software faster than ever before.
+  Cybernetic IDE is a robotics development environment built on a Zed editor
+  foundation with an embedded Unitree G1 MuJoCo viewer, Dockerized simulator
+  runtime, and Unitree SDK-shaped control path.
 grade: stable
 confinement: classic
 compression: lzo
-website: https://zed.dev/
-source-code: https://github.com/zed-industries/zed
-issues: https://github.com/zed-industries/zed/issues
-contact: https://zed.dev/community-links#support-and-feedback
+website: https://cyberneticphysics.com/
+source-code: https://github.com/cybernetic-physics/cybernetic-ide
+issues: https://github.com/cybernetic-physics/cybernetic-ide/issues
+contact: https://github.com/cybernetic-physics/cybernetic-ide/issues
 
 parts:
   zed:
@@ -54,6 +55,6 @@ parts:
 apps:
   zed:
     command: usr/bin/zed
-    common-id: dev.zed.Zed
+    common-id: org.cyberneticphysics.CyberneticIDE
     environment:
       ZED_BUNDLE_TYPE: snap
