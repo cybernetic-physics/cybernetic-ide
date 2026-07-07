@@ -67,6 +67,8 @@ python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
 python3 examples/g1_official_raise_hand.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_wave_hand_sdk.py
+python3 examples/g1_walk_square_loco.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_lowstate_monitor.py --samples 3
 python3 examples/g1_joint_targets.py
@@ -209,6 +211,18 @@ Supported methods include `GetFsmId`, `GetFsmMode`, `GetBalanceMode`,
 `StopMove`, `LowStand`, `HighStand`, `WaveHand`, and `ShakeHand`. `Move` is
 currently simulated with simple kinematic base motion; it is not yet Unitree's
 full locomotion controller.
+
+Two focused examples are useful when teaching agents or new users the
+locomotion surface:
+
+```sh
+python3 examples/g1_wave_hand_sdk.py
+python3 examples/g1_walk_square_loco.py
+```
+
+Both scripts call the Unitree-shaped `LocoClient`, write screenshots, and save
+a JSON manifest under `.runtime/` so an AI agent can inspect return codes,
+status, lowstate, and visual evidence after the behavior runs.
 
 ## Unitree G1 AudioClient-Shaped Code
 

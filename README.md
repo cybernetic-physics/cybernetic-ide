@@ -52,6 +52,8 @@ making the user think about the transport layer.
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
 | `examples/g1_official_raise_hand.py` | Opt-in official Unitree MuJoCo + SDK2/CycloneDDS hand-raise probe. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
+| `examples/g1_wave_hand_sdk.py` | Focused Unitree `LocoClient.WaveHand` demo with before/after evidence. |
+| `examples/g1_walk_square_loco.py` | Unitree `LocoClient` locomotion pattern demo that walks a small square. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_lowstate_monitor.py` | Compact lowstate and named-joint telemetry monitor with optional JSONL output. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
@@ -139,6 +141,8 @@ cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_wave_hand_sdk.py
+python3 examples/g1_walk_square_loco.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_lowstate_monitor.py --samples 3
 python3 examples/g1_joint_targets.py
@@ -454,8 +458,14 @@ python3 -m py_compile \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
   examples/g1_loco_sdk.py \
+  examples/g1_wave_hand_sdk.py \
+  examples/g1_walk_square_loco.py \
   examples/g1_lowcmd_sdk.py \
   examples/g1_joint_targets.py \
+  examples/g1_scene_obstacle.py \
+  examples/g1_safety_stop.py \
+  examples/g1_agent_debug_loop.py \
+  examples/g1_behavior_gallery.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \

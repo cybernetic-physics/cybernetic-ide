@@ -99,8 +99,11 @@ Use these as the living examples for developer behavior:
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_raise_hand_sdk.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_wave_hand_sdk.py
+python3 examples/g1_walk_square_loco.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_joint_targets.py
+python3 examples/g1_scene_obstacle.py --activate
 python3 examples/g1_behavior_gallery.py
 python3 examples/yoga_teacher.py
 ```
@@ -109,7 +112,8 @@ They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
 `LocoClient`-shaped locomotion, G1 audio intent (`AudioClient`), low-level
 `rt/lowcmd`/`rt/lowstate` control, read-only `rt/sportmodestate` and
 `rt/wirelesscontroller` telemetry, named-joint target control, a behavior
-gallery with snapshots, and a higher-level scripted motion flow.
+gallery with snapshots, copy-on-write scene edits, and a higher-level scripted
+motion flow.
 
 ## LocoMuJoCo Policy-Training Package
 

@@ -359,10 +359,12 @@ are honest by reading examples that do real things.
 
 Tasks:
 
-- `examples/g1_wave_hand_sdk.py`: high-level wave behavior.
+- Done: `examples/g1_wave_hand_sdk.py`: high-level wave behavior with
+  before/after evidence.
 - Done: `examples/g1_official_raise_hand.py`: official sidecar-backed SDK2/DDS
   hand-raise proof.
-- `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern.
+- Done: `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern with
+  command trace, snapshots, and final telemetry.
 - Done: `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
 - Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.
 - Done: `examples/g1_scene_obstacle.py`: add an object to a copied MJCF scene,

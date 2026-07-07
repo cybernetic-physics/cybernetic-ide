@@ -308,8 +308,14 @@ python3 -m py_compile \
   examples/g1_raise_hand_sdk.py \
   examples/g1_official_raise_hand.py \
   examples/g1_loco_sdk.py \
+  examples/g1_wave_hand_sdk.py \
+  examples/g1_walk_square_loco.py \
   examples/g1_lowcmd_sdk.py \
   examples/g1_joint_targets.py \
+  examples/g1_scene_obstacle.py \
+  examples/g1_safety_stop.py \
+  examples/g1_agent_debug_loop.py \
+  examples/g1_behavior_gallery.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \
@@ -504,6 +510,11 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
   including official-style FSM, balance, swing-height, and stand-height
   getters/setters.
+- `examples/g1_wave_hand_sdk.py` isolates the official-style
+  `LocoClient.WaveHand()` call and writes before/after screenshots plus a
+  manifest for agent review.
+- `examples/g1_walk_square_loco.py` uses repeated `LocoClient.Move()` calls to
+  trace a small square with final status, lowstate, snapshots, and a manifest.
 - `examples/g1_lowstate_monitor.py` prints compact simulator-backed
   `rt/lowstate` and named-joint telemetry, with optional JSONL output for
   offline agent review.
