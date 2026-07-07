@@ -27,8 +27,8 @@ making the user think about the transport layer.
 - An installable `cybernetic-robotics` Python package under
   `packages/cybernetic-robotics/` with a beginner `G1Robot` API, CLI, raw
   protocol clients, scene helpers, and a packaged `unitree_sdk2py` simulator
-  shim, including the Unitree-shaped `G1ArmActionClient` and `LocoClient`
-  surfaces.
+  shim, including the Unitree-shaped `G1ArmActionClient`, `LocoClient`,
+  `rt/lowcmd`, and `rt/lowstate` surfaces.
 - Example scripts in `examples/` for both low-level simulator probes and the
   Unitree-shaped hand-raise demo.
 - Cybernetic IDE task entries for running the simulator demo directly from the
@@ -48,6 +48,7 @@ making the user think about the transport layer.
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
+| `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
 | `examples/g1_behavior_gallery.py` | Behavior gallery that runs arm action, locomotion, wave, stand-height, safe-neutral, and saves snapshots. |
 | `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
 | `examples/use_cybernetic_robotics_lib.py` | Polished package demo that exercises both `G1Robot` and the Unitree SDK2-shaped shim. |
@@ -118,6 +119,7 @@ cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_behavior_gallery.py
 python3 examples/easy_g1_playground.py
 ```
@@ -157,6 +159,36 @@ python3 examples/g1_raise_hand_sdk.py
 After installing `packages/cybernetic-robotics`, the same import shape is
 available without manually injecting `overlays/unitree-g1-sdk-shim` onto
 `PYTHONPATH`.
+
+For lower-level SDK2-shaped control, use the channel APIs:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+lowstate_sub = ChannelSubscriber("rt/lowstate", LowState_)
+lowstate_sub.Init()
+low_state = lowstate_sub.Read()
+
+low_cmd = unitree_hg_msg_dds__LowCmd_()
+low_cmd.motor_cmd[22].mode = 1
+low_cmd.motor_cmd[22].q = -1.0
+low_cmd.motor_cmd[22].kp = 30.0
+low_cmd.motor_cmd[22].kd = 1.0
+
+lowcmd_pub = ChannelPublisher("rt/lowcmd", LowCmd_)
+lowcmd_pub.Init()
+lowcmd_pub.Write(low_cmd)
+```
+
+The complete runnable version is:
+
+```sh
+python3 examples/g1_lowcmd_sdk.py
+```
 
 Or run the task inside Cybernetic IDE:
 
@@ -284,9 +316,16 @@ python3 -m py_compile \
   examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  examples/g1_loco_sdk.py \
+  examples/g1_lowcmd_sdk.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/idl/unitree_hg/msg/dds_.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/g1/arm/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/g1/loco/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/comm/motion_switcher/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/utils/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
@@ -301,8 +340,9 @@ The first demo proves the Cybernetic product boundary: Unitree-shaped user
 code can control a MuJoCo G1 through an invisible simulator bridge. Next
 milestones:
 
-1. Replace the bootstrap pose bridge with official `unitree_mujoco` plus SDK2
-   DDS topics (`rt/arm_sdk`, `rt/lowcmd`, `rt/lowstate`).
+1. Replace the simulator-backed local channel approximation with official
+   `unitree_mujoco` plus CycloneDDS SDK2 topics (`rt/arm_sdk`, `rt/lowcmd`,
+   `rt/lowstate`).
 2. Add real/sim session selection with explicit safety gates.
 3. Stream low-state telemetry into Robot Viewer panels.
 4. Add safe high-level locomotion controls before low-level joint control.

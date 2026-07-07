@@ -201,6 +201,11 @@ class G1MujocoState:
             "velocity_until": None,
             "arm_task_id": None,
         }
+        self.lowcmd_state = {
+            "topic": None,
+            "received_at": None,
+            "motor_cmd_count": 0,
+        }
         self.latest_jpeg = None
         self.latest_jpeg_frame_id = None
         self.latest_jpeg_rendered_at = None
@@ -246,12 +251,14 @@ class G1MujocoState:
         """
 
         count = self.model.nu
+        self.actuator_joint_id = np.zeros(count, dtype=int)
         self.actuator_qpos_adr = np.zeros(count, dtype=int)
         self.actuator_dof_adr = np.zeros(count, dtype=int)
         self.kp = np.zeros(count)
         self.kd = np.zeros(count)
         for index in range(count):
             joint_id = int(self.model.actuator_trnid[index, 0])
+            self.actuator_joint_id[index] = joint_id
             self.actuator_qpos_adr[index] = int(self.model.jnt_qposadr[joint_id])
             self.actuator_dof_adr[index] = int(self.model.jnt_dofadr[joint_id])
             name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, index) or ""
@@ -293,6 +300,11 @@ class G1MujocoState:
                     "arm_task_id": None,
                 }
             )
+            self.lowcmd_state = {
+                "topic": None,
+                "received_at": None,
+                "motor_cmd_count": 0,
+            }
             self.data.ctrl[:] = 0.0
             self.paused = True
             self.last_step_wall_time = time.monotonic()
@@ -464,6 +476,85 @@ class G1MujocoState:
             math.sin(half_yaw),
         ]
 
+    def low_state_payload(self):
+        with self.lock:
+            self.apply_loco_velocity_locked(0.0)
+            motor_state = []
+            for index in range(35):
+                if index < self.model.nu:
+                    qpos_addr = int(self.actuator_qpos_adr[index])
+                    dof_addr = int(self.actuator_dof_adr[index])
+                    motor_state.append(
+                        {
+                            "mode": 1,
+                            "q": float(self.data.qpos[qpos_addr]),
+                            "dq": float(self.data.qvel[dof_addr]),
+                            "tau_est": float(self.data.ctrl[index]),
+                        }
+                    )
+                else:
+                    motor_state.append({"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0})
+            return {
+                "mode_machine": int(self.loco_state.get("fsm_id") or 0),
+                "imu_state": {
+                    "quaternion": as_list(self.data.qpos[3:7]) if self.model.nq >= 7 else [1.0, 0.0, 0.0, 0.0],
+                    "gyroscope": [0.0, 0.0, 0.0],
+                    "accelerometer": [0.0, 0.0, 0.0],
+                },
+                "motor_state": motor_state,
+                "lowcmd": dict(self.lowcmd_state),
+            }
+
+    def handle_lowcmd_command(self, payload):
+        motor_cmd = payload.get("motor_cmd", [])
+        if not isinstance(motor_cmd, list):
+            return {"ok": False, "error": "motor_cmd must be a list"}
+        with self.lock:
+            q = self.data.qpos[self.actuator_qpos_adr]
+            qd = self.data.qvel[self.actuator_dof_adr]
+            applied_targets = 0
+            for index, command in enumerate(motor_cmd[: self.model.nu]):
+                if not isinstance(command, dict):
+                    continue
+                tau = float(command.get("tau", 0.0))
+                kp = float(command.get("kp", 0.0))
+                kd = float(command.get("kd", 0.0))
+                target_q = float(command.get("q", q[index]))
+                target_dq = float(command.get("dq", 0.0))
+                if int(command.get("mode", 0)) and (kp > 0.0 or kd > 0.0):
+                    joint_id = int(self.actuator_joint_id[index])
+                    qpos_addr = int(self.actuator_qpos_adr[index])
+                    if self.model.jnt_limited[joint_id]:
+                        minimum, maximum = self.model.jnt_range[joint_id]
+                        target_q = clamp(target_q, float(minimum), float(maximum))
+                    self.data.qpos[qpos_addr] = target_q
+                    self.data.qvel[int(self.actuator_dof_adr[index])] = target_dq
+                    applied_targets += 1
+                self.data.ctrl[index] = clamp(
+                    tau + kp * (target_q - q[index]) + kd * (target_dq - qd[index]),
+                    self.ctrl_lo[index],
+                    self.ctrl_hi[index],
+                )
+            mujoco.mj_forward(self.model, self.data)
+            self.drop_to_floor_locked()
+            self.lowcmd_state = {
+                "topic": payload.get("topic", "rt/lowcmd"),
+                "received_at": time.time(),
+                "motor_cmd_count": len(motor_cmd),
+                "applied_position_targets": applied_targets,
+            }
+            self.control_mode = "lowcmd"
+            self.active_pose = "lowcmd"
+            self.paused = True
+            self.last_step_wall_time = time.monotonic()
+            self.refresh_jpeg_cache()
+            return {
+                "ok": True,
+                "control_mode": self.control_mode,
+                "paused": self.paused,
+                "lowcmd": dict(self.lowcmd_state),
+            }
+
     def handle_loco_command(self, payload):
         action = payload.get("action", "state")
         with self.lock:
@@ -477,6 +568,7 @@ class G1MujocoState:
                 self.loco_state["fsm_mode"] = payload.get("mode") or str(fsm_id)
                 if fsm_id in (0, 1):
                     self.control_mode = None
+                    self.lowcmd_state["received_at"] = None
                     self.loco_state["velocity"] = [0.0, 0.0, 0.0]
                     self.loco_state["velocity_until"] = None
                     self.paused = True
@@ -754,6 +846,7 @@ class G1MujocoState:
                     "last_error": self.last_render_error,
                     "camera": self.camera_payload(),
                 },
+                "lowcmd": dict(self.lowcmd_state),
             }
 
     def render_cache_payload(self):
@@ -991,6 +1084,8 @@ class G1MujocoState:
             )
         if command == "loco":
             return self.handle_loco_command(payload)
+        if command == "lowcmd":
+            return self.handle_lowcmd_command(payload)
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}
@@ -1065,6 +1160,10 @@ def start_http_server(state):
 
             if parsed.path == "/camera":
                 self.write_json(200, {"ok": True, "camera": state.camera_payload()})
+                return
+
+            if parsed.path == "/lowstate":
+                self.write_json(200, state.low_state_payload())
                 return
 
             if parsed.path == "/visual_frame":

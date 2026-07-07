@@ -153,6 +153,12 @@ class SimulatorClient:
     def loco(self, action: str = "state", **fields: Any) -> JsonObject:
         return self.command("loco", action=action, **fields)
 
+    def lowcmd(self, motor_cmd: list[JsonObject], **fields: Any) -> JsonObject:
+        return self.command("lowcmd", motor_cmd=motor_cmd, **fields)
+
+    def lowstate(self) -> JsonObject:
+        return self.get_json("/lowstate")
+
     def camera(self, action: str = "state", **fields: Any) -> CameraState:
         if action == "state" and not fields:
             return CameraState(self.get_json("/camera"))

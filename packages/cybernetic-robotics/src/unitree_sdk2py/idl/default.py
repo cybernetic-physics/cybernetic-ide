@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+from .unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_, MotorCmd_, MotorState_
+
+
+def unitree_hg_msg_dds__IMUState_() -> IMUState_:
+    return IMUState_()
+
+
+def unitree_hg_msg_dds__MotorCmd_() -> MotorCmd_:
+    return MotorCmd_()
+
+
+def unitree_hg_msg_dds__MotorState_() -> MotorState_:
+    return MotorState_()
+
+
+def unitree_hg_msg_dds__LowCmd_() -> LowCmd_:
+    return LowCmd_()
+
+
+def unitree_hg_msg_dds__LowState_() -> LowState_:
+    return LowState_()

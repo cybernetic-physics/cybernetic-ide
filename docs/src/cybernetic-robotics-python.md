@@ -65,6 +65,7 @@ API and the Unitree SDK-shaped shim:
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_lowcmd_sdk.py
 ```
 
 ## CLI
@@ -147,6 +148,56 @@ Supported methods include `GetFsmId`, `SetFsmId`, `Damp`, `Start`,
 `ShakeHand`. `Move` is currently simulated with simple kinematic base motion;
 it is not yet Unitree's full locomotion controller.
 
+## Low-Level Unitree Channels
+
+For developers adapting Unitree's official low-level examples, the package also
+implements the core `rt/lowcmd` and `rt/lowstate` channel shape:
+
+```python
+from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+from unitree_sdk2py.utils.crc import CRC
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+motion = MotionSwitcherClient()
+motion.SetTimeout(5.0)
+motion.Init()
+motion.ReleaseMode()
+
+lowstate_sub = ChannelSubscriber("rt/lowstate", LowState_)
+lowstate_sub.Init()
+low_state = lowstate_sub.Read()
+
+low_cmd = unitree_hg_msg_dds__LowCmd_()
+low_cmd.mode_machine = low_state.mode_machine
+low_cmd.motor_cmd[22].mode = 1
+low_cmd.motor_cmd[22].q = -1.0
+low_cmd.motor_cmd[22].kp = 30.0
+low_cmd.motor_cmd[22].kd = 1.0
+low_cmd.crc = CRC().Crc(low_cmd)
+
+lowcmd_pub = ChannelPublisher("rt/lowcmd", LowCmd_)
+lowcmd_pub.Init()
+lowcmd_pub.Write(low_cmd)
+```
+
+`ChannelSubscriber("rt/lowstate", LowState_)` reads synthesized MuJoCo motor
+position, velocity, estimated torque, IMU quaternion, and mode-machine fields
+from the local simulator. `ChannelPublisher("rt/lowcmd", LowCmd_)` converts
+motor commands to MuJoCo actuator torques. The bridge intentionally preserves
+Unitree method names and import paths, but it is still simulator-only and does
+not replace Unitree's full CycloneDDS transport or a real whole-body balance
+controller.
+
+Run the full example:
+
+```sh
+python3 examples/g1_lowcmd_sdk.py
+```
+
 ## Agent MCP Tools
 
 The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to
@@ -156,6 +207,8 @@ the Agent panel. The most useful camera tools are:
 viewer_camera_control
 viewer_snapshot
 viewer_snapshot_file
+g1_lowstate
+g1_lowcmd
 ```
 
 `viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the

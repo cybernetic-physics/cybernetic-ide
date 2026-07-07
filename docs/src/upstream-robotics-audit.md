@@ -20,6 +20,8 @@ surfaces a developer is likely to reach for first:
 
 - `unitree_sdk2py.g1.arm.g1_arm_action_client.G1ArmActionClient`
 - `unitree_sdk2py.g1.loco.g1_loco_client.LocoClient`
+- `unitree_sdk2py.core.channel.ChannelPublisher("rt/lowcmd", LowCmd_)`
+- `unitree_sdk2py.core.channel.ChannelSubscriber("rt/lowstate", LowState_)`
 
 The arm action shim supports `ExecuteAction(action_map["right hand up"])` and
 `ExecuteAction(action_map["release arm"])`.
@@ -43,21 +45,28 @@ In simulator mode, these methods post to Cybernetic's local GameControl API.
 task commands map to local named poses. This makes official-shaped user code
 runnable now while keeping the deeper DDS backend boundary explicit.
 
+The low-level channel shim synthesizes `LowState_` from MuJoCo joint and IMU
+state, and translates `LowCmd_` motor commands into MuJoCo actuator torques.
+It also provides the compatibility imports used by Unitree's official low-level
+example: `unitree_hg` IDL dataclasses, `CRC`, `RecurrentThread`, and
+`MotionSwitcherClient`.
+
 ## What Is Still Not Full SDK2 Parity
 
-Unitree's official MuJoCo bridge is low-level DDS-first. For full parity,
-Cybernetic still needs a real bridge for:
+Unitree's official MuJoCo bridge is low-level DDS-first. Cybernetic now has a
+simulator-backed local approximation for `rt/lowcmd` and `rt/lowstate`, but for
+full parity it still needs a real bridge for:
 
-- `rt/lowcmd` motor command publishing.
-- `rt/lowstate` motor/IMU state subscription.
+- CycloneDDS-compatible `rt/lowcmd` motor command publishing.
+- CycloneDDS-compatible `rt/lowstate` motor/IMU state subscription.
 - `rt/sportmodestate` high-level body pose and velocity telemetry.
 - `rt/wirelesscontroller` simulated joystick input.
-- G1 `unitree_hg` IDL types and CRC behavior.
+- Complete G1 `unitree_hg` IDL coverage and official CRC byte packing.
 - A mode switcher / safety gate that prevents low-level commands from fighting
   high-level services.
 
-The current `LocoClient` implementation is intentionally a high-level facade,
-not a whole-body balance controller.
+The current `LocoClient` and low-level command implementation are intentionally
+simulator facades, not whole-body balance controllers.
 
 ## Agent MCP Additions
 
@@ -71,6 +80,11 @@ It also exposes `g1_loco_command` for common `LocoClient`-style commands:
 `start`, `move`, `stop_move`, `damp`, `zero_torque`, `low_stand`,
 `high_stand`, `wave_hand`, and `shake_hand`.
 
+For lower-level inspection and control, agents can use:
+
+- `g1_lowstate`: read synthesized `rt/lowstate` telemetry.
+- `g1_lowcmd`: publish a list of simulator-backed motor commands.
+
 ## Example Scripts
 
 Use these as the living examples for developer behavior:
@@ -79,10 +93,11 @@ Use these as the living examples for developer behavior:
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_raise_hand_sdk.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_behavior_gallery.py
 python3 examples/yoga_teacher.py
 ```
 
 They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
-`LocoClient`-shaped locomotion, a behavior gallery with snapshots, and a
-higher-level scripted motion flow.
+`LocoClient`-shaped locomotion, low-level `rt/lowcmd`/`rt/lowstate` control, a
+behavior gallery with snapshots, and a higher-level scripted motion flow.

@@ -10,6 +10,9 @@ from cybernetic_robotics import G1Robot, RobotEndpoints, SimulatorClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
 
 
 class FakeG1Handler(BaseHTTPRequestHandler):
@@ -30,6 +33,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "azimuth": -90.0,
         "elevation": -8.0,
     }
+    lowcmd_count = 0
 
     def do_GET(self):  # noqa: N802 - stdlib handler method.
         if self.path == "/health":
@@ -53,6 +57,22 @@ class FakeG1Handler(BaseHTTPRequestHandler):
             return self._json({"frame_id": 7, "time": 0.25})
         if self.path == "/visual_scene":
             return self._json({"robots": [{"name": "g1"}]})
+        if self.path == "/lowstate":
+            return self._json(
+                {
+                    "mode_machine": 1,
+                    "imu_state": {
+                        "quaternion": [1.0, 0.0, 0.0, 0.0],
+                        "gyroscope": [0.0, 0.0, 0.0],
+                        "accelerometer": [0.0, 0.0, 0.0],
+                    },
+                    "motor_state": [
+                        {"mode": 1, "q": 0.1 * index, "dq": 0.0, "tau_est": 0.0}
+                        for index in range(35)
+                    ],
+                    "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
+                }
+            )
         if self.path == "/camera_frame_0.jpg":
             return self._bytes(b"fake-jpeg", "image/jpeg")
         self.send_error(404)
@@ -84,6 +104,16 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                 elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
                     type(self).pose = "raise_right_hand"
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
+            elif command == "lowcmd":
+                type(self).lowcmd_count = len(payload.get("motor_cmd", []))
+                type(self).paused = False
+                return self._json(
+                    {
+                        "ok": True,
+                        "control_mode": "lowcmd",
+                        "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
+                    }
+                )
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -120,6 +150,7 @@ class FakeServer:
             "balance_mode": 0,
             "stand_height": None,
         }
+        FakeG1Handler.lowcmd_count = 0
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -198,6 +229,34 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(get_code, 0)
                 self.assertEqual(fsm_id, 500)
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_lowcmd_and_lowstate_channels_use_same_simulator(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                lowcmd = unitree_hg_msg_dds__LowCmd_()
+                lowcmd.motor_cmd[22].mode = 1
+                lowcmd.motor_cmd[22].q = -1.0
+                lowcmd.motor_cmd[22].kp = 40.0
+                lowcmd.motor_cmd[22].kd = 1.0
+
+                publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+                publisher.Init()
+                self.assertTrue(publisher.Write(lowcmd))
+
+                subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+                subscriber.Init()
+                lowstate = subscriber.Read()
+
+                self.assertEqual(FakeG1Handler.lowcmd_count, 35)
+                self.assertEqual(lowstate.mode_machine, 1)
+                self.assertAlmostEqual(lowstate.motor_state[1].q, 0.1)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

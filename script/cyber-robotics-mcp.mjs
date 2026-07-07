@@ -178,6 +178,23 @@ const tools = [
     ["command"],
     { readOnlyHint: false },
   ),
+  tool("g1_lowstate", "Read simulator-backed Unitree rt/lowstate motor and IMU telemetry.", {}, [], {
+    readOnlyHint: true,
+  }),
+  tool(
+    "g1_lowcmd",
+    "Publish a simulator-backed Unitree rt/lowcmd motor command list.",
+    {
+      motor_cmd: {
+        type: "array",
+        description: "Array of motor commands with q, dq, tau, kp, kd, and mode fields.",
+        items: { type: "object" },
+      },
+      topic: { type: "string", default: "rt/lowcmd" },
+    },
+    ["motor_cmd"],
+    { readOnlyHint: false },
+  ),
   tool("safety_stop", "Pause the simulator and release the G1 arm to the neutral pose.", {}, [], {
     readOnlyHint: false,
     destructiveHint: true,
@@ -412,6 +429,10 @@ async function callTool(name, args) {
       return textResult(await executeG1Action(args.action));
     case "g1_loco_command":
       return textResult(await executeG1LocoCommand(args));
+    case "g1_lowstate":
+      return textResult(await getJson("/lowstate"));
+    case "g1_lowcmd":
+      return textResult(await executeG1Lowcmd(args));
     case "safety_stop":
       return textResult({
         pause: await command({ command: "pause" }),
@@ -576,6 +597,24 @@ async function executeG1LocoCommand(args) {
     throw new Error(`Unsupported G1 loco command: ${commandName}`);
   }
   return command({ command: "loco", ...payload });
+}
+
+async function executeG1Lowcmd(args) {
+  if (!Array.isArray(args.motor_cmd)) {
+    throw new Error("g1_lowcmd requires motor_cmd as an array");
+  }
+  return command({
+    command: "lowcmd",
+    topic: args.topic || "rt/lowcmd",
+    motor_cmd: args.motor_cmd.map((cmd) => ({
+      mode: Number(cmd?.mode || 0),
+      q: Number(cmd?.q || 0),
+      dq: Number(cmd?.dq || 0),
+      tau: Number(cmd?.tau || 0),
+      kp: Number(cmd?.kp || 0),
+      kd: Number(cmd?.kd || 0),
+    })),
+  });
 }
 
 async function readActiveMjcf() {

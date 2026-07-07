@@ -172,9 +172,16 @@ python3 -m py_compile \
   examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  examples/g1_loco_sdk.py \
+  examples/g1_lowcmd_sdk.py \
   packages/cybernetic-robotics/src/cybernetic_robotics/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/idl/unitree_hg/msg/dds_.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/g1/arm/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/g1/loco/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/comm/motion_switcher/*.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/utils/*.py \
   overlays/unitree-g1-mujoco-protocol/python/g1_protocol_sim.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/core/channel.py \
   overlays/unitree-g1-sdk-shim/unitree_sdk2py/g1/arm/g1_arm_action_api.py \
@@ -193,6 +200,8 @@ docker compose \
 
 node script/probe-unitree-g1-mujoco-protocol.mjs --topic simulation_state
 python3 examples/g1_raise_hand_sdk.py
+python3 examples/g1_loco_sdk.py
+python3 examples/g1_lowcmd_sdk.py
 ```
 
 ## Missing Booster Studio Features {#missing-booster-studio-features}
@@ -328,9 +337,14 @@ The current repo has the first narrow version of that API boundary:
 - `packages/cybernetic-robotics/` packages that same beginner experience into
   an installable Python project with `G1Robot`, `SimulatorClient`,
   `TinyWebSocket`, `SceneWorkspace`, `cyber-g1`, and simulator-backed
-  `unitree_sdk2py` modules.
+  `unitree_sdk2py` modules for high-level arm, locomotion, and low-level
+  `rt/lowcmd` / `rt/lowstate` channel examples.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
+- `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface.
+- `examples/g1_lowcmd_sdk.py` uses Unitree-shaped `ChannelPublisher`,
+  `ChannelSubscriber`, `LowCmd_`, `LowState_`, `CRC`, and
+  `MotionSwitcherClient` imports.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 
@@ -340,22 +354,25 @@ official `unitree_mujoco` + SDK2 DDS topics.
 
 ## First Milestone {#first-milestone}
 
-Build the safe high-level SDK path before low-level joints or learned policies.
+Build the safe official-SDK runtime path before real hardware or learned
+policies.
 
 1. Add a `unitree-g1-runtime` image or sidecar with SDK2 Python, CycloneDDS,
    and the official Unitree G1 examples available.
 2. Add session config for `mode=sim|real`, DDS domain, network interface, G1
    model variant, and safety profile.
-3. Implement `connect`, `disconnect`, `getStatus`, `streamTelemetry`,
+3. Replace the current local HTTP approximation for `rt/lowcmd` and
+   `rt/lowstate` with a CycloneDDS-compatible bridge.
+4. Implement `connect`, `disconnect`, `getStatus`, `streamTelemetry`,
    `damp`, `zeroTorque`, `sit`, `stand`, `stopMove`, `moveVelocity`,
    `setStandHeight`, `balanceStand`, and `executeArmAction`.
-4. In sim mode, launch official `unitree_mujoco` with `-r g1`, the selected
+5. In sim mode, launch official `unitree_mujoco` with `-r g1`, the selected
    G1 scene, domain `1`, and interface `lo`.
-5. In real mode, connect SDK2 to domain `0` on the selected physical network
+6. In real mode, connect SDK2 to domain `0` on the selected physical network
    interface.
-6. Add Cybernetic panels for connection, status, safety stop, teleop,
+7. Add Cybernetic panels for connection, status, safety stop, teleop,
    telemetry, and logs.
-7. Route viewer telemetry and control state through the provider so the same
+8. Route viewer telemetry and control state through the provider so the same
    panels work for sim and hardware.
 
 ## Safety Gates {#safety-gates}
