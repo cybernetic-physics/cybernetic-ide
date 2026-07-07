@@ -135,6 +135,24 @@ discovery check: it creates Unitree-typed request writers for `sport`, `agv`,
 `arm`, and `voice`, waits for publication matching, and reports whether a
 service-side reader exists before any RPC call is sent.
 
+Smoke-test a temporary Unitree-shaped RPC bridge:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_smoke \
+  -e CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=1.0 \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper is `unitree_probe_rpc_bridge_smoke`. Python users can call
+`OfficialG1Sim.rpc_bridge_smoke()`. This starts temporary `sport` and `agv`
+Unitree RPC servers inside the sidecar and calls them with SDK clients. It does
+not command MuJoCo or hardware; it proves the request/response service bridge
+shape before a long-running bridge maps those APIs onto simulator providers.
+
 Probe whether the managed official peer answers G1 sport/LocoClient RPCs:
 
 ```sh

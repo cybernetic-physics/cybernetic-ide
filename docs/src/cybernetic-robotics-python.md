@@ -159,6 +159,10 @@ manual control instead of the context manager, use `official.start_session()`,
 whether official Unitree RPC request topics such as `rt/api/sport/request` and
 `rt/api/agv/request` have matched service-side readers before any RPC command
 is sent.
+`official.rpc_bridge_smoke()` starts temporary Unitree-shaped `sport` and
+`agv` RPC servers inside the SDK2 sidecar and calls them with SDK clients. This
+does not command MuJoCo or hardware; it proves the server/client bridge shape
+needed for a future long-running service bridge.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
@@ -476,6 +480,7 @@ unitree_sdk_compatibility_audit
 unitree_sdk_behavior_smoke
 unitree_read_official_mujoco_lowstate
 unitree_probe_official_mujoco_rpc_discovery
+unitree_probe_rpc_bridge_smoke
 unitree_probe_official_mujoco_loco_rpc
 unitree_official_mujoco_evidence_bundle
 robotics_tool_reference

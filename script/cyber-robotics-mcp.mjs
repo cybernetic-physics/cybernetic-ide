@@ -240,6 +240,21 @@ const tools = [
     [],
     { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
   ),
+  tool(
+    "unitree_probe_rpc_bridge_smoke",
+    "Start temporary Unitree-shaped sport/agv RPC services in the SDK2 sidecar and call them with official SDK clients.",
+    {
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.2,
+        maximum: 10,
+        default: 1,
+        description: "Per-RPC timeout used by the smoke clients.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  ),
   tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1132,6 +1147,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoLocoRpc(args));
     case "unitree_probe_official_mujoco_rpc_discovery":
       return textResult(sdk2ProbeOfficialMujocoRpcDiscovery(args));
+    case "unitree_probe_rpc_bridge_smoke":
+      return textResult(sdk2ProbeRpcBridgeSmoke(args));
     case "unitree_stop_official_mujoco_session":
       return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
@@ -2442,6 +2459,12 @@ function roboticsToolReference() {
         "Managed official MuJoCo DDS session running and ready.",
       ),
       toolReference(
+        "unitree_probe_rpc_bridge_smoke",
+        "diagnostic",
+        "Starts temporary sport/agv RPC services and verifies official SDK clients can call them.",
+        "Official SDK2 sidecar prepared; does not command the robot.",
+      ),
+      toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
         "read-with-optional-stop",
         "May send a safe StopMove RPC when include_stop is true.",
@@ -2968,6 +2991,40 @@ function sdk2ProbeOfficialMujocoRpcDiscovery(options = {}) {
   return {
     command: `docker ${args.join(" ")}`,
     session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ProbeRpcBridgeSmoke(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.2, 10, 1);
+  const env = [
+    "CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_smoke",
+    `CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm"];
+  for (const entry of env) {
+    args.push("-e", entry);
+  }
+  args.push("unitree-g1-sdk2-sidecar");
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
     stdout: result.stdout,
     stderr: result.stderr,
     report,

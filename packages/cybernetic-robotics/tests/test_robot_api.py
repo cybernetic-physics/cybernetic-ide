@@ -1662,6 +1662,51 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ACTION=probe_official_mujoco_rpc_discovery", command)
         self.assertIn("CYBER_UNITREE_RPC_DISCOVERY_WAIT=1.5", command)
 
+    def test_official_g1_sim_can_smoke_temporary_rpc_bridge(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "rpc_bridge_smoke": {
+                            "ok": True,
+                            "services_started": ["sport", "agv"],
+                            "calls": [
+                                {"name": "sport.GetFsmId", "ok": True, "return": [0, 500]},
+                                {"name": "agv.Move", "ok": True, "return": [0, "{}"]},
+                            ],
+                            "bridge_state": {"sport": {"fsm_id": 500}, "agv": {"velocity": [0.0, 0.0, 0.0]}},
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.rpc_bridge_smoke(timeout=1.5)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "temporary_unitree_sdk2_rpc_bridge")
+        self.assertEqual(result["services_started"], ["sport", "agv"])
+        self.assertEqual(result["calls"][0]["name"], "sport.GetFsmId")
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=probe_unitree_rpc_bridge_smoke", command)
+        self.assertIn("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT=1.5", command)
+
 
 if __name__ == "__main__":
     unittest.main()

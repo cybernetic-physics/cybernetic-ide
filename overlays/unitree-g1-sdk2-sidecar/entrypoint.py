@@ -1472,6 +1472,179 @@ def probe_official_mujoco_rpc_discovery(domain: int, interface: str | None) -> d
     return report
 
 
+def probe_unitree_rpc_bridge_smoke(domain: int, interface: str | None) -> dict:
+    """Start temporary Unitree-shaped RPC services and call them with SDK clients."""
+
+    timeout = float(os.environ.get("CYBER_UNITREE_RPC_BRIDGE_TIMEOUT", "1.0"))
+    report = {
+        "action": "probe_unitree_rpc_bridge_smoke",
+        "domain": domain,
+        "interface": interface or None,
+        "timeout_seconds": timeout,
+        "services_started": [],
+        "calls": [],
+        "bridge_state": {
+            "sport": {
+                "fsm_id": 500,
+                "fsm_mode": "idle",
+                "balance_mode": 0,
+                "swing_height": 0.08,
+                "stand_height": 0.72,
+                "velocity": [0.0, 0.0, 0.0],
+            },
+            "agv": {
+                "velocity": [0.0, 0.0, 0.0],
+                "height_velocity": 0.0,
+            },
+        },
+    }
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+        from unitree_sdk2py.g1.loco.g1_loco_api import (
+            LOCO_API_VERSION,
+            ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
+            ROBOT_API_ID_LOCO_GET_FSM_ID,
+            ROBOT_API_ID_LOCO_GET_FSM_MODE,
+            ROBOT_API_ID_LOCO_GET_STAND_HEIGHT,
+            ROBOT_API_ID_LOCO_GET_SWING_HEIGHT,
+            ROBOT_API_ID_LOCO_SET_FSM_ID,
+            ROBOT_API_ID_LOCO_SET_STAND_HEIGHT,
+            ROBOT_API_ID_LOCO_SET_VELOCITY,
+        )
+        from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+        from unitree_sdk2py.rpc.client import Client
+        from unitree_sdk2py.rpc.server import Server
+
+        ChannelFactoryInitialize(domain, interface)
+
+        sport = Server("sport")
+        sport._SetApiVersion(LOCO_API_VERSION)
+        sport_state = report["bridge_state"]["sport"]
+
+        def sport_get_fsm_id(_parameter: str):
+            return 0, json.dumps({"data": sport_state["fsm_id"]})
+
+        def sport_get_fsm_mode(_parameter: str):
+            return 0, json.dumps({"data": sport_state["fsm_mode"]})
+
+        def sport_get_balance_mode(_parameter: str):
+            return 0, json.dumps({"data": sport_state["balance_mode"]})
+
+        def sport_get_swing_height(_parameter: str):
+            return 0, json.dumps({"data": sport_state["swing_height"]})
+
+        def sport_get_stand_height(_parameter: str):
+            return 0, json.dumps({"data": sport_state["stand_height"]})
+
+        def sport_set_fsm_id(parameter: str):
+            payload = _safe_json_loads(parameter)
+            sport_state["fsm_id"] = int(payload.get("data", sport_state["fsm_id"]))
+            return 0, json.dumps({"data": sport_state["fsm_id"]})
+
+        def sport_set_stand_height(parameter: str):
+            payload = _safe_json_loads(parameter)
+            sport_state["stand_height"] = float(payload.get("data", sport_state["stand_height"]))
+            return 0, json.dumps({"data": sport_state["stand_height"]})
+
+        def sport_set_velocity(parameter: str):
+            payload = _safe_json_loads(parameter)
+            velocity = payload.get("velocity", sport_state["velocity"])
+            sport_state["velocity"] = [float(value) for value in velocity[:3]]
+            sport_state["duration"] = float(payload.get("duration", 0.0))
+            return 0, json.dumps({"velocity": sport_state["velocity"], "duration": sport_state["duration"]})
+
+        for api_id, handler in [
+            (ROBOT_API_ID_LOCO_GET_FSM_ID, sport_get_fsm_id),
+            (ROBOT_API_ID_LOCO_GET_FSM_MODE, sport_get_fsm_mode),
+            (ROBOT_API_ID_LOCO_GET_BALANCE_MODE, sport_get_balance_mode),
+            (ROBOT_API_ID_LOCO_GET_SWING_HEIGHT, sport_get_swing_height),
+            (ROBOT_API_ID_LOCO_GET_STAND_HEIGHT, sport_get_stand_height),
+            (ROBOT_API_ID_LOCO_SET_FSM_ID, sport_set_fsm_id),
+            (ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, sport_set_stand_height),
+            (ROBOT_API_ID_LOCO_SET_VELOCITY, sport_set_velocity),
+        ]:
+            sport._RegistHandler(api_id, handler, False)
+        sport.Start(False)
+        report["services_started"].append("sport")
+
+        agv = Server("agv")
+        agv._SetApiVersion("1.0.0.1")
+        agv_state = report["bridge_state"]["agv"]
+
+        def agv_move(parameter: str):
+            payload = _safe_json_loads(parameter)
+            agv_state["velocity"] = [
+                float(payload.get("vx", 0.0)),
+                float(payload.get("vy", 0.0)),
+                float(payload.get("vyaw", 0.0)),
+            ]
+            return 0, json.dumps({"velocity": agv_state["velocity"]})
+
+        def agv_height_adjust(parameter: str):
+            payload = _safe_json_loads(parameter)
+            agv_state["height_velocity"] = float(payload.get("data", 0.0))
+            return 0, json.dumps({"data": agv_state["height_velocity"]})
+
+        agv._RegistHandler(1001, agv_move, False)
+        agv._RegistHandler(1002, agv_height_adjust, False)
+        agv.Start(False)
+        report["services_started"].append("agv")
+
+        time.sleep(0.3)
+
+        loco = LocoClient()
+        loco.SetTimeout(timeout)
+        loco.Init()
+        _record_rpc_call(report["calls"], "sport.GetFsmId", loco.GetFsmId)
+        _record_rpc_call(report["calls"], "sport.SetStandHeight", lambda: loco.SetStandHeight(0.73))
+        _record_rpc_call(report["calls"], "sport.SetVelocity", lambda: loco.SetVelocity(0.0, 0.0, 0.0, 0.1))
+
+        agv_client = Client("agv", False)
+        agv_client.SetTimeout(timeout)
+        agv_client._SetApiVerson("1.0.0.1")
+        agv_client._RegistApi(1001, 0)
+        agv_client._RegistApi(1002, 0)
+        _record_rpc_call(report["calls"], "agv.Move", lambda: agv_client._Call(1001, json.dumps({"vx": 0.0, "vy": 0.0, "vyaw": 0.0})))
+        _record_rpc_call(report["calls"], "agv.HeightAdjust", lambda: agv_client._Call(1002, json.dumps({"data": 0.0})))
+    except Exception as exc:
+        report["error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    report["ok"] = bool(report.get("services_started") and report["calls"] and all(call.get("ok") for call in report["calls"]))
+    if report["ok"]:
+        report["next_step"] = "Promote this temporary SDK2 RPC server pattern into a managed bridge that maps sport/agv requests onto the simulator provider boundary."
+    else:
+        report["next_step"] = "Fix the temporary SDK2 RPC bridge before using it as the high-level Unitree service adapter."
+    return report
+
+
+def _safe_json_loads(text: str) -> dict:
+    try:
+        value = json.loads(text or "{}")
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
+
+
+def _record_rpc_call(calls: list[dict], name: str, fn) -> None:
+    started = time.monotonic()
+    entry = {"name": name}
+    try:
+        value = fn()
+        entry["return"] = _jsonable_return(value)
+        code = _loco_return_code(value)
+        if code is not None:
+            entry["rpc_code"] = code
+            entry["rpc_status"] = _unitree_rpc_status(code)
+        entry["ok"] = _loco_call_ok(value)
+    except Exception as exc:
+        entry["ok"] = False
+        entry["error"] = str(exc)
+    entry["elapsed_seconds"] = round(time.monotonic() - started, 4)
+    calls.append(entry)
+
+
 def _channel_publication_matched_count(channel) -> int:
     try:
         writer = getattr(channel, "_Channel__writer")
@@ -1743,6 +1916,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_rpc_discovery":
         report["rpc_discovery_probe"] = probe_official_mujoco_rpc_discovery(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_unitree_rpc_bridge_smoke":
+        report["rpc_bridge_smoke"] = probe_unitree_rpc_bridge_smoke(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "read_official_mujoco_lowstate":
         report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)

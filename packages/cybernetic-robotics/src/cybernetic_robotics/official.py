@@ -165,6 +165,29 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def rpc_bridge_smoke(self, *, timeout: float = 1.0) -> dict[str, Any]:
+        """Smoke-test a temporary Unitree-shaped sport/agv RPC bridge."""
+
+        env = {
+            "CYBER_UNITREE_ACTION": "probe_unitree_rpc_bridge_smoke",
+            "CYBER_UNITREE_RPC_BRIDGE_TIMEOUT": str(_clamp_float(timeout, 0.2, 10.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        probe = report.get("rpc_bridge_smoke") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(probe, dict) and probe.get("ok")),
+            "source": "temporary_unitree_sdk2_rpc_bridge",
+            "services_started": probe.get("services_started", []) if isinstance(probe, dict) else [],
+            "calls": probe.get("calls", []) if isinstance(probe, dict) else [],
+            "bridge_state": probe.get("bridge_state", {}) if isinstance(probe, dict) else {},
+            "probe": probe,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
         """Start the managed official Unitree MuJoCo DDS peer session.
 
@@ -471,6 +494,9 @@ class OfficialG1ManagedSession:
 
     def rpc_discovery(self, *, wait: float = 1.0) -> dict[str, Any]:
         return self.sim.rpc_discovery_session(wait=wait)
+
+    def rpc_bridge_smoke(self, *, timeout: float = 1.0) -> dict[str, Any]:
+        return self.sim.rpc_bridge_smoke(timeout=timeout)
 
     def arm_pose(self, preset: str = "raise_right_hand", **kwargs: Any) -> dict[str, Any]:
         return self.sim.arm_pose_session(preset, **kwargs)

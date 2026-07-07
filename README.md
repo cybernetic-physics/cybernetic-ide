@@ -372,6 +372,9 @@ ad hoc scripts first. The default tool surface includes:
   which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
   matched service-side DDS readers before an agent tries a request/response
   client;
+- official SDK2 bridge smoke: `unitree_probe_rpc_bridge_smoke`, which starts
+  temporary `sport` and `agv` Unitree RPC servers and verifies SDK clients can
+  call them before we promote the bridge into a long-running simulator service;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;

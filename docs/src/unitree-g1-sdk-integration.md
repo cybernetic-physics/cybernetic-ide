@@ -636,6 +636,15 @@ The current repo has the first narrow version of that API boundary:
   matched service-side readers for `sport`, `agv`, `arm`, and `voice`, which
   means the official MuJoCo peer should be treated as a low-level
   `rt/lowcmd`/`rt/lowstate` peer rather than a high-level Unitree RPC server.
+- `unitree_probe_rpc_bridge_smoke` proves the next architecture step without
+  pretending it already drives the robot. It starts temporary Unitree SDK2
+  `Server("sport")` and `Server("agv")` instances, registers a small safe
+  subset of handlers, then calls them with `LocoClient` and a raw `Client("agv")`.
+  Passing this probe means Cybernetic can satisfy the official request/response
+  contract; the remaining work is making that bridge long-lived and mapping
+  handlers onto the simulator provider boundary. Live smoke evidence showed
+  `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
+  and `agv.HeightAdjust` all returning `RPC_OK`.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

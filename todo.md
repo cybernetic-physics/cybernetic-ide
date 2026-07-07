@@ -309,6 +309,16 @@ Tasks:
   Unitree MuJoCo peer is currently useful for low-level `rt/lowcmd` /
   `rt/lowstate`, not high-level Unitree RPC services, unless we add or launch a
   separate service bridge.
+- Done: add `OfficialG1Sim.rpc_bridge_smoke()` and MCP
+  `unitree_probe_rpc_bridge_smoke`. This starts temporary SDK2 `sport` and
+  `agv` service servers in the sidecar and calls them with official-style
+  clients. The goal is not motion yet; it proves the missing service bridge can
+  be built using Unitree's own RPC server/client machinery.
+- Current bridge evidence: the live smoke started `sport` and `agv`, then
+  `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
+  and `agv.HeightAdjust` all returned `RPC_OK`. The next real implementation
+  should keep those servers running and map handlers onto the simulator
+  provider boundary instead of the in-memory smoke state.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;
