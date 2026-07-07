@@ -67,6 +67,14 @@ class SimulatorStatus:
         model_path = self.simulation.get("model_path")
         return str(model_path) if model_path is not None else None
 
+    @property
+    def fallen(self) -> bool:
+        return bool(self.simulation.get("fallen"))
+
+    @property
+    def pelvis_height(self) -> float | None:
+        return _optional_float(self.simulation.get("pelvis_height"))
+
 
 class SimulatorClient:
     """HTTP client for Cybernetic's GameControl-style simulator API."""
@@ -121,8 +129,26 @@ class SimulatorClient:
     def step(self, count: int = 1) -> list[JsonObject]:
         return [self.command("step") for _ in range(max(1, int(count)))]
 
-    def pose(self, name: str) -> JsonObject:
+    def pose(
+        self,
+        name: str,
+        *,
+        smooth: bool = False,
+        duration: float | None = None,
+        fps: int = 30,
+    ) -> JsonObject:
+        if smooth or duration is not None:
+            return self.command(
+                "pose",
+                pose=name,
+                smooth=True,
+                duration=float(duration if duration is not None else 1.2),
+                fps=int(fps),
+            )
         return self.command("pose", pose=name)
+
+    def hold_pose(self, name: str, teleport: bool = True) -> JsonObject:
+        return self.command("hold_pose", pose=name, teleport=bool(teleport))
 
     def camera(self, action: str = "state", **fields: Any) -> CameraState:
         if action == "state" and not fields:

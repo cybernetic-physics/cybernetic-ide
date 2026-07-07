@@ -35,6 +35,14 @@ class G1Status:
     def model_path(self) -> str | None:
         return self.raw.model_path
 
+    @property
+    def fallen(self) -> bool:
+        return self.raw.fallen
+
+    @property
+    def pelvis_height(self) -> float | None:
+        return self.raw.pelvis_height
+
 
 class G1Robot:
     """Beginner-friendly handle for the local Unitree G1 MuJoCo simulator."""
@@ -91,8 +99,16 @@ class G1Robot:
     def neutral(self) -> dict[str, Any]:
         return self.release_arm()
 
-    def pose(self, name: str) -> dict[str, Any]:
-        return self.sim.pose(name)
+    def pose(self, name: str, **kwargs: Any) -> dict[str, Any]:
+        return self.sim.pose(name, **kwargs)
+
+    def hold(self, name: str, teleport: bool = True) -> dict[str, Any]:
+        """Physically hold a pose: motors PD-track it while physics runs."""
+
+        return self.sim.hold_pose(name, teleport=teleport)
+
+    def is_fallen(self) -> bool:
+        return self.status().fallen
 
     def snapshot(self, path: str | Path, image_format: str | None = None) -> Path:
         return self.sim.snapshot(path, image_format=image_format)

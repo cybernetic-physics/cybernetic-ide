@@ -39,6 +39,90 @@ NAMED_POSES = {
         "right_wrist_yaw_joint": 0.0,
     },
     "neutral": {},
+    # --- Yoga flow poses ---
+    # Static held frames: apply_named_pose() sets qpos and leaves the sim paused,
+    # so these are visual asanas, not balanced dynamic control. Joint values are
+    # clamped to model ranges by apply_named_pose(), so mild over-reach is safe.
+    "mountain": {
+        "left_elbow_joint": 0.12,
+        "right_elbow_joint": 0.12,
+    },
+    "upward_salute": {
+        "left_shoulder_pitch_joint": -2.7,
+        "left_shoulder_roll_joint": 0.12,
+        "left_elbow_joint": 0.0,
+        "right_shoulder_pitch_joint": -2.7,
+        "right_shoulder_roll_joint": -0.12,
+        "right_elbow_joint": 0.0,
+    },
+    "forward_fold": {
+        "left_hip_pitch_joint": 1.4,
+        "right_hip_pitch_joint": 1.4,
+        "left_knee_joint": 0.15,
+        "right_knee_joint": 0.15,
+        "waist_pitch_joint": 0.52,
+        "left_shoulder_pitch_joint": 0.25,
+        "right_shoulder_pitch_joint": 0.25,
+    },
+    "chair": {
+        "left_hip_pitch_joint": 0.45,
+        "right_hip_pitch_joint": 0.45,
+        "left_knee_joint": 0.5,
+        "right_knee_joint": 0.5,
+        "left_ankle_pitch_joint": -0.28,
+        "right_ankle_pitch_joint": -0.28,
+        "left_shoulder_pitch_joint": -2.3,
+        "right_shoulder_pitch_joint": -2.3,
+    },
+    "warrior_one": {
+        "left_hip_pitch_joint": 0.55,
+        "left_knee_joint": 1.2,
+        "right_hip_pitch_joint": -0.4,
+        "right_knee_joint": 0.2,
+        "left_shoulder_pitch_joint": -2.6,
+        "right_shoulder_pitch_joint": -2.6,
+    },
+    "warrior_two": {
+        "left_hip_roll_joint": 0.6,
+        "left_knee_joint": 0.95,
+        "right_hip_roll_joint": -0.6,
+        "right_knee_joint": 0.1,
+        "left_shoulder_pitch_joint": 0.0,
+        "left_shoulder_roll_joint": 1.4,
+        "right_shoulder_pitch_joint": 0.0,
+        "right_shoulder_roll_joint": -1.4,
+    },
+    "goddess": {
+        "left_hip_roll_joint": 0.55,
+        "right_hip_roll_joint": -0.55,
+        "left_hip_pitch_joint": 0.35,
+        "right_hip_pitch_joint": 0.35,
+        "left_knee_joint": 0.85,
+        "right_knee_joint": 0.85,
+        "left_shoulder_pitch_joint": -0.3,
+        "left_shoulder_roll_joint": 1.2,
+        "left_elbow_joint": 1.5,
+        "right_shoulder_pitch_joint": -0.3,
+        "right_shoulder_roll_joint": -1.2,
+        "right_elbow_joint": 1.5,
+    },
+    "tree": {
+        "left_hip_roll_joint": 0.7,
+        "left_hip_pitch_joint": -0.2,
+        "left_knee_joint": 2.2,
+        "left_shoulder_pitch_joint": -2.7,
+        "left_shoulder_roll_joint": 0.15,
+        "right_shoulder_pitch_joint": -2.7,
+        "right_shoulder_roll_joint": -0.15,
+    },
+    "namaste": {
+        "left_shoulder_pitch_joint": -0.5,
+        "left_shoulder_roll_joint": 0.3,
+        "left_elbow_joint": 1.6,
+        "right_shoulder_pitch_joint": -0.5,
+        "right_shoulder_roll_joint": -0.3,
+        "right_elbow_joint": 1.6,
+    },
 }
 
 
@@ -141,12 +225,55 @@ class G1MujocoState:
             width=self.render_width,
         )
 
+        self._setup_hold_controller()
+
+    def _setup_hold_controller(self):
+        """Precompute per-actuator PD gains and joint address maps.
+
+        The G1 uses torque (motor) actuators, so holding a pose against gravity
+        means computing joint torques each physics step:
+        tau = kp*(target - q) - kd*qd, clamped to each motor's ctrlrange.
+        """
+
+        count = self.model.nu
+        self.actuator_qpos_adr = np.zeros(count, dtype=int)
+        self.actuator_dof_adr = np.zeros(count, dtype=int)
+        self.kp = np.zeros(count)
+        self.kd = np.zeros(count)
+        for index in range(count):
+            joint_id = int(self.model.actuator_trnid[index, 0])
+            self.actuator_qpos_adr[index] = int(self.model.jnt_qposadr[joint_id])
+            self.actuator_dof_adr[index] = int(self.model.jnt_dofadr[joint_id])
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, index) or ""
+            if "ankle" in name:
+                kp, kd = 120.0, 5.0
+            elif "knee" in name or "hip" in name or "waist" in name:
+                kp, kd = 400.0, 15.0
+            elif "shoulder" in name or "elbow" in name or "wrist" in name:
+                kp, kd = 90.0, 3.0
+            else:
+                kp, kd = 120.0, 5.0
+            self.kp[index] = kp
+            self.kd[index] = kd
+
+        self.ctrl_lo = self.model.actuator_ctrlrange[:, 0].astype(float).copy()
+        self.ctrl_hi = self.model.actuator_ctrlrange[:, 1].astype(float).copy()
+        unlimited = self.ctrl_hi <= self.ctrl_lo
+        self.ctrl_lo[unlimited] = -np.inf
+        self.ctrl_hi[unlimited] = np.inf
+
+        self.hold_target_qpos = np.zeros(count)
+        self.control_mode = None
+
     def reset(self):
         with self.lock:
             mujoco.mj_resetData(self.model, self.data)
             mujoco.mj_forward(self.model, self.data)
             self.frame_id = 0
             self.active_pose = None
+            self.control_mode = None
+            self.data.ctrl[:] = 0.0
+            self.paused = True
             self.last_step_wall_time = time.monotonic()
 
     def set_paused(self, value):
@@ -159,6 +286,7 @@ class G1MujocoState:
     def step(self, count=1):
         with self.lock:
             for _ in range(max(1, count)):
+                self.apply_hold_control_locked()
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
 
@@ -167,6 +295,36 @@ class G1MujocoState:
         if joint_id < 0:
             raise KeyError(f"unknown joint: {joint_name}")
         return joint_id, int(self.model.jnt_qposadr[joint_id])
+
+    def _target_qpos_locked(self, targets):
+        """Full qpos vector for a joint-target dict (reset baseline + targets).
+
+        Leaves self.data.qpos as it found it; the caller decides what to do with
+        the returned vector. Must run with self.lock held.
+        """
+
+        saved = self.data.qpos.copy()
+        mujoco.mj_resetData(self.model, self.data)
+        for joint_name, value in targets.items():
+            joint_id, qpos_addr = self.joint_qpos_addr(joint_name)
+            minimum, maximum = self.model.jnt_range[joint_id]
+            self.data.qpos[qpos_addr] = clamp(float(value), float(minimum), float(maximum))
+        target = self.data.qpos.copy()
+        self.data.qpos[:] = saved
+        return target
+
+    def _settle_locked(self, qpos, pose_name):
+        """Seat a qpos vector as a held, grounded, paused frame."""
+
+        self.data.qpos[:] = qpos
+        self.data.qvel[:] = 0.0
+        self.data.ctrl[:] = 0.0
+        self.paused = True
+        self.active_pose = pose_name
+        self.frame_id += 1
+        self.last_step_wall_time = time.monotonic()
+        mujoco.mj_forward(self.model, self.data)
+        self.drop_to_floor_locked()
 
     def apply_named_pose(self, pose_name):
         targets = NAMED_POSES.get(pose_name)
@@ -178,18 +336,8 @@ class G1MujocoState:
             }
 
         with self.lock:
-            mujoco.mj_resetData(self.model, self.data)
-            for joint_name, value in targets.items():
-                joint_id, qpos_addr = self.joint_qpos_addr(joint_name)
-                minimum, maximum = self.model.jnt_range[joint_id]
-                self.data.qpos[qpos_addr] = clamp(float(value), float(minimum), float(maximum))
-            self.data.qvel[:] = 0.0
-            self.data.ctrl[:] = 0.0
-            self.paused = True
-            self.active_pose = pose_name
-            self.frame_id += 1
-            self.last_step_wall_time = time.monotonic()
-            mujoco.mj_forward(self.model, self.data)
+            target = self._target_qpos_locked(targets)
+            self._settle_locked(target, pose_name)
             self.refresh_jpeg_cache()
             return {
                 "ok": True,
@@ -198,6 +346,150 @@ class G1MujocoState:
                 "frame_id": self.frame_id,
                 "joints": targets,
             }
+
+    def animate_to_pose(self, pose_name, duration=1.2, fps=30.0):
+        """Interpolate from the currently held pose to a named pose.
+
+        Each intermediate frame is re-grounded and rendered, so the transition
+        is visible as continuous motion in the viewer and to snapshot readers.
+        The base stays upright throughout, so lerping qpos (identity base quat in
+        both endpoints) is sufficient — no slerp needed.
+        """
+
+        targets = NAMED_POSES.get(pose_name)
+        if targets is None:
+            return {
+                "ok": False,
+                "error": f"unsupported pose: {pose_name}",
+                "available_poses": sorted(NAMED_POSES),
+            }
+
+        with self.lock:
+            target = self._target_qpos_locked(targets)
+            start = self.data.qpos.copy()
+
+        frames = max(1, int(float(duration) * float(fps)))
+        delay = 1.0 / max(float(fps), 1.0)
+        # The render loop (render_hz) and websocket writer (frame_hz) render live
+        # qpos on their own cadence, so this loop only advances the state and
+        # paces itself; rendering a JPEG per frame here would make each glide run
+        # many times slower than its requested duration under osmesa.
+        for index in range(1, frames + 1):
+            fraction = index / frames
+            eased = fraction * fraction * (3.0 - 2.0 * fraction)
+            blended = start + (target - start) * eased
+            with self.lock:
+                self._settle_locked(blended, pose_name)
+            if index < frames:
+                time.sleep(delay)
+        self.refresh_jpeg_cache()
+
+        return {
+            "ok": True,
+            "pose": pose_name,
+            "paused": True,
+            "frame_id": self.frame_id,
+            "animated": True,
+            "frames": frames,
+            "joints": targets,
+        }
+
+    def apply_hold_control_locked(self):
+        """Set actuator torques to PD-hold the current target pose.
+
+        Gravity/bias forces are fed forward (qfrc_bias) so the motors supply the
+        torque needed just to stand in the pose; the PD terms then only correct
+        deviation. Without this the joints buckle under a loaded pose (a squat)
+        because position error alone can't produce enough holding torque.
+        """
+
+        if self.control_mode != "hold":
+            return
+        q = self.data.qpos[self.actuator_qpos_adr]
+        qd = self.data.qvel[self.actuator_dof_adr]
+        gravity_comp = self.data.qfrc_bias[self.actuator_dof_adr]
+        tau = gravity_comp + self.kp * (self.hold_target_qpos - q) - self.kd * qd
+        np.clip(tau, self.ctrl_lo, self.ctrl_hi, out=tau)
+        self.data.ctrl[:] = tau
+
+    def set_hold_pose(self, pose_name, teleport=True):
+        """Drive the motors to hold a pose while physics runs.
+
+        With teleport=True the robot is first seated in the pose (zero velocity)
+        and the PD controller then fights gravity to keep it there. Statically
+        stable, well-grounded poses hold; poses whose center of mass falls
+        outside the support (single-leg balances) will topple — by design, since
+        there is no whole-body balance controller.
+        """
+
+        targets = NAMED_POSES.get(pose_name)
+        if targets is None:
+            return {
+                "ok": False,
+                "error": f"unsupported pose: {pose_name}",
+                "available_poses": sorted(NAMED_POSES),
+            }
+
+        with self.lock:
+            target_qpos = np.zeros(self.model.nu)
+            for index in range(self.model.nu):
+                joint_id = int(self.model.actuator_trnid[index, 0])
+                joint_name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_id) or ""
+                if joint_name in targets:
+                    minimum, maximum = self.model.jnt_range[joint_id]
+                    target_qpos[index] = clamp(float(targets[joint_name]), float(minimum), float(maximum))
+            self.hold_target_qpos = target_qpos
+
+            if teleport:
+                full = self._target_qpos_locked(targets)
+                self.data.qpos[:] = full
+                self.data.qvel[:] = 0.0
+                mujoco.mj_forward(self.model, self.data)
+                self.drop_to_floor_locked()
+
+            self.data.ctrl[:] = 0.0
+            self.control_mode = "hold"
+            self.paused = False
+            self.active_pose = pose_name
+            self.frame_id += 1
+            self.last_step_wall_time = time.monotonic()
+
+        self.refresh_jpeg_cache()
+        return {
+            "ok": True,
+            "pose": pose_name,
+            "held": True,
+            "paused": False,
+            "frame_id": self.frame_id,
+        }
+
+    def is_fallen_locked(self):
+        pelvis_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+        if pelvis_id < 0:
+            return False, None
+        height = float(self.data.xpos[pelvis_id, 2])
+        upright = float(self.data.xmat[pelvis_id].reshape(3, 3)[2, 2])
+        fallen = bool(height < 0.45 or upright < 0.5)
+        return fallen, height
+
+    def drop_to_floor_locked(self, clearance=0.02):
+        """Lower the floating base so the lowest robot geom rests on the floor.
+
+        Static poses set only joint angles, so bending the knees leaves the
+        feet floating at the default standing height. This re-seats the pose on
+        the ground by translating the free base in z. No-op when the model has
+        no floating base as its first joint.
+        """
+
+        if self.model.njnt == 0 or self.model.jnt_type[0] != mujoco.mjtJoint.mjJNT_FREE:
+            return
+        base_z_addr = int(self.model.jnt_qposadr[0]) + 2
+        robot_geoms = self.model.geom_bodyid != 0
+        if not bool(np.any(robot_geoms)):
+            return
+        lowest = float(np.min(self.data.geom_xpos[robot_geoms, 2]))
+        self.data.qpos[base_z_addr] += clearance - lowest
+        mujoco.mj_forward(self.model, self.data)
 
     def reset_camera(self):
         with self.camera_lock:
@@ -287,6 +579,7 @@ class G1MujocoState:
             elapsed = min(now - self.last_step_wall_time, 0.08)
             steps = max(1, int(elapsed / self.model.opt.timestep))
             for _ in range(steps):
+                self.apply_hold_control_locked()
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
             self.last_step_wall_time = now
@@ -294,9 +587,13 @@ class G1MujocoState:
     def simulation_state_payload(self):
         with self.lock:
             render_cache = self.render_cache_payload()
+            fallen, pelvis_height = self.is_fallen_locked()
             return {
                 "actual_speed_factor": 0.0 if self.paused else 1.0,
                 "paused": self.paused,
+                "control_mode": self.control_mode,
+                "fallen": fallen,
+                "pelvis_height": pelvis_height,
                 "robot_statuses": {self.robot_name: True},
                 "is_multi_robot": False,
                 "robot_modes": {
@@ -553,7 +850,19 @@ class G1MujocoState:
             self.step(1)
             return {"ok": True, "paused": self.paused, "frame_id": self.frame_id}
         if command == "pose":
-            return self.apply_named_pose(payload.get("pose", "raise_right_hand"))
+            pose_name = payload.get("pose", "raise_right_hand")
+            if payload.get("smooth") or payload.get("duration") is not None:
+                return self.animate_to_pose(
+                    pose_name,
+                    duration=payload.get("duration", 1.2),
+                    fps=payload.get("fps", 30.0),
+                )
+            return self.apply_named_pose(pose_name)
+        if command == "hold_pose":
+            return self.set_hold_pose(
+                payload.get("pose", "raise_right_hand"),
+                teleport=payload.get("teleport", True),
+            )
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}
