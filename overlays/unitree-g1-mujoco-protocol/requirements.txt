@@ -1,0 +1,5 @@
+mujoco==3.3.6
+numpy
+msgpack
+websockets>=12,<16
+pillow

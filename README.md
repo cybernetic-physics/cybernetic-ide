@@ -1,4 +1,14 @@
-# Zed
+# Cybernetic IDE
+
+Cybernetic IDE is a Zed-based robotics IDE fork with an embedded Unitree G1
+MuJoCo viewer and a Dockerized Booster-style simulator protocol harness. The
+runtime harness is checked in under `overlays/unitree-g1-mujoco-*` and fetches
+public Unitree MuJoCo assets into `.runtime/` at prepare time.
+
+The upstream editor remains Zed; the robotics-specific entry point is the
+`cyber_robot_viewer` crate.
+
+# Upstream Zed
 
 [![Zed](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/zed-industries/zed/main/assets/badge/v0.json)](https://zed.dev)
 [![CI](https://github.com/zed-industries/zed/actions/workflows/run_tests.yml/badge.svg)](https://github.com/zed-industries/zed/actions/workflows/run_tests.yml)
@@ -46,4 +56,3 @@ Zed is developed by **Zed Industries, Inc.**, a for-profit company.
 If you’d like to financially support the project, you can do so via GitHub Sponsors.
 Sponsorships go directly to Zed Industries and are used as general company revenue.
 There are no perks or entitlements associated with sponsorship.
-

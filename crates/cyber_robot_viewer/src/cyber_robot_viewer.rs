@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context as _, Result, anyhow};
 use gpui::{
@@ -20,7 +20,7 @@ use util::ResultExt as _;
 use workspace::Workspace;
 use workspace::item::Item;
 
-const DEFAULT_HARNESS_DIR: &str = "/Users/cuboniks/dasm/booster-studio-real-fork";
+const HARNESS_MARKER_PATH: &str = "overlays/unitree-g1-mujoco-protocol/Dockerfile";
 const DEFAULT_IMAGE: &str = "cyber/unitree-g1-mujoco-protocol:0.1.0";
 const DEFAULT_MODEL_PATH: &str = "/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml";
 const PHYSICS_URL: &str = "ws://127.0.0.1:8788";
@@ -29,8 +29,10 @@ const GAME_CONTROL_HOST: &str = "127.0.0.1";
 const GAME_CONTROL_PORT: u16 = 38383;
 const STATUS_PATH: &str = "/status";
 const VISUAL_FRAME_PATH: &str = "/visual_frame";
+const CAMERA_CONTROL_PATH: &str = "/camera";
 const CAMERA_FRAME_PATH: &str = "/camera_frame_0.jpg";
-const POLL_INTERVAL: Duration = Duration::from_secs(2);
+const STATUS_POLL_INTERVAL: Duration = Duration::from_secs(2);
+const FRAME_POLL_INTERVAL: Duration = Duration::from_millis(125);
 const MAX_READY_ATTEMPTS: usize = 45;
 const CAMERA_DRAG_THRESHOLD_PX: f32 = 4.0;
 
@@ -335,36 +337,43 @@ impl CyberRobotViewer {
                     }
                     Err(error) => {
                         append_log(&this, cx, format!("Probe pending: {error:#}")).await;
-                        cx.background_executor().timer(POLL_INTERVAL).await;
+                        cx.background_executor().timer(STATUS_POLL_INTERVAL).await;
                     }
                 }
             }
 
+            let mut last_status_probe = Instant::now();
             loop {
-                cx.background_executor().timer(POLL_INTERVAL).await;
-                match probe_simulator(&config).await {
-                    Ok(telemetry) => {
-                        let frame = fetch_camera_frame().await.ok();
-                        update_view(
-                            &this,
-                            cx,
-                            ViewerPhase::Connected,
-                            "Simulator connected",
-                            Some(telemetry),
-                            frame,
-                        )
-                        .await;
-                    }
-                    Err(error) => {
-                        update_view(
-                            &this,
-                            cx,
-                            ViewerPhase::Waiting,
-                            format!("Simulator probe failed: {error:#}"),
-                            None,
-                            None,
-                        )
-                        .await;
+                cx.background_executor().timer(FRAME_POLL_INTERVAL).await;
+                if let Ok(frame) = fetch_camera_frame().await {
+                    update_frame(&this, cx, frame).await;
+                }
+
+                if last_status_probe.elapsed() >= STATUS_POLL_INTERVAL {
+                    last_status_probe = Instant::now();
+                    match probe_simulator(&config).await {
+                        Ok(telemetry) => {
+                            update_view(
+                                &this,
+                                cx,
+                                ViewerPhase::Connected,
+                                "Simulator connected",
+                                Some(telemetry),
+                                None,
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            update_view(
+                                &this,
+                                cx,
+                                ViewerPhase::Waiting,
+                                format!("Simulator probe failed: {error:#}"),
+                                None,
+                                None,
+                            )
+                            .await;
+                        }
                     }
                 }
             }
@@ -473,35 +482,32 @@ impl CyberRobotViewer {
         }
 
         self.camera_request.in_flight = true;
-        self.camera_task =
-            cx.spawn_in(
-                window,
-                async move |this, cx| match fetch_camera_frame_after_command(command).await {
-                    Ok(frame) => {
-                        this.update_in(cx, |viewer, window, cx| {
-                            viewer.latest_frame = Some(frame);
-                            viewer.camera_request.in_flight = false;
-                            if let Some(pending) = viewer.camera_request.pending.take() {
-                                viewer.request_camera_frame(pending, window, cx);
-                            }
-                            cx.notify();
-                        })
-                        .log_err();
-                    }
-                    Err(error) => {
-                        this.update_in(cx, |viewer, window, cx| {
-                            viewer.camera_request.in_flight = false;
-                            let pending = viewer.camera_request.pending.take();
-                            viewer.push_log(format!("Camera control failed: {error:#}"));
-                            if let Some(pending) = pending {
-                                viewer.request_camera_frame(pending, window, cx);
-                            }
-                            cx.notify();
-                        })
-                        .log_err();
-                    }
-                },
-            );
+        self.camera_task = cx.spawn_in(window, async move |this, cx| {
+            match send_camera_command(command).await {
+                Ok(()) => {
+                    this.update_in(cx, |viewer, window, cx| {
+                        viewer.camera_request.in_flight = false;
+                        if let Some(pending) = viewer.camera_request.pending.take() {
+                            viewer.request_camera_frame(pending, window, cx);
+                        }
+                        cx.notify();
+                    })
+                    .log_err();
+                }
+                Err(error) => {
+                    this.update_in(cx, |viewer, window, cx| {
+                        viewer.camera_request.in_flight = false;
+                        let pending = viewer.camera_request.pending.take();
+                        viewer.push_log(format!("Camera control failed: {error:#}"));
+                        if let Some(pending) = pending {
+                            viewer.request_camera_frame(pending, window, cx);
+                        }
+                        cx.notify();
+                    })
+                    .log_err();
+                }
+            }
+        });
     }
 
     fn render_robot_stage(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -860,12 +866,27 @@ impl RobotDockerConfig {
         Self {
             harness_dir: std::env::var("CYBER_ROBOT_HARNESS_DIR")
                 .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from(DEFAULT_HARNESS_DIR)),
+                .unwrap_or_else(|_| default_harness_dir()),
             image: std::env::var("CYBER_ROBOT_IMAGE").unwrap_or_else(|_| DEFAULT_IMAGE.to_string()),
             model_path: std::env::var("CYBER_ROBOT_MODEL_PATH")
                 .unwrap_or_else(|_| DEFAULT_MODEL_PATH.to_string()),
         }
     }
+}
+
+fn default_harness_dir() -> PathBuf {
+    std::env::current_dir()
+        .ok()
+        .and_then(find_harness_root)
+        .or_else(|| find_harness_root(PathBuf::from(env!("CARGO_MANIFEST_DIR"))))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn find_harness_root(start: PathBuf) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|ancestor| ancestor.join(HARNESS_MARKER_PATH).exists())
+        .map(Path::to_path_buf)
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -971,7 +992,7 @@ async fn prepare_harness(config: &RobotDockerConfig) -> Result<()> {
     run_command(
         &config.harness_dir,
         "node",
-        &["scripts/prepare-unitree-g1-mujoco-container.mjs"],
+        &["script/prepare-unitree-g1-mujoco-container.mjs"],
         &[
             ("UNITREE_G1_MUJOCO_IMAGE", config.image.as_str()),
             ("UNITREE_G1_MODEL_PATH", config.model_path.as_str()),
@@ -1074,10 +1095,10 @@ async fn fetch_camera_frame() -> Result<Arc<RenderImage>> {
     render_image_from_bytes(&bytes)
 }
 
-async fn fetch_camera_frame_after_command(command: CameraCommand) -> Result<Arc<RenderImage>> {
+async fn send_camera_command(command: CameraCommand) -> Result<()> {
     let body = command.body();
-    let bytes = http_post_bytes(CAMERA_FRAME_PATH, body.as_bytes(), "application/json").await?;
-    render_image_from_bytes(&bytes)
+    http_post_bytes(CAMERA_CONTROL_PATH, body.as_bytes(), "application/json").await?;
+    Ok(())
 }
 
 fn render_image_from_bytes(bytes: &[u8]) -> Result<Arc<RenderImage>> {
@@ -1479,6 +1500,18 @@ async fn update_view(
     .log_err();
 }
 
+async fn update_frame(
+    this: &gpui::WeakEntity<CyberRobotViewer>,
+    cx: &mut gpui::AsyncWindowContext,
+    frame: Arc<RenderImage>,
+) {
+    this.update(cx, |viewer, cx| {
+        viewer.latest_frame = Some(frame.clone());
+        cx.notify();
+    })
+    .log_err();
+}
+
 async fn append_log(
     this: &gpui::WeakEntity<CyberRobotViewer>,
     cx: &mut gpui::AsyncWindowContext,
@@ -1635,6 +1668,17 @@ mod tests {
             }),
             1,
             "reopening should activate the existing embedded viewer"
+        );
+    }
+
+    #[test]
+    fn default_harness_dir_finds_checked_in_runtime() {
+        let harness_dir = default_harness_dir();
+        assert!(
+            harness_dir.join(HARNESS_MARKER_PATH).exists(),
+            "expected {} under {}",
+            HARNESS_MARKER_PATH,
+            harness_dir.display()
         );
     }
 
