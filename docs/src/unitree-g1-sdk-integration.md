@@ -419,9 +419,10 @@ run local sim2sim through
 `overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py`. That runtime
 is also wired into the live Docker protocol server when
 `UNITREE_G1_POLICY_BUNDLE` points at a packed bundle; `g1-yoga-sim2sim` remains
-the pre-Docker proof harness for observation/action mapping. Agents can inspect
-and control that optional runtime through `sim_policy_status`,
-`sim_policy_start`, and `sim_policy_stop`.
+the pre-Docker proof harness for observation/action mapping. Agents should
+preflight a bundle with `sim_policy_bundle_info`, then inspect and control that
+optional runtime through `sim_policy_status`, `sim_policy_start`, and
+`sim_policy_stop`.
 
 ## Key Findings {#key-findings}
 

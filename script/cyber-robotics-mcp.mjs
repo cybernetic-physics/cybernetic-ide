@@ -14,6 +14,8 @@ const DEFAULT_CONTAINER = "unitree-g1-mujoco";
 const OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session";
 const UNITREE_RPC_BRIDGE_CONTAINER = "unitree-g1-rpc-bridge";
 const DEFAULT_POSE = "raise_right_hand";
+const POLICY_CONTAINER_DIR = "/opt/unitree-g1-mujoco-protocol/policy";
+const DEFAULT_POLICY_BUNDLE = `${POLICY_CONTAINER_DIR}/g1_yoga_policy.npz`;
 const MAX_LOG_BYTES = 256_000;
 const CAMERA_BOOKMARKS_PATH = ".runtime/robot-viewer-camera-bookmarks.json";
 const G1_ACTION_POSES = {
@@ -809,6 +811,21 @@ const tools = [
     readOnlyHint: true,
   }),
   tool(
+    "sim_policy_bundle_info",
+    "Inspect the configured LocoMuJoCo-trained G1 yoga policy bundle before starting it.",
+    {
+      path: {
+        type: "string",
+        description: "Optional workspace path, absolute host path under the policy mount, or /opt/unitree-g1-mujoco-protocol/policy/*.npz container path. Defaults to UNITREE_G1_POLICY_BUNDLE.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+  ),
+  tool(
     "sim_policy_start",
     "Start the optional LocoMuJoCo-trained G1 yoga policy runtime.",
     {
@@ -1511,6 +1528,8 @@ async function callTool(name, args) {
       return textResult(await command({ command: "pose", pose: args.pose || DEFAULT_POSE }));
     case "sim_policy_status":
       return textResult(await command({ command: "yoga_policy", action: "status" }));
+    case "sim_policy_bundle_info":
+      return textResult(policyBundleInfo(args));
     case "sim_policy_start":
       return textResult(await command({
         command: "yoga_policy",
@@ -3174,6 +3193,12 @@ function roboticsToolReference() {
         "Simulator HTTP endpoint reachable; use safety_stop after exploratory motion.",
       ),
       toolReference(
+        "sim_policy_bundle_info",
+        "read",
+        "Reads local LocoMuJoCo deploy bundle metadata only.",
+        "Policy bundle may be absent; use before sim_policy_start.",
+      ),
+      toolReference(
         "viewer_camera_control",
         "viewer-state",
         "Moves only the viewer camera.",
@@ -4641,8 +4666,12 @@ function updateComposeEnv(updates) {
     "UNITREE_G1_AUTORUN",
     "UNITREE_G1_FRAME_HZ",
     "UNITREE_G1_RENDER_HZ",
+    "UNITREE_G1_HTTP_PORT",
+    "UNITREE_G1_WS_PORT",
     "UNITREE_G1_RENDER_WIDTH",
     "UNITREE_G1_RENDER_HEIGHT",
+    "UNITREE_G1_POLICY_DIR_HOST",
+    "UNITREE_G1_POLICY_BUNDLE",
   ];
   const lines = keys.filter((key) => next[key] !== undefined).map((key) => `${key}=${next[key]}`);
   fs.writeFileSync(composeEnvPath(), `${lines.join(os.EOL)}${os.EOL}`);
@@ -4660,6 +4689,284 @@ function runtimePaths() {
     assetRoot,
     containerModelPath,
     hostModelPath: path.join(assetRoot, relativeModelPath),
+  };
+}
+
+function resolvePolicyBundlePath(userPath) {
+  const env = readComposeEnv();
+  const hostPolicyDir = path.resolve(env.UNITREE_G1_POLICY_DIR_HOST || path.join(root, ".runtime/unitree-g1-mujoco/policy"));
+  const configuredContainerPath = env.UNITREE_G1_POLICY_BUNDLE || DEFAULT_POLICY_BUNDLE;
+  const requested = userPath || configuredContainerPath;
+  const value = String(requested);
+  let hostPath;
+  let containerPath = value.startsWith(POLICY_CONTAINER_DIR) ? value : configuredContainerPath;
+
+  if (value.startsWith(`${POLICY_CONTAINER_DIR}/`)) {
+    hostPath = path.join(hostPolicyDir, value.slice(POLICY_CONTAINER_DIR.length + 1));
+  } else if (path.isAbsolute(value)) {
+    hostPath = path.resolve(value);
+    if (!hostPath.startsWith(`${hostPolicyDir}${path.sep}`) && hostPath !== hostPolicyDir && !hostPath.startsWith(`${root}${path.sep}`)) {
+      throw new Error(`Policy bundle path must stay inside the workspace or configured policy mount: ${value}`);
+    }
+  } else {
+    hostPath = safeWorkspacePath(value);
+  }
+
+  if (hostPath.startsWith(`${hostPolicyDir}${path.sep}`)) {
+    containerPath = `${POLICY_CONTAINER_DIR}/${path.relative(hostPolicyDir, hostPath).split(path.sep).join("/")}`;
+  }
+
+  return {
+    requested: value,
+    configured_container_path: configuredContainerPath,
+    host_policy_dir: hostPolicyDir,
+    host_path: hostPath,
+    container_path: containerPath,
+  };
+}
+
+function policyBundleInfo(args = {}) {
+  const resolved = resolvePolicyBundlePath(args.path);
+  const exists = fs.existsSync(resolved.host_path);
+  const base = {
+    ok: false,
+    source: "locomujoco_yoga_policy_bundle",
+    ...resolved,
+    exists,
+  };
+  if (!exists) {
+    return {
+      ...base,
+      bytes: 0,
+      missing: ["bundle_file"],
+      warnings: [
+        "No deploy bundle exists at the resolved host path. Pack one with packages/g1-yoga-rl before starting sim_policy_start.",
+      ],
+      agent_hints: [
+        "Run sim_prepare_runtime to create the policy mount directory.",
+        "Use packages/g1-yoga-rl to export, evaluate, pack, and validate a deploy bundle.",
+      ],
+    };
+  }
+
+  const inspector = String.raw`
+import json
+import os
+import sys
+
+path = sys.argv[1]
+required = [
+    "n_layers",
+    "obs_mean",
+    "obs_var",
+    "act_mean",
+    "act_delta",
+    "goal_ref",
+    "ref_qpos",
+    "ref_qvel",
+    "site_names",
+    "site_parent_bodies",
+    "site_pos",
+    "site_quat",
+    "obs_joint_names",
+    "act_joint_names",
+    "joint_names",
+    "control_dt",
+]
+out = {
+    "ok": False,
+    "bytes": os.path.getsize(path),
+    "required_static_keys": required,
+    "warnings": [],
+    "errors": [],
+}
+
+def inspect_npz_headers_only(path):
+    import ast
+    import struct
+    import zipfile
+
+    arrays = {}
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.namelist()):
+            if not member.endswith(".npy"):
+                continue
+            key = member[:-4]
+            raw = archive.read(member)
+            if raw[:6] != b"\x93NUMPY":
+                arrays[key] = {"error": "not an npy member"}
+                continue
+            major = raw[6]
+            if major == 1:
+                header_len = struct.unpack("<H", raw[8:10])[0]
+                offset = 10
+            else:
+                header_len = struct.unpack("<I", raw[8:12])[0]
+                offset = 12
+            header = ast.literal_eval(raw[offset:offset + header_len].decode("latin1").strip())
+            item = {
+                "shape": list(header.get("shape", ())),
+                "dtype": str(header.get("descr", "")),
+            }
+            data = raw[offset + header_len:]
+            if item["shape"] == []:
+                dtype = item["dtype"]
+                try:
+                    if dtype in ("<i8", "|i8"):
+                        item["value"] = int(struct.unpack("<q", data[:8])[0])
+                    elif dtype in ("<i4", "|i4"):
+                        item["value"] = int(struct.unpack("<i", data[:4])[0])
+                    elif dtype in ("<f8", "|f8"):
+                        item["value"] = float(struct.unpack("<d", data[:8])[0])
+                    elif dtype in ("<f4", "|f4"):
+                        item["value"] = float(struct.unpack("<f", data[:4])[0])
+                except Exception as exc:
+                    item["scalar_error"] = str(exc)
+            arrays[key] = item
+    keys = sorted(arrays)
+    n_layers = arrays.get("n_layers", {}).get("value")
+    weight_keys = []
+    if isinstance(n_layers, int):
+        for index in range(n_layers):
+            weight_keys.extend([f"w{index}", f"b{index}"])
+    missing = [key for key in required + weight_keys if key not in arrays]
+    result = {
+        "ok": not missing,
+        "inspection_mode": "npy_headers_without_numpy",
+        "keys": keys,
+        "arrays": arrays,
+        "missing": missing,
+        "required_weight_keys": weight_keys,
+    }
+    def shape(name):
+        return arrays.get(name, {}).get("shape", [])
+    if isinstance(n_layers, int):
+        result["n_layers"] = n_layers
+    if "control_dt" in arrays and "value" in arrays["control_dt"]:
+        result["control_dt"] = float(arrays["control_dt"]["value"])
+    if shape("goal_ref"):
+        result["frame_count"] = int(shape("goal_ref")[0])
+    if shape("ref_qpos"):
+        result["reference_qpos_frames"] = int(shape("ref_qpos")[0])
+    if shape("ref_qvel"):
+        result["reference_qvel_frames"] = int(shape("ref_qvel")[0])
+    if shape("act_joint_names"):
+        result["policy_actuator_count"] = int(shape("act_joint_names")[0])
+    if shape("obs_joint_names"):
+        result["observation_joint_count"] = int(shape("obs_joint_names")[0])
+    if shape("site_names"):
+        result["mimic_site_count"] = int(shape("site_names")[0])
+    return result
+
+try:
+    import numpy as np
+except Exception as exc:
+    out["warnings"].append(f"numpy unavailable, using header-only inspection: {exc}")
+    out.update(inspect_npz_headers_only(path))
+    print(json.dumps(out, sort_keys=True))
+    sys.exit(0)
+
+def scalar_value(array):
+    if getattr(array, "shape", None) == ():
+        value = array.item()
+        if hasattr(value, "item"):
+            value = value.item()
+        if isinstance(value, bytes):
+            return value.decode("utf-8", "replace")
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+    return None
+
+try:
+    data = np.load(path, allow_pickle=False)
+    keys = sorted(data.files)
+    out["keys"] = keys
+    n_layers = None
+    if "n_layers" in data.files:
+        n_layers = int(data["n_layers"])
+        out["n_layers"] = n_layers
+    weight_keys = []
+    if n_layers is not None:
+        for index in range(n_layers):
+            weight_keys.extend([f"w{index}", f"b{index}"])
+    expected = required + weight_keys
+    missing = [key for key in expected if key not in data.files]
+    out["required_weight_keys"] = weight_keys
+    out["missing"] = missing
+    arrays = {}
+    for key in keys:
+        array = data[key]
+        item = {
+            "shape": list(array.shape),
+            "dtype": str(array.dtype),
+        }
+        value = scalar_value(array)
+        if value is not None:
+            item["value"] = value
+        arrays[key] = item
+    out["arrays"] = arrays
+
+    def shape(name):
+        return tuple(arrays.get(name, {}).get("shape", []))
+
+    if "goal_ref" in arrays:
+        out["frame_count"] = int(shape("goal_ref")[0]) if shape("goal_ref") else 0
+    if "ref_qpos" in arrays:
+        out["reference_qpos_frames"] = int(shape("ref_qpos")[0]) if shape("ref_qpos") else 0
+    if "ref_qvel" in arrays:
+        out["reference_qvel_frames"] = int(shape("ref_qvel")[0]) if shape("ref_qvel") else 0
+    if "act_joint_names" in data.files:
+        out["policy_actuator_count"] = int(len(data["act_joint_names"]))
+    if "obs_joint_names" in data.files:
+        out["observation_joint_count"] = int(len(data["obs_joint_names"]))
+    if "site_names" in data.files:
+        out["mimic_site_count"] = int(len(data["site_names"]))
+    if "control_dt" in data.files:
+        out["control_dt"] = float(data["control_dt"])
+    out["inspection_mode"] = "numpy"
+
+    if "goal_ref" in arrays and "obs_mean" in arrays and shape("goal_ref")[-1:] != shape("obs_mean")[-1:]:
+        out["warnings"].append("goal_ref observation width does not match obs_mean width")
+    if "goal_ref" in arrays and "obs_var" in arrays and shape("goal_ref")[-1:] != shape("obs_var")[-1:]:
+        out["warnings"].append("goal_ref observation width does not match obs_var width")
+    if "act_mean" in arrays and "act_delta" in arrays and shape("act_mean") != shape("act_delta"):
+        out["warnings"].append("act_mean and act_delta shapes differ")
+    if "act_joint_names" in data.files and "act_mean" in arrays and len(data["act_joint_names"]) != shape("act_mean")[0]:
+        out["warnings"].append("act_joint_names count does not match action mean width")
+    if {"goal_ref", "ref_qpos", "ref_qvel"}.issubset(arrays):
+        frame_counts = {shape("goal_ref")[0], shape("ref_qpos")[0], shape("ref_qvel")[0]}
+        if len(frame_counts) != 1:
+            out["warnings"].append("goal_ref/ref_qpos/ref_qvel frame counts differ")
+    out["ok"] = not missing and not out["errors"]
+except Exception as exc:
+    out["errors"].append(str(exc))
+
+print(json.dumps(out, sort_keys=True))
+`;
+  const result = run("python3", ["-c", inspector, resolved.host_path], { timeoutMs: 30000 });
+  let inspected;
+  try {
+    inspected = JSON.parse(result.stdout || "{}");
+  } catch (error) {
+    inspected = {
+      ok: false,
+      errors: [`Failed to parse policy inspector output: ${error.message}`],
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  }
+
+  return {
+    ...base,
+    ...inspected,
+    inspector_status: result.status,
+    inspector_stderr: result.stderr || undefined,
+    ok: Boolean(inspected.ok) && result.status === 0,
+    agent_hints: [
+      "Call this before sim_policy_start so missing keys or shape mismatches are caught without moving the robot.",
+      "The Docker runtime reads the container_path; copy or pack deploy bundles into host_path/host_policy_dir.",
+      "A valid bundle still needs runtime sim2sim validation before treating policy motion as safe.",
+    ],
   };
 }
 

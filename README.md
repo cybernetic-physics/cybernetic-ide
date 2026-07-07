@@ -338,9 +338,10 @@ ad hoc scripts first. The default tool surface includes:
 - behavior tracing: `robot_behavior_trace`, which runs one selected simulator
   or G1 SDK-shaped command and writes before/after evidence bundles plus joint
   and hand telemetry deltas for review;
-- learned policy runtime: `sim_policy_status`, `sim_policy_start`, and
-  `sim_policy_stop`, which control the optional LocoMuJoCo-trained yoga policy
-  when a deploy bundle is mounted into the simulator;
+- learned policy runtime: `sim_policy_bundle_info`, `sim_policy_status`,
+  `sim_policy_start`, and `sim_policy_stop`, which inspect and control the
+  optional LocoMuJoCo-trained yoga policy when a deploy bundle is mounted into
+  the simulator;
 - session diagnostics: `unitree_session_status`, which reports the selected
   Unitree transport, sim/real mode, DDS domain/interface, simulator
   reachability, topic freshness, and official sidecar readiness when

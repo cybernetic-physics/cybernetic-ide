@@ -1200,6 +1200,7 @@
               "robot_evidence_bundle": true,
               "sim_apply_pose": true,
               "sim_policy_status": true,
+              "sim_policy_bundle_info": true,
               "sim_policy_start": true,
               "sim_policy_stop": true,
               "viewer_camera_control": true,

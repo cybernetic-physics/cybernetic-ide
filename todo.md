@@ -251,6 +251,10 @@ Tasks:
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
   mounting for deploy bundles.
+- Done: add MCP `sim_policy_bundle_info` so agents can preflight the configured
+  LocoMuJoCo deploy bundle, inspect required keys/shapes, resolve host versus
+  container policy paths, and catch missing or malformed bundles before moving
+  the robot.
 - Remaining: promote the proven lowstate/lowcmd/motion probes into a long-lived
   DDS session transport for locomotion, richer arm action coverage, and lower
   latency streaming beyond the current bounded managed-session arm pose path.

@@ -595,6 +595,10 @@ viewer_snapshot_series
 sim_validate_behavior
 robot_evidence_bundle
 robot_behavior_trace
+sim_policy_bundle_info
+sim_policy_status
+sim_policy_start
+sim_policy_stop
 unitree_provider_status
 unitree_session_status
 unitree_sdk_compatibility_audit
