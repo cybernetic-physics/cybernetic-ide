@@ -159,8 +159,9 @@ python3 examples/yoga_teacher.py
 
 They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
 `LocoClient`-shaped locomotion, G1 audio intent (`AudioClient`), low-level
-`rt/lowcmd`/`rt/lowstate` control, read-only `rt/sportmodestate` and
-`rt/wirelesscontroller` telemetry, named-joint target control, a behavior
+`rt/lowcmd`/`rt/lowstate` control, read-only `rt/sportmodestate` telemetry,
+simulator-backed `rt/wirelesscontroller` joystick intent/readback, named-joint
+target control, a behavior
 gallery with snapshots, copy-on-write scene edits, and a higher-level scripted
 motion flow.
 

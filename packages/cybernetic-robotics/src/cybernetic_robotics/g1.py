@@ -130,6 +130,19 @@ class G1Robot:
     def dex3_state(self, hand: str | None = None) -> dict[str, Any]:
         return self.sim.dex3_state(hand)
 
+    def wireless_controller(
+        self,
+        *,
+        lx: float = 0.0,
+        ly: float = 0.0,
+        rx: float = 0.0,
+        ry: float = 0.0,
+        keys: int = 0,
+    ) -> dict[str, Any]:
+        """Record a simulator joystick intent compatible with Unitree WirelessController_."""
+
+        return self.sim.wireless_controller(lx=lx, ly=ly, rx=rx, ry=ry, keys=keys)
+
     def command_state(self) -> dict[str, Any]:
         """Read the active command/controller summary for debugging."""
 

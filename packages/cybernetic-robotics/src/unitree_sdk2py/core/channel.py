@@ -64,6 +64,18 @@ class ChannelPublisher:
             )
             self.last_response = response
             return bool(response.get("ok"))
+        if self.name == "rt/wirelesscontroller":
+            response = _session_from_env(timeout or 5.0).publish_wireless_controller(
+                self.name,
+                lx=float(getattr(message, "lx", 0.0)),
+                ly=float(getattr(message, "ly", 0.0)),
+                rx=float(getattr(message, "rx", 0.0)),
+                ry=float(getattr(message, "ry", 0.0)),
+                keys=int(getattr(message, "keys", 0)),
+                timeout=timeout or 5.0,
+            )
+            self.last_response = response
+            return bool(response.get("ok"))
         if self.name not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
@@ -172,7 +184,13 @@ class ChannelSubscriber:
                 return _sportmode_from_status(response["sportmodestate"], metadata=response)
             raise RuntimeError(response.get("error") or "sportmodestate unavailable through active Unitree provider")
         if self.name == "rt/wirelesscontroller":
-            return _wireless_from_lowstate(client.lowstate())
+            response = _session_from_env(float(timeout or 5.0)).read_wireless_controller(self.name)
+            self.last_response = response
+            if isinstance(response.get("telemetry_summary"), dict):
+                return _wireless_from_summary(response["telemetry_summary"], metadata=response)
+            if isinstance(response.get("wireless_controller"), dict):
+                return _wireless_from_summary(response["wireless_controller"], metadata=response)
+            return _wireless_from_lowstate(client.lowstate(), metadata=response)
         if self.name in {
             "rt/dex3/left/state",
             "rt/dex3/right/state",
@@ -339,7 +357,7 @@ def _sportmode_from_summary(value: dict, *, metadata: dict | None = None):
     return state
 
 
-def _wireless_from_lowstate(value: dict):
+def _wireless_from_lowstate(value: dict, *, metadata: dict | None = None):
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import WirelessController_
 
     state = WirelessController_()
@@ -350,6 +368,20 @@ def _wireless_from_lowstate(value: dict):
         state.rx = _signed_byte_to_axis(wireless[2])
         state.ry = _signed_byte_to_axis(wireless[3])
         state.keys = int(wireless[8]) | (int(wireless[9]) << 8)
+    state.metadata = metadata or {}
+    return state
+
+
+def _wireless_from_summary(value: dict, *, metadata: dict | None = None):
+    from unitree_sdk2py.idl.unitree_go.msg.dds_ import WirelessController_
+
+    state = WirelessController_()
+    state.lx = float(value.get("lx") or 0.0)
+    state.ly = float(value.get("ly") or 0.0)
+    state.rx = float(value.get("rx") or 0.0)
+    state.ry = float(value.get("ry") or 0.0)
+    state.keys = int(value.get("keys") or 0)
+    state.metadata = metadata or {}
     return state
 
 

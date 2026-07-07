@@ -949,6 +949,7 @@ const tools = [
           "g1_apply_joint_targets",
           "g1_lowcmd",
           "g1_hand_sdk",
+          "g1_wireless_controller",
           "g1_dex3_command",
           "safety_stop",
         ],
@@ -1399,6 +1400,25 @@ const tools = [
     { readOnlyHint: false },
   ),
   tool(
+    "g1_wireless_controller",
+    "Publish simulator-backed Unitree rt/wirelesscontroller joystick intent.",
+    {
+      lx: { type: "number", minimum: -1, maximum: 1, default: 0 },
+      ly: { type: "number", minimum: -1, maximum: 1, default: 0 },
+      rx: { type: "number", minimum: -1, maximum: 1, default: 0 },
+      ry: { type: "number", minimum: -1, maximum: 1, default: 0 },
+      keys: {
+        type: "integer",
+        minimum: 0,
+        maximum: 65535,
+        default: 0,
+        description: "16-bit button bitfield mirrored into lowstate.wireless_remote bytes 8 and 9.",
+      },
+    },
+    [],
+    { readOnlyHint: false },
+  ),
+  tool(
     "g1_dex3_command",
     "Publish a simulator-backed Unitree Dex3 HandCmd_ intent to rt/dex3/{left,right}/cmd.",
     {
@@ -1786,6 +1806,8 @@ async function callTool(name, args) {
       return textResult(await executeG1Lowcmd(args));
     case "g1_hand_sdk":
       return textResult(await executeG1HandSdk(args));
+    case "g1_wireless_controller":
+      return textResult(await executeG1WirelessController(args));
     case "g1_dex3_command":
       return textResult(await executeG1Dex3Command(args));
     case "g1_dex3_state":
@@ -1882,6 +1904,7 @@ function commandStateFromPayload(status, lowstate) {
   const loco = simulation.loco && typeof simulation.loco === "object" ? simulation.loco : {};
   const motionSwitcher = simulation.motion_switcher && typeof simulation.motion_switcher === "object" ? simulation.motion_switcher : {};
   const handSdk = simulation.hand_sdk && typeof simulation.hand_sdk === "object" ? simulation.hand_sdk : {};
+  const wirelessController = simulation.wireless_controller && typeof simulation.wireless_controller === "object" ? simulation.wireless_controller : {};
   const dex3 = simulation.dex3 && typeof simulation.dex3 === "object" ? simulation.dex3 : {};
   const dex3Hands = dex3.hands && typeof dex3.hands === "object" ? dex3.hands : {};
   const velocity = Array.isArray(loco.velocity) ? loco.velocity : [];
@@ -1889,6 +1912,8 @@ function commandStateFromPayload(status, lowstate) {
   const lowcmdStale = effectiveLowcmd.stale === true;
   const moving = velocity.some((value) => Math.abs(Number(value) || 0) > 1e-6);
   const handIntent = String(handSdk.intent || "idle");
+  const wirelessActive = ["lx", "ly", "rx", "ry"].some((axis) => Math.abs(Number(wirelessController[axis]) || 0) > 1e-6)
+    || Number(wirelessController.keys || 0) !== 0;
   const dex3ActiveHands = Object.entries(dex3Hands)
     .filter(([, state]) => state && typeof state === "object" && !["", "idle", "hold"].includes(String(state.intent || "idle")))
     .map(([hand]) => hand);
@@ -1904,6 +1929,8 @@ function commandStateFromPayload(status, lowstate) {
     inferredController = "locomotion";
   } else if (!["", "idle", "hold"].includes(handIntent)) {
     inferredController = "hand_sdk";
+  } else if (wirelessActive) {
+    inferredController = "wireless_controller";
   } else if (dex3ActiveHands.length > 0) {
     inferredController = "dex3";
   } else if (pose) {
@@ -1959,6 +1986,15 @@ function commandStateFromPayload(status, lowstate) {
       motor_count: handSdk.motor_count ?? null,
       weight: handSdk.weight ?? null,
       tau: handSdk.tau ?? null,
+    },
+    wireless_controller: {
+      topic: wirelessController.topic ?? null,
+      lx: wirelessController.lx ?? null,
+      ly: wirelessController.ly ?? null,
+      rx: wirelessController.rx ?? null,
+      ry: wirelessController.ry ?? null,
+      keys: wirelessController.keys ?? null,
+      received_at: wirelessController.received_at ?? null,
     },
     dex3: {
       active_hands: dex3ActiveHands,
@@ -2484,10 +2520,12 @@ async function robotEvidenceBundle(args = {}) {
   const simulation = status?.simulation && typeof status.simulation === "object" ? status.simulation : {};
   const render = simulation?.render && typeof simulation.render === "object" ? simulation.render : {};
   const handSdk = simulation?.hand_sdk && typeof simulation.hand_sdk === "object" ? simulation.hand_sdk : {};
+  const wirelessController = simulation?.wireless_controller && typeof simulation.wireless_controller === "object" ? simulation.wireless_controller : {};
   const dex3 = simulation?.dex3 && typeof simulation.dex3 === "object" ? simulation.dex3 : {};
   const dex3Hands = dex3?.hands && typeof dex3.hands === "object" ? dex3.hands : {};
   const handState = {
     hand_sdk: handSdk,
+    wireless_controller: wirelessController,
     dex3,
   };
 
@@ -2589,6 +2627,7 @@ async function robotEvidenceBundle(args = {}) {
       motor_count: Array.isArray(lowstate.motor_state) ? lowstate.motor_state.length : null,
       joint_count: Array.isArray(jointState.joints) ? jointState.joints.length : null,
       hand_sdk_intent: handSdk.intent || null,
+      wireless_controller_keys: wirelessController.keys ?? null,
       dex3_hands: Object.keys(dex3Hands),
       render_seq: render.render_seq ?? null,
       provider: providerStatus.provider || null,
@@ -2603,7 +2642,7 @@ async function robotEvidenceBundle(args = {}) {
     snapshot: snapshotValue,
     snapshot_series: snapshotSeriesValue,
     agent_hints: [
-      "Use lowstate, joint_state, and hand_state as telemetry evidence; screenshots are visual evidence.",
+      "Use lowstate, joint_state, hand_state, and wireless_controller state as telemetry evidence; screenshots are visual evidence.",
       "Use checks to decide whether a behavior is reviewable before explaining success to the user.",
       "Use provider_status to distinguish local HTTP shim, rpc_bridge, DDS sidecar, and unsupported real-hardware paths.",
     ],
@@ -2701,7 +2740,7 @@ async function robotBehaviorTrace(args = {}) {
     agent_hints: [
       "Open the before/after manifests for full telemetry and screenshot evidence.",
       "Use deltas.changed_joints to confirm expected arm or locomotion effects.",
-      "Use deltas.hand_sdk_changed and deltas.dex3_changed for hand-intent evidence.",
+      "Use deltas.hand_sdk_changed, deltas.wireless_controller_changed, and deltas.dex3_changed for intent evidence.",
     ],
   };
   await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -2734,6 +2773,8 @@ async function executeTraceCommand(name, commandArgs) {
       return executeG1Lowcmd(commandArgs);
     case "g1_hand_sdk":
       return executeG1HandSdk(commandArgs);
+    case "g1_wireless_controller":
+      return executeG1WirelessController(commandArgs);
     case "g1_dex3_command":
       return executeG1Dex3Command(commandArgs);
     case "safety_stop":
@@ -2769,6 +2810,8 @@ function summarizeTraceDeltas(before, after) {
 
   const beforeHandSdk = before?.hand_state?.hand_sdk || {};
   const afterHandSdk = after?.hand_state?.hand_sdk || {};
+  const beforeWireless = before?.hand_state?.wireless_controller || {};
+  const afterWireless = after?.hand_state?.wireless_controller || {};
   const beforeDex3 = before?.hand_state?.dex3 || {};
   const afterDex3 = after?.hand_state?.dex3 || {};
 
@@ -2776,9 +2819,12 @@ function summarizeTraceDeltas(before, after) {
     changed_joint_count: changedJoints.length,
     changed_joints: changedJoints.slice(0, 16),
     hand_sdk_changed: JSON.stringify(beforeHandSdk) !== JSON.stringify(afterHandSdk),
+    wireless_controller_changed: JSON.stringify(beforeWireless) !== JSON.stringify(afterWireless),
     dex3_changed: JSON.stringify(beforeDex3) !== JSON.stringify(afterDex3),
     before_hand_sdk_intent: beforeHandSdk.intent || null,
     after_hand_sdk_intent: afterHandSdk.intent || null,
+    before_wireless_keys: beforeWireless.keys ?? null,
+    after_wireless_keys: afterWireless.keys ?? null,
     before_dex3_hands: Object.keys(beforeDex3.hands || {}),
     after_dex3_hands: Object.keys(afterDex3.hands || {}),
   };
@@ -3333,6 +3379,18 @@ async function executeG1HandSdk(args) {
   });
 }
 
+async function executeG1WirelessController(args) {
+  return command({
+    command: "wireless_controller",
+    topic: "rt/wirelesscontroller",
+    lx: clampNumber(args.lx, -1, 1, 0),
+    ly: clampNumber(args.ly, -1, 1, 0),
+    rx: clampNumber(args.rx, -1, 1, 0),
+    ry: clampNumber(args.ry, -1, 1, 0),
+    keys: clampInt(args.keys, 0, 65535, 0),
+  });
+}
+
 async function executeG1Dex3Command(args) {
   const hand = args.hand === "left" ? "left" : "right";
   const q = clampNumber(args.q, -1.75, 1.75, 0.25);
@@ -3605,6 +3663,7 @@ function roboticsToolReference() {
       toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
       toolReference("g1_hand_sdk", "robot-motion-intent", "Publishes rt/hand_sdk open/close intent.", "Simulator running; records hand intent rather than full finger physics."),
+      toolReference("g1_wireless_controller", "robot-motion-intent", "Publishes rt/wirelesscontroller joystick/button intent.", "Simulator running; local simulator intent only, not physical joystick hardware."),
       toolReference("g1_dex3_command", "robot-motion-intent", "Publishes Dex3 HandCmd_ intent and records synthesized hand state.", "Simulator running; records hand telemetry rather than full finger physics."),
       toolReference("g1_dex3_state", "read", "Reads synthesized Dex3 hand telemetry for one or both hands.", "Simulator running after optional hand command."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),

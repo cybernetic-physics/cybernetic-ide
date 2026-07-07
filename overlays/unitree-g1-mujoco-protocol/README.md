@@ -64,6 +64,11 @@ Simulator commands:
   `/status.simulation.dex3.hands.{left,right}` telemetry compatible with
   `rt/lf/dex3/{left,right}/state` readers. This is hand intent/state
   telemetry, not MuJoCo finger actuation.
+- `wireless_controller` commands accept official-style
+  `rt/wirelesscontroller` joystick axes plus a 16-bit `keys` field, record
+  them in `/status.simulation.wireless_controller`, and mirror them into
+  `/lowstate.wireless_remote`. This is simulator joystick intent, not physical
+  controller hardware.
 - `yoga_policy` commands start, stop, or inspect the optional LocoMuJoCo-trained
   policy runtime. Set `UNITREE_G1_POLICY_BUNDLE` to a packed `g1-yoga-pack`
   bundle path inside the container; when the file is absent the command returns
@@ -99,6 +104,11 @@ curl -sS \
 curl -sS \
   -H 'content-type: application/json' \
   -d '{"command":"dex3","hand":"right","topic":"rt/dex3/right/cmd","motor_cmd":[{"mode":16,"q":0.25,"kp":1.5,"kd":0.1}]}' \
+  http://127.0.0.1:38383/command
+
+curl -sS \
+  -H 'content-type: application/json' \
+  -d '{"command":"wireless_controller","lx":0.35,"ry":-0.2,"keys":4660}' \
   http://127.0.0.1:38383/command
 ```
 

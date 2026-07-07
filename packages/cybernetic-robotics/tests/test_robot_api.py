@@ -111,6 +111,15 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "intent": "idle",
         "cmds": [],
     }
+    wireless_controller = {
+        "topic": "rt/wirelesscontroller",
+        "lx": 0.0,
+        "ly": 0.0,
+        "rx": 0.0,
+        "ry": 0.0,
+        "keys": 0,
+        "wireless_remote": [0 for _ in range(40)],
+    }
     dex3 = {
         "hands": {
             hand: {
@@ -165,6 +174,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "loco": type(self).loco,
                         "render": {"camera": type(self).camera},
                         "hand_sdk": type(self).hand_sdk,
+                        "wireless_controller": type(self).wireless_controller,
                         "dex3": type(self).dex3,
                         "lowcmd": {
                             "motor_cmd_count": type(self).lowcmd_count,
@@ -198,7 +208,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         {"mode": 1, "q": 0.1 * index, "dq": 0.0, "tau_est": 0.0, "temperature": [35, 40]}
                         for index in range(35)
                     ],
-                    "wireless_remote": [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
+                    "wireless_remote": type(self).wireless_controller.get(
+                        "wireless_remote",
+                        [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
+                    ),
                     "lowcmd": {
                         "motor_cmd_count": type(self).lowcmd_count,
                         "topic": type(self).last_lowcmd.get("topic"),
@@ -379,6 +392,29 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     "cmds": cmds,
                 }
                 return self._json({"ok": True, "command": command, "hand_sdk": type(self).hand_sdk})
+            elif command == "wireless_controller":
+                def axis_byte(value):
+                    number = int(round(max(-1.0, min(1.0, float(value))) * 127.0))
+                    return number & 0xFF
+
+                keys = int(payload.get("keys", 0)) & 0xFFFF
+                wireless_remote = [0 for _ in range(40)]
+                wireless_remote[0] = axis_byte(payload.get("lx", 0.0))
+                wireless_remote[1] = axis_byte(payload.get("ly", 0.0))
+                wireless_remote[2] = axis_byte(payload.get("rx", 0.0))
+                wireless_remote[3] = axis_byte(payload.get("ry", 0.0))
+                wireless_remote[8] = keys & 0xFF
+                wireless_remote[9] = (keys >> 8) & 0xFF
+                type(self).wireless_controller = {
+                    "topic": payload.get("topic", "rt/wirelesscontroller"),
+                    "lx": max(-1.0, min(1.0, float(payload.get("lx", 0.0)))),
+                    "ly": max(-1.0, min(1.0, float(payload.get("ly", 0.0)))),
+                    "rx": max(-1.0, min(1.0, float(payload.get("rx", 0.0)))),
+                    "ry": max(-1.0, min(1.0, float(payload.get("ry", 0.0)))),
+                    "keys": keys,
+                    "wireless_remote": wireless_remote,
+                }
+                return self._json({"ok": True, "command": command, "wireless_controller": type(self).wireless_controller})
             elif command == "dex3":
                 hand = payload.get("hand", "left")
                 motor_cmd = payload.get("motor_cmd", [])
@@ -1360,6 +1396,40 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
+    def test_unitree_style_wireless_controller_records_and_reads_joystick_state(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                message = WirelessController_(lx=0.4, ly=-0.5, rx=1.0, ry=-1.0, keys=0x1234)
+                publisher = ChannelPublisher("rt/wirelesscontroller", WirelessController_)
+                publisher.Init()
+                self.assertTrue(publisher.Write(message))
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertEqual(publisher.last_response["wireless_controller"]["keys"], 0x1234)
+
+                subscriber = ChannelSubscriber("rt/wirelesscontroller", WirelessController_)
+                subscriber.Init()
+                state = subscriber.Read()
+
+                self.assertAlmostEqual(state.lx, 0.4)
+                self.assertAlmostEqual(state.ly, -0.5)
+                self.assertAlmostEqual(state.rx, 1.0)
+                self.assertAlmostEqual(state.ry, -1.0)
+                self.assertEqual(state.keys, 0x1234)
+                self.assertEqual(subscriber.last_response["provider"], "local_http_simulator")
+
+                robot = G1Robot.connect(endpoints=RobotEndpoints(game_control_url=fake.url))
+                result = robot.wireless_controller(lx=-0.25, keys=0x00FF)
+                self.assertTrue(result["ok"])
+                self.assertAlmostEqual(result["wireless_controller"]["lx"], -0.25)
+                self.assertEqual(result["wireless_controller"]["keys"], 0x00FF)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
     def test_unitree_session_routes_dds_lowcmd_to_managed_official_session(self):
         class FakeOfficial:
             def __init__(self):
@@ -1535,6 +1605,40 @@ class RobotApiTests(unittest.TestCase):
         self.assertAlmostEqual(state.velocity[0], 0.1)
         self.assertEqual(state.foot_force, [1, 2, 3, 4])
         self.assertEqual(official.calls[0]["topic"], "rt/sportmodestate")
+        self.assertEqual(subscriber.last_response["provider"], "official_mujoco_dds_simulator")
+
+    def test_unitree_wireless_channel_can_read_official_dds_summary(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls = []
+
+            def telemetry_session(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "topic": kwargs["topic"],
+                    "telemetry_summary": {
+                        "lx": 0.1,
+                        "ly": -0.2,
+                        "rx": 0.3,
+                        "ry": -0.4,
+                        "keys": 0x00AA,
+                    },
+                }
+
+        official = FakeOfficial()
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=official)
+
+        with patch("unitree_sdk2py.core.channel.UnitreeSession.from_env", return_value=session):
+            subscriber = ChannelSubscriber("rt/wirelesscontroller", WirelessController_)
+            subscriber.Init()
+            state = subscriber.Read()
+
+        self.assertAlmostEqual(state.lx, 0.1)
+        self.assertAlmostEqual(state.ry, -0.4)
+        self.assertEqual(state.keys, 0x00AA)
+        self.assertEqual(official.calls[0]["topic"], "rt/wirelesscontroller")
         self.assertEqual(subscriber.last_response["provider"], "official_mujoco_dds_simulator")
 
     def test_unitree_default_sport_mode_state_alias_matches_official_example_import(self):
@@ -1885,6 +1989,9 @@ class RobotApiTests(unittest.TestCase):
                 loco.Init()
                 self.assertEqual(loco.Start(), 0)
                 self.assertEqual(loco.Move(0.2, -0.1, 0.3), 0)
+                wireless_pub = ChannelPublisher("rt/wirelesscontroller", WirelessController_)
+                wireless_pub.Init()
+                self.assertTrue(wireless_pub.Write(WirelessController_(lx=1.0, rx=-1 / 127, ry=64 / 127, keys=0x1234)))
 
                 sport_sub = ChannelSubscriber("rt/sportmodestate", SportModeState_)
                 sport_sub.Init()

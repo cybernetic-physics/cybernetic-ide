@@ -59,6 +59,7 @@ making the user think about the transport layer.
 | `examples/g1_arm_sdk_dds.py` | Official-style G1 `rt/arm_sdk` demo that enables arm SDK slot 29 and publishes bounded arm LowCmd frames. |
 | `examples/g1_user_lowcmd_sdk.py` | Official-style G1 `rt/user_lowcmd` demo inspired by Unitree's C++ user-control example. |
 | `examples/g1_hand_sdk.py` | Official-style G1 `rt/hand_sdk` demo that records open/close hand intent using Unitree's MotorCmds shape. |
+| `examples/g1_wireless_controller_sdk.py` | Official-style `rt/wirelesscontroller` joystick/button intent demo using Unitree's WirelessController shape. |
 | `examples/g1_dex3_sdk.py` | Official-style G1 Dex3 hand demo using `HandCmd_` and `HandState_` topics with synthesized simulator telemetry. |
 | `examples/g1_lowstate_monitor.py` | Compact lowstate and named-joint telemetry monitor with optional JSONL output. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
@@ -432,7 +433,7 @@ ad hoc scripts first. The default tool surface includes:
 - Unitree-shaped G1 controls: `g1_execute_action`, `g1_loco_command`,
   `g1_agv_command`, `g1_motion_switcher`, `g1_safety_check`, `g1_lowstate`,
   `g1_joint_state`, `g1_apply_joint_targets`, `g1_lowcmd`, `g1_hand_sdk`,
-  `g1_dex3_command`, and `g1_dex3_state`;
+  `g1_wireless_controller`, `g1_dex3_command`, and `g1_dex3_state`;
 - Python control jobs: `python_control_run`, `python_control_start`,
   `python_control_logs`, `python_control_pause`, `python_control_resume`,
   `python_control_stop`, and `python_control_list`.

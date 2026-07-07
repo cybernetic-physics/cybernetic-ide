@@ -229,6 +229,12 @@ Tasks:
   MCP `unitree_read_official_mujoco_telemetry`, and DDS-mode
   `ChannelSubscriber("rt/sportmodestate")` routing for the G1 FSM/sport-mode
   topic.
+- Done: add simulator-backed `rt/wirelesscontroller` joystick intent through
+  `/command wireless_controller`, `G1Robot.wireless_controller()`,
+  `ChannelPublisher("rt/wirelesscontroller", WirelessController_)`, MCP
+  `g1_wireless_controller`, and `examples/g1_wireless_controller_sdk.py`.
+  DDS simulator mode keeps publishing locked and reads official telemetry via
+  the managed session when the peer publishes `rt/wirelesscontroller`.
 - Done: add Python-native managed official session lifecycle through
   `OfficialG1Sim.start_session()`, `session_status()`, `stop_session()`, CLI
   `cyber-g1 official start-session/session-status/lowstate-session/stop-session`,

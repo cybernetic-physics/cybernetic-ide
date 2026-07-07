@@ -627,11 +627,18 @@ The current repo has the first narrow version of that API boundary:
   `rt/lf/dex3/{left,right}/state`. This gives user code and agents the
   official Dex3 surface while documenting that real finger physics remains
   future work.
+- `examples/g1_wireless_controller_sdk.py` mirrors Unitree's
+  `rt/wirelesscontroller` message shape with `WirelessController_` axes and a
+  16-bit keys field. Local simulator mode records that as joystick/button
+  intent and mirrors it into `lowstate.wireless_remote`; simulator DDS mode
+  keeps publishing locked and uses the managed official session for read-only
+  `rt/wirelesscontroller` telemetry when the peer provides it.
 - The channel shim supports read-only `rt/sportmodestate`,
   `rt/lf/sportmodestate`, and `rt/wirelesscontroller` subscribers with
-  lightweight `unitree_go` dataclasses. Local simulator mode synthesizes those
-  from status and lowstate; simulator DDS mode routes sport mode state through
-  the managed official session when selected.
+  lightweight `unitree_go` dataclasses. Local simulator mode synthesizes sport
+  mode from status and wireless state from the joystick intent/lowstate bytes;
+  simulator DDS mode routes sport mode and wireless reads through the managed
+  official session when selected.
 - `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
   `/joint_state` and compiles joint-name targets back into simulator-backed
   lowcmd slots.

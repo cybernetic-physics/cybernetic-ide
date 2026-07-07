@@ -519,6 +519,7 @@ Run the official-style hand SDK intent example:
 ```sh
 python3 examples/g1_hand_sdk.py
 python3 examples/g1_dex3_sdk.py --hand right --q 0.25
+python3 examples/g1_wireless_controller_sdk.py --lx 0.35 --ry -0.2 --keys 0x1234
 ```
 
 `ChannelPublisher("rt/hand_sdk")` accepts Unitree's simple
@@ -532,6 +533,15 @@ The simulator records blend weight, mean tau, and open/close intent in
 `HandState_` telemetry. This matches the topic/message shape of Unitree's C++
 `g1_dex3_example.cpp`; the current runtime records intent/state only and does
 not yet drive the G1 finger bodies with a Dex3 MuJoCo controller.
+
+`ChannelPublisher("rt/wirelesscontroller")` accepts
+`unitree_go.msg.dds_.WirelessController_` and records joystick axes plus the
+16-bit button bitfield in `/status.simulation.wireless_controller`. The
+matching `ChannelSubscriber("rt/wirelesscontroller")` reads that local
+simulator intent or, in DDS simulator mode, reads the managed official peer's
+read-only telemetry when `rt/wirelesscontroller` is published. This is useful
+for SDK examples and agent workflows that expect joystick state; it is not
+physical joystick hardware control.
 
 ## Named Joint Targets
 
@@ -653,6 +663,7 @@ g1_lowstate
 g1_joint_state
 g1_apply_joint_targets
 g1_lowcmd
+g1_wireless_controller
 g1_dex3_command
 g1_dex3_state
 ```

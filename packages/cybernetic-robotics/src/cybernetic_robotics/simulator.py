@@ -189,6 +189,9 @@ class SimulatorClient:
     def dex3(self, hand: str, motor_cmd: list[JsonObject], **fields: Any) -> JsonObject:
         return self.command("dex3", hand=hand, motor_cmd=motor_cmd, **fields)
 
+    def wireless_controller(self, **fields: Any) -> JsonObject:
+        return self.command("wireless_controller", **fields)
+
     def dex3_state(self, hand: str | None = None) -> JsonObject:
         dex3 = self.status().dex3
         if hand is None:
@@ -341,6 +344,7 @@ def _command_state_from_payload(status: JsonObject, lowstate: JsonObject) -> Jso
     loco = simulation.get("loco") if isinstance(simulation.get("loco"), dict) else {}
     motion_switcher = simulation.get("motion_switcher") if isinstance(simulation.get("motion_switcher"), dict) else {}
     hand_sdk = simulation.get("hand_sdk") if isinstance(simulation.get("hand_sdk"), dict) else {}
+    wireless_controller = simulation.get("wireless_controller") if isinstance(simulation.get("wireless_controller"), dict) else {}
     dex3 = simulation.get("dex3") if isinstance(simulation.get("dex3"), dict) else {}
     lowstate_lowcmd = lowstate.get("lowcmd") if isinstance(lowstate.get("lowcmd"), dict) else {}
     effective_lowcmd = {**lowstate_lowcmd, **lowcmd}
@@ -367,6 +371,11 @@ def _command_state_from_payload(status: JsonObject, lowstate: JsonObject) -> Jso
         inferred_controller = "locomotion"
     elif hand_intent not in {"", "idle", "hold"}:
         inferred_controller = "hand_sdk"
+    elif (
+        any(abs(_optional_float(wireless_controller.get(axis)) or 0.0) > 1e-6 for axis in ("lx", "ly", "rx", "ry"))
+        or int(wireless_controller.get("keys") or 0)
+    ):
+        inferred_controller = "wireless_controller"
     elif dex3_active_hands:
         inferred_controller = "dex3"
     elif pose:
@@ -423,6 +432,15 @@ def _command_state_from_payload(status: JsonObject, lowstate: JsonObject) -> Jso
             "motor_count": hand_sdk.get("motor_count"),
             "weight": hand_sdk.get("weight"),
             "tau": hand_sdk.get("tau"),
+        },
+        "wireless_controller": {
+            "topic": wireless_controller.get("topic"),
+            "lx": wireless_controller.get("lx"),
+            "ly": wireless_controller.get("ly"),
+            "rx": wireless_controller.get("rx"),
+            "ry": wireless_controller.get("ry"),
+            "keys": wireless_controller.get("keys"),
+            "received_at": wireless_controller.get("received_at"),
         },
         "dex3": {
             "active_hands": dex3_active_hands,

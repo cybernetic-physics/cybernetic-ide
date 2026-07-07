@@ -723,6 +723,98 @@ class UnitreeSession:
             "official_dds_supported": False,
         }
 
+    def publish_wireless_controller(
+        self,
+        topic: str,
+        *,
+        lx: float = 0.0,
+        ly: float = 0.0,
+        rx: float = 0.0,
+        ry: float = 0.0,
+        keys: int = 0,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Publish simulator joystick intent through the active provider."""
+
+        if topic != "rt/wirelesscontroller":
+            raise NotImplementedError(f"Cybernetic Unitree session wireless publisher does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree wireless controller publishing is locked until the real-hardware provider and safety gates are implemented",
+            }
+        if self.config.transport == DDS and self.config.mode == SIM:
+            return {
+                "ok": False,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "topic": topic,
+                "error": "managed official DDS wireless controller publishing is not wired; read-only telemetry is available when the peer publishes rt/wirelesscontroller",
+                "compatibility_fallback": False,
+            }
+
+        previous_timeout = self.simulator.timeout
+        if timeout is not None:
+            self.simulator.timeout = float(timeout)
+        try:
+            response = self.simulator.wireless_controller(
+                topic=topic,
+                lx=float(lx),
+                ly=float(ly),
+                rx=float(rx),
+                ry=float(ry),
+                keys=int(keys),
+            )
+        finally:
+            self.simulator.timeout = previous_timeout
+        return {
+            **response,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
+    def read_wireless_controller(self, topic: str = "rt/wirelesscontroller") -> dict[str, Any]:
+        """Read Unitree WirelessController telemetry through the active provider."""
+
+        if topic != "rt/wirelesscontroller":
+            raise NotImplementedError(f"Cybernetic Unitree session wireless subscriber does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree wireless telemetry is locked until the real-hardware provider and safety gates are implemented",
+            }
+        if self.config.transport == DDS and self.config.mode == SIM:
+            response = self._official().telemetry_session(topic=topic)
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "official_dds_supported": True,
+                "compatibility_fallback": False,
+            }
+
+        status = self.simulator.status().raw
+        simulation = status.get("simulation") if isinstance(status.get("simulation"), dict) else {}
+        wireless = simulation.get("wireless_controller") if isinstance(simulation.get("wireless_controller"), dict) else {}
+        return {
+            "ok": True,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "wireless_controller": wireless,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
     def read_dex3_state(self, topic: str) -> dict[str, Any]:
         """Read simulator-backed Dex3 hand telemetry for official state topics."""
 

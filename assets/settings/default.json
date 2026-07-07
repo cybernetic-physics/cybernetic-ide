@@ -1235,6 +1235,7 @@
               "g1_apply_joint_targets": true,
               "g1_lowcmd": true,
               "g1_hand_sdk": true,
+              "g1_wireless_controller": true,
               "g1_dex3_command": true,
               "g1_dex3_state": true,
               "safety_stop": true,

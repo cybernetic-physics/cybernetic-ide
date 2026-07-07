@@ -398,6 +398,17 @@ class G1MujocoState:
             "intent": "idle",
             "cmds": [],
         }
+        self.wireless_controller_state = {
+            "topic": "rt/wirelesscontroller",
+            "received_at": None,
+            "lx": 0.0,
+            "ly": 0.0,
+            "rx": 0.0,
+            "ry": 0.0,
+            "keys": 0,
+            "wireless_remote": [0 for _ in range(40)],
+            "source": "simulator",
+        }
         self.dex3_state = self.empty_dex3_state()
         self.lowcmd_state = {
             "topic": None,
@@ -946,6 +957,7 @@ class G1MujocoState:
                     "accelerometer": [0.0, 0.0, 0.0],
                 },
                 "motor_state": motor_state,
+                "wireless_remote": list(self.wireless_controller_state.get("wireless_remote", [0 for _ in range(40)])),
                 "lowcmd": dict(self.lowcmd_state),
             }
 
@@ -1156,6 +1168,53 @@ class G1MujocoState:
                 "ok": True,
                 "control_mode": "hand_sdk",
                 "hand_sdk": dict(self.hand_sdk_state),
+            }
+
+    def handle_wireless_controller_command(self, payload):
+        def axis(name):
+            try:
+                return clamp(float(payload.get(name, 0.0)), -1.0, 1.0)
+            except (TypeError, ValueError) as error:
+                raise ValueError(f"{name} must be numeric") from error
+
+        try:
+            lx = axis("lx")
+            ly = axis("ly")
+            rx = axis("rx")
+            ry = axis("ry")
+            keys = int(payload.get("keys", 0)) & 0xFFFF
+        except ValueError as error:
+            return {"ok": False, "error": str(error)}
+
+        def axis_byte(value):
+            number = int(round(clamp(value, -1.0, 1.0) * 127.0))
+            return number & 0xFF
+
+        wireless_remote = [0 for _ in range(40)]
+        wireless_remote[0] = axis_byte(lx)
+        wireless_remote[1] = axis_byte(ly)
+        wireless_remote[2] = axis_byte(rx)
+        wireless_remote[3] = axis_byte(ry)
+        wireless_remote[8] = keys & 0xFF
+        wireless_remote[9] = (keys >> 8) & 0xFF
+        state = {
+            "topic": payload.get("topic", "rt/wirelesscontroller"),
+            "received_at": time.time(),
+            "lx": lx,
+            "ly": ly,
+            "rx": rx,
+            "ry": ry,
+            "keys": keys,
+            "wireless_remote": wireless_remote,
+            "source": "unitree_go.WirelessController_ simulator intent",
+        }
+        with self.lock:
+            self.wireless_controller_state = state
+            self.frame_id += 1
+            return {
+                "ok": True,
+                "control_mode": "wireless_controller",
+                "wireless_controller": dict(state),
             }
 
     def empty_dex3_state(self):
@@ -1635,6 +1694,7 @@ class G1MujocoState:
                 "loco": dict(self.loco_state),
                 "motion_switcher": dict(self.motion_switcher_state),
                 "hand_sdk": dict(self.hand_sdk_state),
+                "wireless_controller": dict(self.wireless_controller_state),
                 "dex3": dict(self.dex3_state),
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
@@ -1918,6 +1978,8 @@ class G1MujocoState:
             return self.handle_joint_targets_command(payload)
         if command == "hand_sdk":
             return self.handle_hand_sdk_command(payload)
+        if command == "wireless_controller":
+            return self.handle_wireless_controller_command(payload)
         if command == "dex3":
             return self.handle_dex3_command(payload)
         if command in NAMED_POSES:
