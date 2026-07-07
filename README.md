@@ -53,6 +53,7 @@ making the user think about the transport layer.
 | `examples/g1_official_raise_hand.py` | Opt-in official Unitree MuJoCo + SDK2/CycloneDDS hand-raise probe. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
 | `examples/g1_lowcmd_sdk.py` | Low-level Unitree SDK2-shaped `rt/lowcmd` / `rt/lowstate` demo for conservative arm joint control. |
+| `examples/g1_lowstate_monitor.py` | Compact lowstate and named-joint telemetry monitor with optional JSONL output. |
 | `examples/g1_joint_targets.py` | Named-joint control demo that compiles joint names to simulator-backed lowcmd slots. |
 | `examples/g1_safety_stop.py` | Simulator safety-stop demo: release motion mode, damp, neutralize, pause, and snapshot. |
 | `examples/g1_agent_debug_loop.py` | Runs a behavior and writes screenshots, status, lowstate, and joint-state JSON for agent debugging. |
@@ -138,6 +139,7 @@ cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_lowstate_monitor.py --samples 3
 python3 examples/g1_joint_targets.py
 python3 examples/g1_safety_stop.py
 python3 examples/g1_agent_debug_loop.py --behavior raise_hand

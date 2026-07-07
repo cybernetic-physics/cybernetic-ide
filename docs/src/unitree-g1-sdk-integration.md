@@ -504,6 +504,9 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
   including official-style FSM, balance, swing-height, and stand-height
   getters/setters.
+- `examples/g1_lowstate_monitor.py` prints compact simulator-backed
+  `rt/lowstate` and named-joint telemetry, with optional JSONL output for
+  offline agent review.
 - `examples/g1_safety_stop.py` demonstrates the shared simulator stop path:
   release motion-switcher mode, damp locomotion, neutralize the arm pose, pause
   the simulator, and save an after-stop snapshot.

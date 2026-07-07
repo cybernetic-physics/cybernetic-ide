@@ -363,7 +363,7 @@ Tasks:
 - Done: `examples/g1_official_raise_hand.py`: official sidecar-backed SDK2/DDS
   hand-raise proof.
 - `examples/g1_walk_square_loco.py`: `LocoClient` movement pattern.
-- `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
+- Done: `examples/g1_lowstate_monitor.py`: telemetry monitor with joint names.
 - Done: `examples/g1_joint_targets.py`: named-joint low-level target demo.
 - `examples/g1_scene_obstacle.py`: add an object, move camera, snapshot.
 - Done: `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a

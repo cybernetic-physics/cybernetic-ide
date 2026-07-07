@@ -68,6 +68,7 @@ python3 examples/use_cybernetic_robotics_lib.py --mode unitree
 python3 examples/g1_official_raise_hand.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
+python3 examples/g1_lowstate_monitor.py --samples 3
 python3 examples/g1_joint_targets.py
 python3 examples/g1_safety_stop.py
 python3 examples/g1_agent_debug_loop.py --behavior raise_hand
