@@ -51,6 +51,7 @@ making the user think about the transport layer.
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
 | `examples/g1_official_raise_hand.py` | Opt-in official Unitree MuJoCo + SDK2/CycloneDDS hand-raise probe. |
+| `examples/g1_official_lowcmd_stream.py` | Lease-limited official Unitree SDK2/CycloneDDS LowCmd stream demo against the managed MuJoCo session. |
 | `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
 | `examples/g1_wave_hand_sdk.py` | Focused Unitree `LocoClient.WaveHand` demo with before/after evidence. |
 | `examples/g1_walk_square_loco.py` | Unitree `LocoClient` locomotion pattern demo that walks a small square. |
@@ -387,6 +388,10 @@ ad hoc scripts first. The default tool surface includes:
   hold values, clamps the supplied motor command prefix, recomputes CRC in the
   sidecar, and publishes a bounded `rt/lowcmd`, `rt/arm_sdk`, or
   `rt/user_lowcmd` frame;
+- managed official SDK2 lowcmd stream:
+  `unitree_stream_official_mujoco_lowcmd`, which uses the same lowstate
+  precheck and sanitization but publishes a lease-limited frame-rate-capped
+  stream to the managed official peer;
 - official SDK2 RPC discovery: `unitree_probe_official_mujoco_rpc_discovery`,
   which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
   matched service-side DDS readers before an agent tries a request/response
@@ -516,6 +521,7 @@ python3 -m py_compile \
   examples/easy_g1_playground.py \
   examples/control_g1_sim.py \
   examples/g1_raise_hand_sdk.py \
+  examples/g1_official_lowcmd_stream.py \
   examples/g1_loco_sdk.py \
   examples/g1_wave_hand_sdk.py \
   examples/g1_walk_square_loco.py \

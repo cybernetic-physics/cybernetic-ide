@@ -618,6 +618,79 @@ const tools = [
     },
   ),
   tool(
+    "unitree_stream_official_mujoco_lowcmd",
+    "Publish a lease-limited generic SDK2/CycloneDDS Unitree HG LowCmd stream to an already-running managed official Unitree MuJoCo G1 session.",
+    {
+      topic: {
+        type: "string",
+        enum: ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"],
+        default: "rt/lowcmd",
+        description: "Official Unitree HG LowCmd topic to stream.",
+      },
+      motor_cmd: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            mode: { type: "integer", minimum: 0, maximum: 15 },
+            q: { type: "number", minimum: -3.5, maximum: 3.5 },
+            dq: { type: "number", minimum: -20, maximum: 20 },
+            tau: { type: "number", minimum: -80, maximum: 80 },
+            kp: { type: "number", minimum: 0, maximum: 80 },
+            kd: { type: "number", minimum: 0, maximum: 8 },
+          },
+          additionalProperties: false,
+        },
+        default: [],
+        description: "LowCmd motor_cmd prefix to apply. Unspecified motor slots hold their sampled lowstate positions.",
+      },
+      mode_pr: { type: "integer", default: 0 },
+      mode_machine: { type: "integer", default: 0 },
+      crc: { type: "integer", default: 0 },
+      frames: {
+        type: "integer",
+        minimum: 1,
+        maximum: 2000,
+        default: 200,
+        description: "Requested stream frames. The sidecar also caps frames by hz, lease_seconds, and max_duration_seconds.",
+      },
+      hz: {
+        type: "number",
+        minimum: 1,
+        maximum: 250,
+        default: 100,
+        description: "Target publish rate in Hz.",
+      },
+      lease_seconds: {
+        type: "number",
+        minimum: 0.1,
+        maximum: 10,
+        default: 2,
+        description: "Lease cap for this stream call. Agents should renew deliberately instead of starting unbounded loops.",
+      },
+      max_duration_seconds: {
+        type: "number",
+        minimum: 0.1,
+        maximum: 10,
+        default: 5,
+        description: "Hard duration cap for this stream call.",
+      },
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.5,
+        maximum: 30,
+        default: 6,
+        description: "Deadline for reading the safety lowstate sample before publishing.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  ),
+  tool(
     "unitree_official_mujoco_evidence_bundle",
     "Run a bounded arm pose against the managed official Unitree MuJoCo G1 DDS session and write before/after rt/lowstate evidence.",
     {
@@ -1508,6 +1581,8 @@ async function callTool(name, args) {
       return textResult(sdk2CommandOfficialMujocoArmPose(args));
     case "unitree_command_official_mujoco_lowcmd":
       return textResult(sdk2CommandOfficialMujocoLowcmd(args));
+    case "unitree_stream_official_mujoco_lowcmd":
+      return textResult(sdk2StreamOfficialMujocoLowcmd(args));
     case "unitree_official_mujoco_evidence_bundle":
       return textResult(await sdk2OfficialMujocoEvidenceBundle(args));
     case "sim_pause":
@@ -3304,6 +3379,12 @@ function roboticsToolReference() {
         "Managed official MuJoCo DDS session running and ready; inspect lowstate first.",
       ),
       toolReference(
+        "unitree_stream_official_mujoco_lowcmd",
+        "expert-robot-motion-stream",
+        "Publishes a bounded sanitized official LowCmd stream with frame-rate, lease, and duration caps.",
+        "Managed official MuJoCo DDS session running and ready; inspect lowstate first and renew streams deliberately.",
+      ),
+      toolReference(
         "unitree_official_mujoco_evidence_bundle",
         "robot-motion-with-evidence",
         "May start official MuJoCo session, commands a bounded arm pose, and writes JSON lowstate evidence.",
@@ -4531,6 +4612,77 @@ function sdk2CommandOfficialMujocoLowcmd(options = {}) {
   return {
     command: `docker ${args.join(" ")}`,
     parameters: { topic, ...payload, frames, timeout_seconds: timeoutSeconds },
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2StreamOfficialMujocoLowcmd(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+  const motorCmd = Array.isArray(options.motor_cmd)
+    ? options.motor_cmd.slice(0, 35).map((item) => ({
+        ...(Number.isFinite(Number(item?.mode)) ? { mode: clampInt(item.mode, 0, 15, 1) } : {}),
+        ...(Number.isFinite(Number(item?.q)) ? { q: clampNumber(item.q, -3.5, 3.5, 0) } : {}),
+        ...(Number.isFinite(Number(item?.dq)) ? { dq: clampNumber(item.dq, -20, 20, 0) } : {}),
+        ...(Number.isFinite(Number(item?.tau)) ? { tau: clampNumber(item.tau, -80, 80, 0) } : {}),
+        ...(Number.isFinite(Number(item?.kp)) ? { kp: clampNumber(item.kp, 0, 80, 0) } : {}),
+        ...(Number.isFinite(Number(item?.kd)) ? { kd: clampNumber(item.kd, 0, 8, 0) } : {}),
+      }))
+    : [];
+  const payload = {
+    motor_cmd: motorCmd,
+    mode_pr: clampInt(options.mode_pr, 0, 255, 0),
+    mode_machine: clampInt(options.mode_machine, 0, 1000, 0),
+    crc: clampInt(options.crc, 0, 0xffffffff, 0),
+  };
+  const topic = ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"].includes(options.topic) ? options.topic : "rt/lowcmd";
+  const frames = clampInt(options.frames, 1, 2000, 200);
+  const hz = clampNumber(options.hz, 1, 250, 100);
+  const leaseSeconds = clampNumber(options.lease_seconds, 0.1, 10, 2);
+  const maxDurationSeconds = clampNumber(options.max_duration_seconds, 0.1, 10, 5);
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.5, 30, 6);
+  const env = [
+    "CYBER_UNITREE_ACTION=stream_official_mujoco_lowcmd",
+    `CYBER_UNITREE_LOWCMD_TOPIC=${topic}`,
+    `CYBER_UNITREE_LOWCMD_JSON=${JSON.stringify(payload)}`,
+    `CYBER_UNITREE_LOWCMD_STREAM_FRAMES=${frames}`,
+    `CYBER_UNITREE_LOWCMD_STREAM_HZ=${hz}`,
+    `CYBER_UNITREE_LOWCMD_STREAM_LEASE_SECONDS=${leaseSeconds}`,
+    `CYBER_UNITREE_LOWCMD_STREAM_MAX_DURATION=${maxDurationSeconds}`,
+    `CYBER_UNITREE_LOWCMD_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm", ...env.flatMap((entry) => ["-e", entry]), "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 240_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    parameters: {
+      topic,
+      ...payload,
+      frames,
+      hz,
+      lease_seconds: leaseSeconds,
+      max_duration_seconds: maxDurationSeconds,
+      timeout_seconds: timeoutSeconds,
+    },
     session,
     stdout: result.stdout,
     stderr: result.stderr,

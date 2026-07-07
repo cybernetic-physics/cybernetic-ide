@@ -472,10 +472,12 @@ simulator mode,
 the LowCmd publishers can publish one bounded, sanitized frame through
 `OfficialG1Sim.lowcmd_session()`. The `rt/arm_sdk` path mirrors Unitree's G1
 arm SDK examples, including slot 29 as the arm-sdk enable slot; the
-`rt/user_lowcmd` path mirrors Unitree's user-control topic. Sustained generic
-lowcmd streaming is still future work; DDS-mode locomotion remains clearly
-marked as a local simulator compatibility fallback instead of being presented
-as official CycloneDDS control.
+`rt/user_lowcmd` path mirrors Unitree's user-control topic.
+`OfficialG1Sim.lowcmd_stream_session()` and MCP
+`unitree_stream_official_mujoco_lowcmd` now provide a simulator-only sustained
+stream with explicit frame-rate, lease, and max-duration caps. DDS-mode
+locomotion remains clearly marked as a local simulator compatibility fallback
+instead of being presented as official CycloneDDS control.
 
 Run the full example:
 
@@ -613,6 +615,7 @@ unitree_verify_rpc_bridge
 unitree_stop_rpc_bridge
 unitree_probe_official_mujoco_loco_rpc
 unitree_official_mujoco_evidence_bundle
+unitree_stream_official_mujoco_lowcmd
 robotics_tool_reference
 unitree_sdk_scaffold_python
 scene_add_object

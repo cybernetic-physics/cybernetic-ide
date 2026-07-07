@@ -928,6 +928,118 @@ def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
     return report
 
 
+def stream_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
+    raw_payload = os.environ.get("CYBER_UNITREE_LOWCMD_JSON", "{}")
+    write_topic = os.environ.get("CYBER_UNITREE_LOWCMD_TOPIC", "rt/lowcmd")
+    requested_frames = max(1, min(2000, int(os.environ.get("CYBER_UNITREE_LOWCMD_STREAM_FRAMES", "200"))))
+    hz = _clamp_number(os.environ.get("CYBER_UNITREE_LOWCMD_STREAM_HZ", "100"), 1.0, 250.0, 100.0)
+    lease_seconds = _clamp_number(os.environ.get("CYBER_UNITREE_LOWCMD_STREAM_LEASE_SECONDS", "2.0"), 0.1, 10.0, 2.0)
+    max_duration_seconds = _clamp_number(os.environ.get("CYBER_UNITREE_LOWCMD_STREAM_MAX_DURATION", "5.0"), 0.1, 10.0, 5.0)
+    effective_frames = min(requested_frames, max(1, int(hz * lease_seconds)), max(1, int(hz * max_duration_seconds)))
+    report = {
+        "action": "stream_official_mujoco_lowcmd",
+        "read_topic": "rt/lowstate",
+        "write_topic": write_topic,
+        "domain": domain,
+        "interface": interface or None,
+        "lowstate_sample_received": False,
+        "lowcmd_write_attempts": 0,
+        "lowcmd_write_successes": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_LOWCMD_TIMEOUT", "6")),
+        "requested_frames": requested_frames,
+        "stream_hz": hz,
+        "lease_seconds": lease_seconds,
+        "max_duration_seconds": max_duration_seconds,
+        "effective_frames": effective_frames,
+        "safety": {
+            "requires_lowstate_sample": True,
+            "fills_unspecified_motors_from_current_lowstate": True,
+            "recomputes_crc": True,
+            "bounded_by_frames_hz_lease_and_max_duration": True,
+            "clamps": {
+                "q": [-3.5, 3.5],
+                "dq": [-20.0, 20.0],
+                "tau": [-80.0, 80.0],
+                "kp": [0.0, 80.0],
+                "kd": [0.0, 8.0],
+            },
+        },
+    }
+    if write_topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
+        report["ok"] = False
+        report["error"] = f"unsupported Unitree HG LowCmd topic: {write_topic}"
+        report["supported_topics"] = ["rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"]
+        return report
+    try:
+        payload = json.loads(raw_payload)
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a JSON object")
+        report["requested_motor_cmd_count"] = len(payload.get("motor_cmd", []) or [])
+    except Exception as exc:
+        report["ok"] = False
+        report["error"] = f"invalid CYBER_UNITREE_LOWCMD_JSON: {exc}"
+        return report
+
+    subscriber = None
+    publisher = None
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+        from unitree_sdk2py.utils.crc import CRC
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        sample = None
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary_before_stream"] = summarize_lowstate(sample)
+                break
+        if sample is None:
+            report["ok"] = False
+            report["error"] = "no official rt/lowstate sample received before lowcmd stream"
+            report["next_step"] = "Start unitree-g1-sdk2-session and verify unitree_read_official_mujoco_lowstate before streaming lowcmd."
+            return report
+
+        crc = CRC()
+        low_cmd = make_hold_lowcmd(sample, unitree_hg_msg_dds__LowCmd_, crc)
+        low_cmd = apply_lowcmd_payload(low_cmd, payload, sample, crc)
+        report["lowcmd_summary"] = summarize_lowcmd(low_cmd)
+
+        publisher = ChannelPublisher(write_topic, LowCmd_)
+        publisher.Init()
+        period = 1.0 / hz
+        start = time.monotonic()
+        for frame in range(effective_frames):
+            report["lowcmd_write_attempts"] += 1
+            if publisher.Write(low_cmd, 1.0):
+                report["lowcmd_write_successes"] += 1
+            next_at = start + ((frame + 1) * period)
+            sleep_for = next_at - time.monotonic()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+        report["elapsed_seconds"] = time.monotonic() - start
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+    finally:
+        if publisher is not None:
+            publisher.Close()
+        if subscriber is not None:
+            subscriber.Close()
+
+    report["ok"] = report["lowstate_sample_received"] and report["lowcmd_write_successes"] == report["effective_frames"]
+    if report["ok"]:
+        report["next_step"] = "This bounded stream proves the managed official DDS peer can accept a lease-limited LowCmd loop; promote into the provider only with watchdog renewal and stop semantics."
+    else:
+        report["next_step"] = "Lowcmd streaming did not complete; inspect write counts, traceback, and managed session readiness before extending the stream window."
+    return report
+
+
 def probe_official_mujoco_arm_motion(mujoco_root: str, domain: int, interface: str | None) -> dict:
     plan = official_mujoco_plan(mujoco_root, domain, interface)
     simulate_root = Path(plan["simulate_root"])
@@ -3038,6 +3150,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "command_official_mujoco_lowcmd":
         report["lowcmd_command"] = command_official_mujoco_lowcmd(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "stream_official_mujoco_lowcmd":
+        report["lowcmd_stream"] = stream_official_mujoco_lowcmd(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_loco_rpc":
         report["loco_rpc_probe"] = probe_official_mujoco_loco_rpc(domain, interface or None)

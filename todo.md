@@ -429,6 +429,13 @@ Tasks:
   matches Unitree's C++ `g1_userctrl_dds_example.cpp` topic choice. Remaining:
   sustained generic lowcmd streaming with explicit watchdogs and lease/safety
   gates.
+- Done: add lease-limited official DDS lowcmd streaming through sidecar
+  `CYBER_UNITREE_ACTION=stream_official_mujoco_lowcmd`, Python
+  `OfficialG1Sim.lowcmd_stream_session()`, and MCP
+  `unitree_stream_official_mujoco_lowcmd`. The stream has lowstate precheck,
+  hold-fill, clamp, CRC recompute, frame-rate cap, lease cap, and max-duration
+  cap. Remaining: promote this into a long-lived provider with explicit
+  watchdog renewal, stop semantics, and behavior-level tests.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

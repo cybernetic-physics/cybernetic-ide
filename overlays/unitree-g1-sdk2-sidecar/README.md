@@ -252,8 +252,18 @@ Generic lowcmd writes to an already-running managed official MuJoCo session use
 values from that sample, clamps supplied `motor_cmd` fields, recomputes CRC in
 the sidecar, and publishes at most 60 identical `rt/lowcmd`, `rt/arm_sdk`, or
 `rt/user_lowcmd` frames. `rt/user_lowcmd` matches Unitree's G1 user-control C++
-example topic. This is the first generic lowcmd provider path; it is not yet
-sustained streaming.
+example topic. This is the first generic lowcmd provider path; this specific
+command is a bounded one-shot publish, not sustained streaming.
+
+Lease-limited generic lowcmd streaming uses
+`CYBER_UNITREE_ACTION=stream_official_mujoco_lowcmd`, exposed in Python as
+`OfficialG1Sim.lowcmd_stream_session()` and in MCP as
+`unitree_stream_official_mujoco_lowcmd`. The stream path uses the same lowstate
+precheck, hold-fill, clamp, and CRC recompute rules as the one-shot command,
+then publishes at a bounded `CYBER_UNITREE_LOWCMD_STREAM_HZ` for the minimum of
+requested frames, lease seconds, and max duration. This is the first sustained
+official SDK2/CycloneDDS LowCmd loop in Cybernetic IDE, but it remains
+simulator-only and must be deliberately renewed instead of running forever.
 
 Command the managed official session with a bounded arm pose:
 

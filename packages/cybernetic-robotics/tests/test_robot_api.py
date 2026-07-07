@@ -2333,6 +2333,66 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_LOWCMD_FRAMES=3", command)
         self.assertIn('"mode_machine":5', command)
 
+    def test_official_g1_sim_can_stream_managed_session_lowcmd(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "lowcmd_stream": {
+                            "ok": True,
+                            "lowcmd_write_attempts": 120,
+                            "lowcmd_write_successes": 120,
+                            "effective_frames": 120,
+                            "stream_hz": 60.0,
+                            "lease_seconds": 2.0,
+                            "max_duration_seconds": 5.0,
+                            "lowcmd_summary": {"motor_count": 35, "crc": 12345},
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=88, _runner=fake_runner)
+
+            result = official.lowcmd_stream_session(
+                motor_cmd=[{"mode": 1, "q": -0.2, "kp": 12.0, "kd": 0.5}],
+                topic="rt/user_lowcmd",
+                mode_pr=1,
+                mode_machine=5,
+                crc=12345,
+                frames=120,
+                hz=60,
+                lease_seconds=2,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["lowcmd_write_successes"], 120)
+        self.assertEqual(result["effective_frames"], 120)
+        self.assertEqual(result["stream_hz"], 60.0)
+        self.assertEqual(captured["timeout"], 88)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=stream_official_mujoco_lowcmd", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_TOPIC=rt/user_lowcmd", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_STREAM_FRAMES=120", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_STREAM_HZ=60.0", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_STREAM_LEASE_SECONDS=2.0", command)
+        self.assertIn('"mode_machine":5', command)
+
     def test_official_g1_sim_can_probe_managed_session_loco_rpc(self):
         captured = {}
 

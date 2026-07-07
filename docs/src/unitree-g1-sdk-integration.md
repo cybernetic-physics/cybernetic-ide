@@ -679,6 +679,11 @@ The current repo has the first narrow version of that API boundary:
   handlers onto the simulator provider boundary. Live smoke evidence showed
   `sport.GetFsmId`, `sport.SetStandHeight`, `sport.SetVelocity`, `agv.Move`,
   `agv.HeightAdjust`, and `arm.ExecuteAction` all returning `RPC_OK`.
+- `unitree_stream_official_mujoco_lowcmd` is the first lease-limited sustained
+  LowCmd loop against the managed official MuJoCo DDS peer. It keeps the same
+  lowstate precheck, hold-fill, clamp, and CRC behavior as the bounded one-shot
+  command, but adds frame-rate, lease, and max-duration caps so agents can test
+  stream semantics without starting an unbounded control loop.
 - `unitree_start_rpc_bridge` / `unitree_rpc_bridge_status` /
   `unitree_probe_rpc_bridge_client` / `unitree_verify_rpc_bridge` /
   `unitree_command_rpc_bridge` / `unitree_stop_rpc_bridge` turn that smoke into

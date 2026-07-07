@@ -165,6 +165,67 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def lowcmd_stream_session(
+        self,
+        *,
+        motor_cmd: list[dict[str, Any]],
+        topic: str = "rt/lowcmd",
+        mode_pr: int = 0,
+        mode_machine: int = 0,
+        crc: int = 0,
+        frames: int = 200,
+        hz: float = 100.0,
+        lease_seconds: float = 2.0,
+        max_duration_seconds: float = 5.0,
+        timeout_seconds: float = 6.0,
+    ) -> dict[str, Any]:
+        """Publish a bounded Unitree HG LowCmd stream to the managed session.
+
+        This is still simulator-only and lease-limited. It is meant to prove
+        official SDK2/CycloneDDS streaming semantics before promoting them into
+        the default provider.
+        """
+
+        if topic not in {"rt/lowcmd", "rt/arm_sdk", "rt/user_lowcmd"}:
+            raise ValueError(f"unsupported official Unitree lowcmd topic: {topic}")
+
+        payload = {
+            "motor_cmd": list(motor_cmd),
+            "mode_pr": int(mode_pr),
+            "mode_machine": int(mode_machine),
+            "crc": int(crc),
+        }
+        env = {
+            "CYBER_UNITREE_ACTION": "stream_official_mujoco_lowcmd",
+            "CYBER_UNITREE_LOWCMD_JSON": json.dumps(payload, separators=(",", ":"), sort_keys=True),
+            "CYBER_UNITREE_LOWCMD_TOPIC": topic,
+            "CYBER_UNITREE_LOWCMD_STREAM_FRAMES": str(_clamp_int(frames, 1, 2000)),
+            "CYBER_UNITREE_LOWCMD_STREAM_HZ": str(_clamp_float(hz, 1.0, 250.0)),
+            "CYBER_UNITREE_LOWCMD_STREAM_LEASE_SECONDS": str(_clamp_float(lease_seconds, 0.1, 10.0)),
+            "CYBER_UNITREE_LOWCMD_STREAM_MAX_DURATION": str(_clamp_float(max_duration_seconds, 0.1, 10.0)),
+            "CYBER_UNITREE_LOWCMD_TIMEOUT": str(_clamp_float(timeout_seconds, 0.5, 30.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        stream = report.get("lowcmd_stream") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(stream, dict) and stream.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "topic": topic,
+            "lowcmd_write_successes": stream.get("lowcmd_write_successes") if isinstance(stream, dict) else None,
+            "lowcmd_write_attempts": stream.get("lowcmd_write_attempts") if isinstance(stream, dict) else None,
+            "effective_frames": stream.get("effective_frames") if isinstance(stream, dict) else None,
+            "stream_hz": stream.get("stream_hz") if isinstance(stream, dict) else None,
+            "lease_seconds": stream.get("lease_seconds") if isinstance(stream, dict) else None,
+            "max_duration_seconds": stream.get("max_duration_seconds") if isinstance(stream, dict) else None,
+            "lowcmd_summary": stream.get("lowcmd_summary") if isinstance(stream, dict) else None,
+            "stream_result": stream,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def loco_rpc_session(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
         """Probe official G1 LocoClient sport RPCs against a managed session."""
 
@@ -776,6 +837,9 @@ class OfficialG1ManagedSession:
 
     def lowcmd(self, **kwargs: Any) -> dict[str, Any]:
         return self.sim.lowcmd_session(**kwargs)
+
+    def lowcmd_stream(self, **kwargs: Any) -> dict[str, Any]:
+        return self.sim.lowcmd_stream_session(**kwargs)
 
     def loco_rpc(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
         return self.sim.loco_rpc_session(include_stop=include_stop, timeout=timeout)
