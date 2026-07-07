@@ -533,6 +533,11 @@ The current repo has the first narrow version of that API boundary:
   session, reads official `rt/lowstate`, commands an arm pose through the
   sustained `rt/lowcmd` peer, reads lowstate again, and stops the session unless
   `--keep-running` is passed.
+- `UnitreeSession.execute_arm_action()` is the transport-aware command boundary
+  for high-level SDK arm actions. `G1ArmActionClient.ExecuteAction()` delegates
+  there, so local simulator mode still uses GameControl HTTP while simulator DDS
+  mode routes supported hand-raise poses through the managed official Unitree
+  MuJoCo + SDK2/CycloneDDS session.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,
@@ -591,6 +596,10 @@ The current repo has the first narrow version of that API boundary:
   `unitree_provider_status` MCP tool give agents and users the short answer for
   which backend is active: provider name, command path, telemetry path, motion
   surfaces, limitations, and next step.
+- `UnitreeSession.execute_arm_action()` is the first normal SDK facade method
+  routed through that provider boundary: local HTTP in default simulator mode,
+  managed official MuJoCo + SDK2/CycloneDDS for supported hand-raise poses when
+  `CYBER_UNITREE_TRANSPORT=dds`.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

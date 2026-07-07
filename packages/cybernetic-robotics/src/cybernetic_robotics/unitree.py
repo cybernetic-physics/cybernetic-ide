@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import os
 from typing import Any
 
+from .config import RobotEndpoints
+from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import SimulatorClient
 
 
@@ -95,6 +96,10 @@ class G1ArmActionClient:
         self.timeout = 1.0
         self.last_response: dict[str, Any] | None = None
         self._simulator = SimulatorClient.from_env(timeout=self.timeout)
+        self._session = UnitreeSession(
+            UnitreeTransportConfig.from_env(RobotEndpoints.from_env()),
+            simulator=self._simulator,
+        )
 
     def SetTimeout(self, timeout: float):
         self.timeout = float(timeout)
@@ -114,36 +119,12 @@ class G1ArmActionClient:
             }
             return -1
 
-        if _use_official_dds_session():
-            if pose not in {"raise_right_hand", "raise_left_hand"}:
-                self.last_response = {
-                    "ok": False,
-                    "error": f"official DDS simulator session does not yet support arm pose: {pose}",
-                    "supported_poses": ["raise_right_hand", "raise_left_hand"],
-                    "transport": "dds",
-                }
-                return -1
-            try:
-                from .official import OfficialG1Sim
-
-                official = OfficialG1Sim.discover(timeout=max(30, int(round(self.timeout))))
-                if pose == "raise_left_hand":
-                    self.last_response = official.raise_left_hand_session()
-                else:
-                    self.last_response = official.raise_right_hand_session()
-                self.last_response["transport"] = "dds"
-                self.last_response["unitree_action_id"] = action_id
-            except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
-                self.last_response = {"ok": False, "error": str(error), "transport": "dds"}
-                return -1
-            return 0 if self.last_response.get("ok") else -1
-
         try:
-            self.last_response = self._simulator.pose(pose)
+            self.last_response = self._session.execute_arm_action(action_id, pose, timeout=self.timeout)
         except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
-            self.last_response = {"ok": False, "error": str(error)}
+            self.last_response = {"ok": False, "error": str(error), "transport": self._session.config.transport}
             return -1
-        return 0
+        return 0 if self.last_response.get("ok") else -1
 
     def GetActionList(self):
         actions = [
@@ -151,13 +132,6 @@ class G1ArmActionClient:
             for name, action_id in sorted(action_map.items(), key=lambda item: item[1])
         ]
         return 0, actions
-
-
-def _use_official_dds_session() -> bool:
-    transport = os.environ.get("CYBER_UNITREE_TRANSPORT", "").strip().lower().replace("-", "_")
-    mode = os.environ.get("CYBER_UNITREE_MODE", "sim").strip().lower()
-    return transport == "dds" and mode != "real"
-
 
 class LocoClient:
     """Simulator-backed subset of Unitree's official G1 `LocoClient`.

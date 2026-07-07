@@ -269,9 +269,15 @@ Tasks:
 - Done: add provider discovery via `UnitreeSession.provider_status()`,
   `cyber-g1 provider`, and MCP `unitree_provider_status` so agents can identify
   the active backend without reverse-parsing broad diagnostics.
+- Done: route high-level SDK arm actions through
+  `UnitreeSession.execute_arm_action()` so `G1ArmActionClient.ExecuteAction()`
+  uses one provider boundary for local HTTP versus the managed official DDS
+  session.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
-  short-lived official probes.
+  short-lived official probes. The arm-action path now crosses that boundary;
+  next candidates are `LocoClient`, generic `ChannelPublisher("rt/lowcmd")`,
+  and `ChannelSubscriber("rt/lowstate")`.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

@@ -175,7 +175,9 @@ poses. This includes `right hand up`, `high five`, `hands up`, `clap`, `hug`,
 matches the official SDK; the local behavior is a visual approximation.
 With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, `right hand up` routes to
 the managed official MuJoCo + SDK2/CycloneDDS session and verifies movement via
-official `rt/lowstate`.
+official `rt/lowstate`. `G1ArmActionClient.ExecuteAction()` now reaches that
+path through `UnitreeSession.execute_arm_action()`, so the SDK facade has one
+provider boundary for local HTTP today and DDS-backed controls as they land.
 
 G1 locomotion examples can use Unitree's `LocoClient` shape:
 

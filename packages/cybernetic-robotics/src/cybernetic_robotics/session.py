@@ -254,12 +254,88 @@ class UnitreeSession:
             },
         }
 
+    def execute_arm_action(self, action_id: int, pose: str, *, timeout: float | None = None) -> dict[str, Any]:
+        """Execute a Unitree-shaped arm action through the active provider.
+
+        This is the transport boundary used by the local `unitree_sdk2py` shim.
+        In the default simulator mode it preserves the existing local HTTP pose
+        behavior. In simulator DDS mode it routes the supported bounded poses to
+        the managed official Unitree MuJoCo + SDK2/CycloneDDS session.
+        """
+
+        if self.config.transport == LOCAL_HTTP and self.config.mode == SIM:
+            response = self.simulator.pose(pose)
+            return {
+                **response,
+                "transport": LOCAL_HTTP,
+                "provider": "local_http_simulator",
+                "unitree_action_id": int(action_id),
+                "pose": pose,
+            }
+
+        if self.config.transport == DDS and self.config.mode == SIM:
+            if pose not in {"raise_right_hand", "raise_left_hand"}:
+                return {
+                    "ok": False,
+                    "transport": DDS,
+                    "provider": "official_mujoco_dds_simulator",
+                    "unitree_action_id": int(action_id),
+                    "pose": pose,
+                    "error": f"official DDS simulator session does not yet support arm pose: {pose}",
+                    "supported_poses": ["raise_right_hand", "raise_left_hand"],
+                    "next_step": "Add this pose to the managed official arm-pose lowcmd table before routing it through DDS.",
+                }
+            official = self._official(timeout=timeout)
+            if pose == "raise_left_hand":
+                response = official.raise_left_hand_session()
+            else:
+                response = official.raise_right_hand_session()
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "unitree_action_id": int(action_id),
+                "pose": pose,
+            }
+
+        return {
+            "ok": False,
+            "transport": self.config.transport,
+            "provider": "real_unitree_dds",
+            "unitree_action_id": int(action_id),
+            "pose": pose,
+            "error": "real Unitree DDS arm actions are locked until the real-hardware provider and safety gates are implemented",
+            "next_step": "Use simulator mode for SDK2/DDS development, then add reviewed real-mode safety gates.",
+        }
+
+    def read_lowstate(self) -> dict[str, Any]:
+        """Read lowstate telemetry through the active provider when possible."""
+
+        if self.config.transport == DDS and self.config.mode == SIM:
+            response = self._official().lowstate_session()
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+            }
+        return {
+            "ok": True,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "lowstate": self.simulator.lowstate(),
+        }
+
     def _official_status(self) -> dict[str, Any]:
+        return self._official().status()
+
+    def _official(self, *, timeout: float | None = None) -> Any:
         if self.official is not None:
-            return self.official.status()
+            return self.official
         from .official import OfficialG1Sim
 
-        return OfficialG1Sim.discover().status()
+        if timeout is None:
+            return OfficialG1Sim.discover()
+        return OfficialG1Sim.discover(timeout=max(30, int(round(timeout))))
 
 
 def _choice(value: str | None, allowed: set[str], default: str) -> str:

@@ -509,7 +509,9 @@ class RobotApiTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue(arm.last_response["ok"])
             self.assertEqual(arm.last_response["transport"], "dds")
+            self.assertEqual(arm.last_response["provider"], "official_mujoco_dds_simulator")
             self.assertEqual(arm.last_response["unitree_action_id"], action_map["right hand up"])
+            self.assertEqual(arm.last_response["pose"], "raise_right_hand")
             self.assertEqual(arm.last_response["moved_joints"], ["right_shoulder_pitch", "right_elbow"])
         finally:
             for key, value in previous.items():
@@ -517,6 +519,40 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+    def test_unitree_session_centralizes_arm_action_transport_routing(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            def raise_left_hand_session(self):
+                self.calls.append("left")
+                return {"ok": True, "moved_joints": ["left_shoulder_pitch"]}
+
+            def lowstate_session(self):
+                self.calls.append("lowstate")
+                return {"ok": True, "lowstate_summary": {"motor_count": 35}}
+
+        official = FakeOfficial()
+        session = UnitreeSession(
+            UnitreeTransportConfig(transport="dds", mode="sim"),
+            official=official,
+        )
+
+        response = session.execute_arm_action(42, "raise_left_hand")
+        unsupported = session.execute_arm_action(43, "high_five")
+        lowstate = session.read_lowstate()
+
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["transport"], "dds")
+        self.assertEqual(response["provider"], "official_mujoco_dds_simulator")
+        self.assertEqual(response["unitree_action_id"], 42)
+        self.assertEqual(response["pose"], "raise_left_hand")
+        self.assertEqual(unsupported["ok"], False)
+        self.assertEqual(unsupported["supported_poses"], ["raise_right_hand", "raise_left_hand"])
+        self.assertTrue(lowstate["ok"])
+        self.assertEqual(lowstate["provider"], "official_mujoco_dds_simulator")
+        self.assertEqual(official.calls, ["left", "lowstate"])
 
     def test_unitree_style_loco_client_uses_same_simulator(self):
         with FakeServer() as fake:
