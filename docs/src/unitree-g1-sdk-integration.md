@@ -181,6 +181,15 @@ dependencies including Eigen for the SDK2 bridge headers, installs official
 `unitree_sdk2` to `/opt/unitree_robotics`, links the MuJoCo release into
 `simulate/mujoco`, and builds `simulate/build/unitree_mujoco`.
 
+`unitree_probe_official_mujoco_launch` is the next gate after a successful
+build. The first raw launch probe exposed two real runtime requirements: the
+binary needs `LD_LIBRARY_PATH` pointed at Unitree SDK2's aarch64 DDS libraries
+and MuJoCo's release libraries, and upstream `simulate` needs a display because
+it initializes GLFW. The sidecar now installs Xvfb and runs a short
+`xvfb-run` startup probe. Passing that probe only proves the official peer can
+start headlessly; DDS `rt/lowstate`/`rt/lowcmd` sample exchange is still the
+next milestone.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.

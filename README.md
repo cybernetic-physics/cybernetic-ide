@@ -314,6 +314,9 @@ ad hoc scripts first. The default tool surface includes:
 - official MuJoCo peer build: `unitree_build_official_mujoco_peer`, which uses
   the sidecar to install/build official `unitree_sdk2`, link the pinned MuJoCo
   release, and build upstream `simulate/build/unitree_mujoco`;
+- official MuJoCo launch probe: `unitree_probe_official_mujoco_launch`, which
+  runs the upstream peer briefly under Xvfb with the required Unitree/MuJoCo
+  runtime library path and reports loader/display readiness;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

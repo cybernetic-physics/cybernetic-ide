@@ -124,6 +124,11 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
+  tool("unitree_probe_official_mujoco_launch", "Launch the official Unitree MuJoCo G1 peer briefly under Xvfb to verify runtime library/display readiness.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -612,6 +617,8 @@ async function callTool(name, args) {
       return textResult(sdk2OfficialMujocoPlan());
     case "unitree_build_official_mujoco_peer":
       return textResult(sdk2BuildOfficialMujocoPeer());
+    case "unitree_probe_official_mujoco_launch":
+      return textResult(sdk2ProbeOfficialMujocoLaunch());
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -1521,6 +1528,34 @@ function sdk2BuildOfficialMujocoPeer() {
   }
   return {
     command: `docker ${[...sdk2ComposeArgs(), "run", "--rm", "-e", "CYBER_UNITREE_ACTION=build_official_mujoco", "unitree-g1-sdk2-sidecar"].join(" ")}`,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ProbeOfficialMujocoLaunch() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const result = runChecked(
+    "docker",
+    [...sdk2ComposeArgs(), "run", "--rm", "-e", "CYBER_UNITREE_ACTION=launch_probe_official_mujoco", "unitree-g1-sdk2-sidecar"],
+    { timeoutMs: 240_000 },
+  );
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${[...sdk2ComposeArgs(), "run", "--rm", "-e", "CYBER_UNITREE_ACTION=launch_probe_official_mujoco", "unitree-g1-sdk2-sidecar"].join(" ")}`,
     stdout: result.stdout,
     stderr: result.stderr,
     report,

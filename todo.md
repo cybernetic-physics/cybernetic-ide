@@ -171,6 +171,10 @@ Tasks:
 - Done: add and verify `unitree_build_official_mujoco_peer`; it builds the
   upstream native C++ `simulate/build/unitree_mujoco` binary from the pinned
   runtime cache.
+- Done: add `unitree_probe_official_mujoco_launch`; raw launch uncovered the
+  missing DDS library path and GLFW display requirement, and the sidecar now
+  uses Xvfb plus explicit Unitree/MuJoCo library paths for a headless startup
+  probe.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose

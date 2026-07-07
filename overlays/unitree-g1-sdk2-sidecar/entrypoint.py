@@ -13,7 +13,7 @@ def exists(path: str) -> bool:
     return Path(path).exists()
 
 
-def run_command(args: list[str], cwd: Path | None = None, timeout: int = 900) -> dict:
+def run_command(args: list[str], cwd: Path | None = None, timeout: int = 900, env: dict | None = None) -> dict:
     result = subprocess.run(
         args,
         cwd=str(cwd) if cwd else None,
@@ -21,6 +21,7 @@ def run_command(args: list[str], cwd: Path | None = None, timeout: int = 900) ->
         capture_output=True,
         timeout=timeout,
         check=False,
+        env=env,
     )
     return {
         "command": " ".join(args),
@@ -79,12 +80,14 @@ def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -
         "unitree_sdk2_install_prefix": "/opt/unitree_robotics",
         "mujoco_symlink_path": str(simulate_root / "mujoco"),
         "mujoco_symlink_exists": (simulate_root / "mujoco").exists(),
+        "runtime_library_path": runtime_library_path(),
         "native_dependencies": [
             "libyaml-cpp-dev",
             "libspdlog-dev",
             "libboost-all-dev",
             "libeigen3-dev",
             "libglfw3-dev",
+            "xvfb",
             "unitree_sdk2 installed to /opt/unitree_robotics",
             "MuJoCo release symlinked to simulate/mujoco",
         ],
@@ -94,6 +97,7 @@ def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -
             "cd /opt/unitree_mujoco/simulate && cmake -S . -B build && cmake --build build -j4",
         ],
         "launch_command": " ".join(part for part in command if part),
+        "launch_probe_command": f"cd {simulate_root} && timeout 8 xvfb-run -a {' '.join(part for part in command if part)}",
         "dds_topics_to_probe_after_launch": [
             "rt/lowstate",
             "rt/lowcmd",
@@ -101,6 +105,29 @@ def official_mujoco_plan(mujoco_root: str, domain: int, interface: str | None) -
             "rt/secondary_imu",
         ],
     }
+
+
+def runtime_library_path() -> str:
+    paths = [
+        "/opt/unitree_sdk2/thirdparty/lib/aarch64",
+        "/opt/unitree_sdk2/lib/aarch64",
+        "/opt/unitree_robotics/lib",
+        "/opt/mujoco/lib",
+    ]
+    existing = [path for path in paths if Path(path).exists()]
+    return ":".join(existing)
+
+
+def runtime_env() -> dict:
+    env = os.environ.copy()
+    current = env.get("LD_LIBRARY_PATH")
+    library_path = runtime_library_path()
+    if current:
+        library_path = f"{library_path}:{current}" if library_path else current
+    if library_path:
+        env["LD_LIBRARY_PATH"] = library_path
+    env.setdefault("MUJOCO_GL", "glfw")
+    return env
 
 
 def build_official_mujoco_peer(sdk2_root: str, mujoco_root: str) -> dict:
@@ -155,6 +182,50 @@ def build_official_mujoco_peer(sdk2_root: str, mujoco_root: str) -> dict:
 
     report["binary_exists_after"] = executable.exists()
     report["ok"] = executable.exists()
+    return report
+
+
+def launch_probe_official_mujoco_peer(mujoco_root: str, domain: int, interface: str | None) -> dict:
+    plan = official_mujoco_plan(mujoco_root, domain, interface)
+    simulate_root = Path(plan["simulate_root"])
+    executable = Path(plan["binary_path"])
+    report = {
+        "action": "launch_probe_official_mujoco",
+        "plan": plan,
+        "binary_exists": executable.exists(),
+        "library_path": runtime_library_path(),
+        "used_xvfb": True,
+        "timeout_seconds": 8,
+    }
+    if not executable.exists():
+        report["ok"] = False
+        report["error"] = "missing official unitree_mujoco binary; run build_official_mujoco first"
+        return report
+    command = [
+        "timeout",
+        str(report["timeout_seconds"]),
+        "xvfb-run",
+        "-a",
+        str(executable),
+        "-r",
+        plan["robot"],
+        "-s",
+        plan["scene"],
+        "-i",
+        str(domain),
+    ]
+    if interface:
+        command.extend(["-n", interface])
+    step = run_command(command, cwd=simulate_root, timeout=report["timeout_seconds"] + 4, env=runtime_env())
+    output = f"{step['stdout_tail']}\n{step['stderr_tail']}"
+    report["step"] = step
+    report["startup_reached_mujoco"] = "MuJoCo version" in output
+    report["loader_error"] = "error while loading shared libraries" in output
+    report["glfw_error"] = "could not initialize GLFW" in output
+    report["timed_out_after_start"] = step["returncode"] == 124
+    report["ok"] = report["startup_reached_mujoco"] and report["timed_out_after_start"] and not report["loader_error"] and not report["glfw_error"]
+    if report["ok"]:
+        report["next_step"] = "Run the official peer as a managed background service and probe rt/lowstate/rt/lowcmd DDS sample exchange."
     return report
 
 
@@ -284,6 +355,9 @@ def main() -> int:
     report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     if action == "build_official_mujoco":
         report["build"] = build_official_mujoco_peer(sdk2_root, mujoco_root)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "launch_probe_official_mujoco":
+        report["launch_probe"] = launch_probe_official_mujoco_peer(mujoco_root, domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action != "status":
         report["status"] = "error"

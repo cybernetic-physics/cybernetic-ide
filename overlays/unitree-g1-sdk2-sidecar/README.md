@@ -24,6 +24,9 @@ The sidecar currently:
   `unitree_sdk2`, links the pinned MuJoCo release, and builds the upstream C++
   `simulate/build/unitree_mujoco` binary in the runtime cache. The native image
   includes the SDK2 bridge headers' C++ dependencies, including Eigen.
+- when `CYBER_UNITREE_ACTION=launch_probe_official_mujoco`, launches the
+  upstream peer briefly under Xvfb with the required `LD_LIBRARY_PATH` so the
+  next gate can distinguish loader/display problems from DDS problems.
 
 It does **not** yet launch official `unitree_mujoco` or prove data exchange
 with a simulator peer. That pub/sub probe is the next provider milestone.
@@ -52,5 +55,15 @@ docker compose \
   --env-file .runtime/unitree-g1-sdk2/compose.env \
   -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
   run --rm -e CYBER_UNITREE_ACTION=build_official_mujoco \
+  unitree-g1-sdk2-sidecar
+```
+
+Probe whether the official peer can start headlessly:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm -e CYBER_UNITREE_ACTION=launch_probe_official_mujoco \
   unitree-g1-sdk2-sidecar
 ```
