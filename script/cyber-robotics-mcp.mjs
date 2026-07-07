@@ -123,6 +123,9 @@ const tools = [
   tool("unitree_session_status", "Read Unitree G1 session transport, DDS, simulator, and topic diagnostics.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("unitree_provider_status", "Summarize the active Unitree provider, command path, telemetry path, and limitations.", {}, [], {
+    readOnlyHint: true,
+  }),
   tool("unitree_prepare_sdk2_sidecar", "Prepare pinned official Unitree SDK2 Python, SDK2 C++, and Unitree MuJoCo sources for the opt-in SDK2 sidecar.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -938,6 +941,8 @@ async function callTool(name, args) {
       return textResult(await simStatus());
     case "unitree_session_status":
       return textResult(await unitreeSessionStatus());
+    case "unitree_provider_status":
+      return textResult(providerStatusFromDiagnostics(await unitreeSessionStatus()));
     case "unitree_prepare_sdk2_sidecar":
       return textResult(runChecked("node", ["script/prepare-unitree-g1-sdk2-sidecar.mjs"], { timeoutMs: 240000 }));
     case "unitree_sdk2_sidecar_status":
@@ -1238,6 +1243,85 @@ async function unitreeSessionStatus() {
 
   result.ok = Boolean(result.ok && !warnings.some((warning) => warning.includes("requires")));
   return result;
+}
+
+function providerStatusFromDiagnostics(diagnostics) {
+  const config = diagnostics.config || {};
+  const transport = config.transport || "local_http";
+  const mode = config.mode || "sim";
+  const officialOk = diagnostics.official_sidecar?.ok === true;
+  const simulatorReachable = diagnostics.simulator?.reachable === true;
+
+  if (transport === "local_http" && mode === "sim") {
+    return {
+      ok: diagnostics.ok === true && simulatorReachable,
+      provider: "local_http_simulator",
+      implemented: simulatorReachable,
+      command_path: "Cybernetic GameControl HTTP commands plus the Booster-style physics WebSocket.",
+      telemetry_path: "Simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames.",
+      motion: {
+        arm_actions: "simulator_named_poses",
+        locomotion: "kinematic_base_velocity",
+        lowcmd: "simulator_joint_targets",
+      },
+      limitations: [
+        "No CycloneDDS transport is used.",
+        "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
+      ],
+      next_step: "Use CYBER_UNITREE_TRANSPORT=dds in simulator mode when testing the official SDK2 sidecar path.",
+      config,
+      warnings: diagnostics.warnings || [],
+      diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
+    };
+  }
+
+  if (transport === "dds" && mode === "sim") {
+    return {
+      ok: diagnostics.ok === true && officialOk,
+      provider: officialOk ? "official_mujoco_dds_simulator" : "official_mujoco_dds_simulator_unready",
+      implemented: officialOk,
+      command_path: "Official SDK2/CycloneDDS sidecar for supported arm poses; local HTTP remains the fallback for viewer and local loco tools.",
+      telemetry_path: "Official sidecar rt/lowcmd/rt/lowstate probes plus local simulator diagnostics when available.",
+      motion: {
+        arm_actions: officialOk ? "managed_official_mujoco_session_for_supported_poses" : "unavailable_until_sidecar_ready",
+        locomotion: "local_http_compatibility_until_dds_loco_provider_lands",
+        lowcmd: "official_probe_or_local_http_depending_on_tool",
+      },
+      limitations: [
+        "Only bounded arm-pose commands are routed through the managed official DDS session today.",
+        "LocoClient locomotion and generic lowcmd streaming still need the long-lived DDS provider.",
+      ],
+      next_step: "Start or inspect the managed official MuJoCo session, then promote loco/lowcmd paths to that provider.",
+      config,
+      warnings: diagnostics.warnings || [],
+      diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
+    };
+  }
+
+  return {
+    ok: false,
+    provider: "real_unitree_dds",
+    implemented: false,
+    command_path: "Not enabled: real hardware requires an explicit provider, interface, unlock, and safety model.",
+    telemetry_path: "Not enabled until real-mode DDS safety gates are implemented.",
+    motion: { arm_actions: "disabled", locomotion: "disabled", lowcmd: "disabled" },
+    limitations: [
+      "Real hardware control is intentionally locked.",
+      "Set CYBER_UNITREE_NETWORK_INTERFACE and the real unlock only after the real provider is implemented and reviewed.",
+    ],
+    next_step: "Finish the simulator DDS provider and safety gates before enabling physical robot control.",
+    config,
+    warnings: diagnostics.warnings || [],
+    diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
+  };
+}
+
+function providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk) {
+  return {
+    simulator_reachable: simulatorReachable,
+    official_sidecar_ok: officialOk,
+    topics: diagnostics.topics || {},
+  };
 }
 
 function summarizeOfficialSidecarStatus(report) {

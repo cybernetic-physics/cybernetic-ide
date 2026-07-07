@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
 
     subcommands.add_parser("status")
     subcommands.add_parser("diagnostics")
+    subcommands.add_parser("provider")
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
@@ -79,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "diagnostics":
         config = UnitreeTransportConfig.from_env(robot.sim.endpoints)
         return _print(UnitreeSession(config, robot.sim).diagnostics())
+    if args.command == "provider":
+        config = UnitreeTransportConfig.from_env(robot.sim.endpoints)
+        return _print(UnitreeSession(config, robot.sim).provider_status())
     if args.command == "pause":
         return _print(robot.pause())
     if args.command == "resume":

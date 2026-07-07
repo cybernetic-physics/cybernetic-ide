@@ -152,6 +152,12 @@ the managed official MuJoCo + SDK2/CycloneDDS session, so the user script keeps
 the Unitree SDK shape while the backend talks to `rt/lowcmd` and verifies
 motion from `rt/lowstate`.
 
+Use `UnitreeSession.from_env().provider_status()` or `cyber-g1 provider` when
+you need the short provider answer: active backend, command path, telemetry
+path, implemented motion surfaces, limitations, and next step. Use
+`UnitreeSession.from_env().diagnostics()` or `cyber-g1 diagnostics` when you
+need the deeper transport, topic, and simulator health report.
+
 The compatibility package currently implements high-level arm actions,
 locomotion actions, G1 audio intent, and the low-level channels needed by the
 local simulator:
@@ -348,6 +354,7 @@ viewer_snapshot
 viewer_snapshot_file
 viewer_snapshot_series
 sim_validate_behavior
+unitree_provider_status
 unitree_session_status
 robotics_tool_reference
 unitree_sdk_scaffold_python

@@ -237,6 +237,9 @@ Tasks:
   sim/real mode, DDS domain, interface, topic freshness, lowcmd timestamps, and
   official sidecar readiness in both Python and MCP when `transport=dds` in
   simulator mode.
+- Done: add provider discovery via `UnitreeSession.provider_status()`,
+  `cyber-g1 provider`, and MCP `unitree_provider_status` so agents can identify
+  the active backend without reverse-parsing broad diagnostics.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes.
@@ -436,7 +439,9 @@ Open questions:
 
 - Where should provider config live in Cybernetic settings?
 - Which state should be global, per workspace, or per robot session?
-- How should the Agent Panel discover which provider is active?
+- Answered first pass: `unitree_provider_status` is the default Agent-panel
+  discovery tool for active provider, command path, telemetry path, current
+  limitations, and next step.
 
 ### Agent-Native Robotics Development
 

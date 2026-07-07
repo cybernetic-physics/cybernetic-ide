@@ -622,6 +622,18 @@ class RobotApiTests(unittest.TestCase):
             self.assertTrue(diagnostics["topics"]["rt/lowstate"]["available"])
             self.assertIn("rt/lowcmd", diagnostics["topics"])
 
+    def test_unitree_session_provider_status_reports_local_http_provider(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            config = UnitreeTransportConfig(transport="local_http", mode="sim", endpoints=endpoints)
+            provider = UnitreeSession(config, SimulatorClient(endpoints)).provider_status()
+
+            self.assertTrue(provider["ok"])
+            self.assertTrue(provider["implemented"])
+            self.assertEqual(provider["provider"], "local_http_simulator")
+            self.assertEqual(provider["motion"]["locomotion"], "kinematic_base_velocity")
+            self.assertTrue(provider["diagnostics_summary"]["simulator_reachable"])
+
     def test_unitree_session_diagnostics_surfaces_real_mode_safety_gate(self):
         previous = {
             key: os.environ.get(key)
@@ -690,6 +702,37 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(diagnostics["topics"]["rt/lowcmd"]["source"], "official_sdk2_sidecar")
         self.assertEqual(diagnostics["topics"]["rt/lowcmd"]["sample_motor_count"], 35)
         self.assertTrue(diagnostics["topics"]["rt/lowstate"]["created"])
+
+    def test_unitree_session_provider_status_reports_dds_sim_provider(self):
+        class FakeOfficial:
+            def status(self):
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_sdk2_sidecar",
+                    "sdk2_probe": {
+                        "domain_initialized": True,
+                        "domain": 1,
+                        "network_interface": "lo",
+                        "channels": {
+                            "rt/lowcmd": {"role": "publisher", "created": True, "sample_motor_count": 35},
+                            "rt/lowstate": {"role": "subscriber", "created": True},
+                        },
+                    },
+                    "official_mujoco_peer": {"binary_exists": True, "scene_exists": True},
+                    "expected_topics": ["rt/lowcmd", "rt/lowstate"],
+                    "next_step": "launch official unitree_mujoco",
+                }
+
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            config = UnitreeTransportConfig(transport="dds", mode="sim", endpoints=endpoints)
+            provider = UnitreeSession(config, SimulatorClient(endpoints), official=FakeOfficial()).provider_status()
+
+        self.assertTrue(provider["ok"])
+        self.assertTrue(provider["implemented"])
+        self.assertEqual(provider["provider"], "official_mujoco_dds_simulator")
+        self.assertEqual(provider["motion"]["arm_actions"], "managed_official_mujoco_session_for_supported_poses")
+        self.assertTrue(provider["diagnostics_summary"]["official_sidecar_ok"])
 
     def test_lowcmd_rejects_malformed_command_lists(self):
         with FakeServer() as fake:

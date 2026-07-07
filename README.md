@@ -138,6 +138,7 @@ Then try:
 
 ```sh
 cyber-g1 status
+cyber-g1 provider
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
@@ -408,6 +409,11 @@ Useful environment variables:
   `age_seconds`, and `watchdog_seconds`.
 - `CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP=1`: auto-open Robot Viewer in debug
   builds.
+
+Use `cyber-g1 provider` or the `unitree_provider_status` MCP tool when an
+agent needs to know which backend is active. The response names the provider,
+command path, telemetry path, implemented motion surfaces, limitations, and
+the next engineering step.
 - `CYBER_G1_GAME_CONTROL_URL`: GameControl base URL for Python examples.
 - `CYBER_G1_WS_HOST` and `CYBER_G1_WS_PORT`: WebSocket host/port for
   `examples/control_g1_sim.py`.

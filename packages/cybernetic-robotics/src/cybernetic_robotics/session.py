@@ -184,6 +184,76 @@ class UnitreeSession:
         diagnostics["ok"] = bool(diagnostics["ok"] and not any("requires" in item for item in warnings))
         return diagnostics
 
+    def provider_status(self) -> dict[str, Any]:
+        """Summarize which Unitree provider is active and what it can do."""
+
+        diagnostics = self.diagnostics()
+        config = diagnostics["config"]
+        transport = config["transport"]
+        mode = config["mode"]
+        official_ok = bool((diagnostics.get("official_sidecar") or {}).get("ok"))
+        simulator_reachable = bool((diagnostics.get("simulator") or {}).get("reachable"))
+
+        if transport == LOCAL_HTTP and mode == SIM:
+            provider = "local_http_simulator"
+            implemented = simulator_reachable
+            command_path = "Cybernetic GameControl HTTP commands plus the Booster-style physics WebSocket."
+            telemetry_path = "Simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames."
+            motion = {
+                "arm_actions": "simulator_named_poses",
+                "locomotion": "kinematic_base_velocity",
+                "lowcmd": "simulator_joint_targets",
+            }
+            limitations = [
+                "No CycloneDDS transport is used.",
+                "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
+            ]
+            next_step = "Use CYBER_UNITREE_TRANSPORT=dds in simulator mode when testing the official SDK2 sidecar path."
+        elif transport == DDS and mode == SIM:
+            provider = "official_mujoco_dds_simulator" if official_ok else "official_mujoco_dds_simulator_unready"
+            implemented = official_ok
+            command_path = "Official SDK2/CycloneDDS sidecar for supported arm poses; local HTTP remains the fallback for viewer and local loco tools."
+            telemetry_path = "Official sidecar rt/lowcmd/rt/lowstate probes plus local simulator diagnostics when available."
+            motion = {
+                "arm_actions": "managed_official_mujoco_session_for_supported_poses" if official_ok else "unavailable_until_sidecar_ready",
+                "locomotion": "local_http_compatibility_until_dds_loco_provider_lands",
+                "lowcmd": "official_probe_or_local_http_depending_on_tool",
+            }
+            limitations = [
+                "Only bounded arm-pose commands are routed through the managed official DDS session today.",
+                "LocoClient locomotion and generic lowcmd streaming still need the long-lived DDS provider.",
+            ]
+            next_step = "Start or inspect the managed official MuJoCo session, then promote loco/lowcmd paths to that provider."
+        else:
+            provider = "real_unitree_dds"
+            implemented = False
+            command_path = "Not enabled: real hardware requires an explicit provider, interface, unlock, and safety model."
+            telemetry_path = "Not enabled until real-mode DDS safety gates are implemented."
+            motion = {"arm_actions": "disabled", "locomotion": "disabled", "lowcmd": "disabled"}
+            limitations = [
+                "Real hardware control is intentionally locked.",
+                "Set CYBER_UNITREE_NETWORK_INTERFACE and the real unlock only after the real provider is implemented and reviewed.",
+            ]
+            next_step = "Finish the simulator DDS provider and safety gates before enabling physical robot control."
+
+        return {
+            "ok": bool(diagnostics["ok"] and implemented),
+            "provider": provider,
+            "implemented": implemented,
+            "command_path": command_path,
+            "telemetry_path": telemetry_path,
+            "motion": motion,
+            "limitations": limitations,
+            "next_step": next_step,
+            "config": config,
+            "warnings": diagnostics["warnings"],
+            "diagnostics_summary": {
+                "simulator_reachable": simulator_reachable,
+                "official_sidecar_ok": official_ok,
+                "topics": diagnostics["topics"],
+            },
+        }
+
     def _official_status(self) -> dict[str, Any]:
         if self.official is not None:
             return self.official.status()

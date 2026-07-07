@@ -548,8 +548,12 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
   `/joint_state` and compiles joint-name targets back into simulator-backed
   lowcmd slots.
+- `UnitreeSession.from_env().provider_status()`, `cyber-g1 provider`, and the
+  `unitree_provider_status` MCP tool give agents and users the short answer for
+  which backend is active: provider name, command path, telemetry path, motion
+  surfaces, limitations, and next step.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
-  `unitree_session_status` MCP tool expose the current transport boundary:
+  `unitree_session_status` MCP tool expose the deeper transport boundary:
   `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
   simulator reachability, and topic freshness. With
   `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both Python diagnostics and
