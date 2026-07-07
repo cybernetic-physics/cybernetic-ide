@@ -1196,6 +1196,7 @@
               "sim_reset": true,
               "sim_step": true,
               "sim_validate_behavior": true,
+              "robot_evidence_bundle": true,
               "sim_apply_pose": true,
               "sim_policy_status": true,
               "sim_policy_start": true,

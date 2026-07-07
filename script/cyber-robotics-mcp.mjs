@@ -652,6 +652,40 @@ const tools = [
     { readOnlyHint: false },
   ),
   tool(
+    "robot_evidence_bundle",
+    "Write a reviewable simulator evidence bundle with status, telemetry, provider diagnostics, and optional viewer screenshots.",
+    {
+      output_path: {
+        type: "string",
+        default: ".runtime/robot-evidence/latest.json",
+        description: "Workspace-relative JSON manifest path.",
+      },
+      label: {
+        type: "string",
+        default: "latest",
+        description: "Filesystem-safe label used for snapshot filenames.",
+      },
+      include_snapshot: {
+        type: "boolean",
+        default: true,
+        description: "Capture the current viewer frame beside the manifest.",
+      },
+      include_snapshot_series: {
+        type: "boolean",
+        default: false,
+        description: "Capture current/front/right/three-quarter views beside the manifest.",
+      },
+      snapshot_format: {
+        type: "string",
+        enum: ["jpeg", "png"],
+        default: "jpeg",
+        description: "Image format for captured viewer evidence.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  ),
+  tool(
     "sim_apply_pose",
     "Apply a named simulator pose, such as raise_right_hand or neutral.",
     {
@@ -1288,6 +1322,8 @@ async function callTool(name, args) {
       return textResult(await repeatStep(toInt(args.count, 1)));
     case "sim_validate_behavior":
       return textResult(await validateBehavior(args));
+    case "robot_evidence_bundle":
+      return textResult(await robotEvidenceBundle(args));
     case "sim_apply_pose":
       return textResult(await command({ command: "pose", pose: args.pose || DEFAULT_POSE }));
     case "sim_policy_status":
@@ -1834,6 +1870,150 @@ async function validateBehavior(args) {
     status,
     lowstate,
   };
+}
+
+async function robotEvidenceBundle(args = {}) {
+  const manifestPath = safeWorkspacePath(args.output_path || ".runtime/robot-evidence/latest.json");
+  const baseDir = path.dirname(manifestPath);
+  const label = safeSegment(args.label || path.basename(manifestPath, path.extname(manifestPath)) || "latest");
+  const format = args.snapshot_format === "png" ? "png" : "jpeg";
+  const extension = format === "png" ? "png" : "jpg";
+  const includeSnapshot = args.include_snapshot !== false;
+  const includeSnapshotSeries = args.include_snapshot_series === true;
+  await fsp.mkdir(baseDir, { recursive: true });
+
+  const [statusResult, lowstateResult, jointStateResult, sceneResult, providerResult] = await Promise.allSettled([
+    getJson("/status"),
+    getJson("/lowstate"),
+    getJson("/joint_state"),
+    getJson("/visual_scene"),
+    unitreeSessionStatus().then((diagnostics) => providerStatusFromDiagnostics(diagnostics)),
+  ]);
+
+  const status = settledValue(statusResult);
+  const lowstate = settledValue(lowstateResult);
+  const jointState = settledValue(jointStateResult);
+  const scene = settledValue(sceneResult);
+  const providerStatus = settledValue(providerResult);
+  const checks = [];
+  const simulation = status?.simulation && typeof status.simulation === "object" ? status.simulation : {};
+  const render = simulation?.render && typeof simulation.render === "object" ? simulation.render : {};
+
+  addCheck(
+    checks,
+    "status_available",
+    !status.error && status.ready === true,
+    status.error ? `status unavailable: ${status.error}` : `simulator ready=${status.ready === true}`,
+  );
+  addCheck(
+    checks,
+    "lowstate_available",
+    !lowstate.error && Array.isArray(lowstate.motor_state),
+    lowstate.error ? `lowstate unavailable: ${lowstate.error}` : `lowstate motors=${lowstate.motor_state.length}`,
+  );
+  addCheck(
+    checks,
+    "joint_state_available",
+    !jointState.error && Array.isArray(jointState.joints),
+    jointState.error ? `joint_state unavailable: ${jointState.error}` : `joint_state joints=${jointState.joints?.length ?? 0}`,
+  );
+  addCheck(
+    checks,
+    "scene_available",
+    !scene.error,
+    scene.error ? `visual_scene unavailable: ${scene.error}` : "visual scene metadata captured",
+  );
+  addCheck(
+    checks,
+    "robot_not_fallen",
+    simulation.fallen !== true,
+    simulation.fallen === true ? "robot is fallen" : "robot is not reporting fallen",
+  );
+  addCheck(
+    checks,
+    "render_ok",
+    !render.last_error,
+    render.last_error ? `render error: ${render.last_error}` : "render cache has no error",
+  );
+
+  let snapshotValue = null;
+  if (includeSnapshot) {
+    try {
+      const snapshotPath = path.relative(root, path.join(baseDir, `${label}.${extension}`));
+      snapshotValue = await snapshotFile(snapshotPath, format);
+      addCheck(checks, "snapshot_available", snapshotValue.bytes > 0, `snapshot bytes=${snapshotValue.bytes}`, {
+        path: snapshotValue.path,
+        workspace_relative_path: snapshotValue.workspace_relative_path,
+        bytes: snapshotValue.bytes,
+      });
+    } catch (error) {
+      snapshotValue = { error: error.message };
+      addCheck(checks, "snapshot_available", false, `snapshot failed: ${error.message}`);
+    }
+  }
+
+  let snapshotSeriesValue = null;
+  if (includeSnapshotSeries) {
+    try {
+      snapshotSeriesValue = await snapshotSeries({
+        output_dir: path.relative(root, path.join(baseDir, `${label}-views`)),
+        prefix: label,
+        format,
+      });
+      const viewCount = Array.isArray(snapshotSeriesValue.views) ? snapshotSeriesValue.views.length : 0;
+      addCheck(checks, "snapshot_series_available", viewCount > 0, `snapshot series views=${viewCount}`, {
+        workspace_relative_output_dir: snapshotSeriesValue.workspace_relative_output_dir,
+        views: viewCount,
+      });
+    } catch (error) {
+      snapshotSeriesValue = { error: error.message };
+      addCheck(checks, "snapshot_series_available", false, `snapshot series failed: ${error.message}`);
+    }
+  }
+
+  const manifest = {
+    ok: checks.every((check) => check.ok),
+    label,
+    captured_at: new Date().toISOString(),
+    output_path: manifestPath,
+    workspace_relative_output_path: path.relative(root, manifestPath),
+    checks,
+    summary: {
+      ready: status.ready === true,
+      fallen: simulation.fallen === true,
+      paused: simulation.paused === true,
+      control_mode: simulation.control_mode || null,
+      pose: simulation.pose || null,
+      robot_mode: simulation.robot_mode || lowstate.mode_machine || null,
+      model_path: simulation.model_path || null,
+      motor_count: Array.isArray(lowstate.motor_state) ? lowstate.motor_state.length : null,
+      joint_count: Array.isArray(jointState.joints) ? jointState.joints.length : null,
+      render_seq: render.render_seq ?? null,
+      provider: providerStatus.provider || null,
+      provider_ok: providerStatus.ok === true,
+    },
+    simulator: status,
+    lowstate,
+    joint_state: jointState,
+    visual_scene: scene,
+    provider_status: providerStatus,
+    snapshot: snapshotValue,
+    snapshot_series: snapshotSeriesValue,
+    agent_hints: [
+      "Use lowstate and joint_state as telemetry evidence; screenshots are visual evidence.",
+      "Use checks to decide whether a behavior is reviewable before explaining success to the user.",
+      "Use provider_status to distinguish local HTTP shim, rpc_bridge, DDS sidecar, and unsupported real-hardware paths.",
+    ],
+  };
+  await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
+
+function settledValue(result) {
+  if (result.status === "fulfilled") {
+    return result.value;
+  }
+  return { error: result.reason?.message || String(result.reason) };
 }
 
 function addCheck(checks, name, ok, message, extra = {}) {
@@ -2550,6 +2730,12 @@ function roboticsToolReference() {
         "read-with-evidence",
         "May write a snapshot file.",
         "Simulator running after a behavior.",
+      ),
+      toolReference(
+        "robot_evidence_bundle",
+        "evidence-write",
+        "Writes simulator status, lowstate, joint state, provider diagnostics, and optional screenshots into one JSON bundle.",
+        "Simulator HTTP endpoint reachable; renderer needed for image evidence.",
       ),
       toolReference(
         "viewer_camera_control",

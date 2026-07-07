@@ -326,6 +326,9 @@ ad hoc scripts first. The default tool surface includes:
 - simulator validation: `sim_validate_behavior`, which checks ready/fallen
   state, render health, lowstate availability, lowcmd freshness, and optional
   snapshot evidence after a script runs;
+- evidence capture: `robot_evidence_bundle`, which writes simulator status,
+  lowstate, named joint state, provider diagnostics, visual scene metadata, and
+  optional screenshots into one reviewable JSON artifact for Agent-panel work;
 - learned policy runtime: `sim_policy_status`, `sim_policy_start`, and
   `sim_policy_stop`, which control the optional LocoMuJoCo-trained yoga policy
   when a deploy bundle is mounted into the simulator;
@@ -433,6 +436,9 @@ Use `cyber-g1 provider` or the `unitree_provider_status` MCP tool when an
 agent needs to know which backend is active. The response names the provider,
 command path, telemetry path, implemented motion surfaces, limitations, and
 the next engineering step.
+Use `robot_evidence_bundle` after an agent edits a scene, runs a script, or
+commands a pose; it persists the telemetry and screenshot evidence needed to
+review the result without relying on a transient chat description.
 - `CYBER_G1_GAME_CONTROL_URL`: GameControl base URL for Python examples.
 - `CYBER_G1_WS_HOST` and `CYBER_G1_WS_PORT`: WebSocket host/port for
   `examples/control_g1_sim.py`.
