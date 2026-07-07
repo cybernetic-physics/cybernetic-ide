@@ -397,6 +397,22 @@ Beginner code can read `robot.status().lowcmd_active`,
 `robot.status().lowcmd_stale`, and `robot.status().lowcmd_age_seconds`; SDK2
 style code can read the same values from `LowState_`.
 
+## Official Example Compatibility Audit
+
+Use `cyber-g1 sdk-audit` to compare the cloned official Unitree G1 SDK2 Python
+examples against Cybernetic's current `unitree_sdk2py` shim:
+
+```sh
+cyber-g1 sdk-audit --upstream-root /Users/cuboniks/wagmi/unitree_sdk2_python
+```
+
+The audit statically checks official G1 example imports, SDK client classes,
+and method calls. It currently reports static import/call coverage for the five
+official G1 examples under `example/g1/high_level/` and
+`example/g1/low_level/`. That does not mean every behavior is physically
+equivalent; locomotion and low-level balance are still simulator
+approximations.
+
 ## Agent MCP Tools
 
 The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to
@@ -410,6 +426,7 @@ viewer_snapshot_series
 sim_validate_behavior
 unitree_provider_status
 unitree_session_status
+unitree_sdk_compatibility_audit
 unitree_read_official_mujoco_lowstate
 unitree_official_mujoco_evidence_bundle
 robotics_tool_reference

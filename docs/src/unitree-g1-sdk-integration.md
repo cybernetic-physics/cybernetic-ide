@@ -591,6 +591,12 @@ The current repo has the first narrow version of that API boundary:
   `unitree_provider_status` MCP tool give agents and users the short answer for
   which backend is active: provider name, command path, telemetry path, motion
   surfaces, limitations, and next step.
+- `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
+  compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
+  current `unitree_sdk2py` shim. The current audit reports import/class/method
+  coverage for all five official G1 examples under `example/g1/high_level/` and
+  `example/g1/low_level/`; this is static compatibility, not proof of physical
+  behavior parity.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the deeper transport boundary:
   `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
@@ -602,6 +608,8 @@ The current repo has the first narrow version of that API boundary:
 - `robotics_tool_reference` gives Agent-panel users a machine-readable safety
   map for the robotics tools: safety level, side effects, and expected
   simulator state.
+- `unitree_sdk_compatibility_audit` gives Agent-panel users the same
+  official-example compatibility report before porting an upstream script.
 - `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
   named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
   create editable Unitree-style starting points without guessing boilerplate.

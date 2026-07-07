@@ -235,6 +235,11 @@ Tasks:
   `unitree_official_mujoco_evidence_bundle` so humans and agents can run a
   bounded official DDS arm pose and persist before/after `rt/lowstate` evidence
   as a single JSON artifact.
+- Done: add `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` to
+  compare cloned official Unitree G1 SDK2 Python examples against Cybernetic's
+  `unitree_sdk2py` shim. The current static audit reports import/class/method
+  coverage for all five official G1 examples, while still documenting that
+  behavior-level locomotion and balance parity are not proven.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -380,6 +385,8 @@ Tasks:
   effects, and expected simulator state for the default robotics tools.
 - Done: add `unitree_official_mujoco_evidence_bundle` for official-DDS
   before/after lowstate artifacts after bounded arm-pose commands.
+- Done: add `unitree_sdk_compatibility_audit` so agents can inspect official G1
+  SDK example import and method coverage before adapting upstream scripts.
 
 Reasoning: MCP tools are how AI agents become robotics development partners.
 Good tools should be task-shaped, inspectable, and safe by default.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .unitree_go.msg.dds_ import SportModeState_
 from .unitree_hg.msg.dds_ import IMUState_, LowCmd_, LowState_, MotorCmd_, MotorState_
 
 
@@ -21,3 +22,7 @@ def unitree_hg_msg_dds__LowCmd_() -> LowCmd_:
 
 def unitree_hg_msg_dds__LowState_() -> LowState_:
     return LowState_()
+
+
+def unitree_go_msg_dds__SportModeState_() -> SportModeState_:
+    return SportModeState_()

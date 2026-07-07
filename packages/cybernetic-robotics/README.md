@@ -108,6 +108,7 @@ cyber-g1 official raise-hand --session
 cyber-g1 official stop-session
 python3 examples/g1_official_raise_hand.py
 python3 examples/g1_official_managed_session.py
+cyber-g1 sdk-audit --upstream-root /Users/cuboniks/wagmi/unitree_sdk2_python
 ```
 
 `official status` is read-only: it checks the sidecar setup, SDK2 imports,
@@ -137,6 +138,12 @@ Pass `keep_running=True` to leave the Docker peer up for follow-up MCP or CLI
 commands. `arm_pose_evidence()` writes a reviewable JSON bundle with before and
 after official `rt/lowstate` summaries, the bounded command parameters, moved
 joints, and agent hints.
+
+`cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
+Python examples with the local `unitree_sdk2py` shim. It reports import, class,
+and method-call coverage, which is useful before adapting an upstream example.
+Static coverage is not behavior parity: locomotion and low-level balance are
+still simulator approximations unless an official DDS proof says otherwise.
 
 ## Unitree SDK2-Shaped API
 

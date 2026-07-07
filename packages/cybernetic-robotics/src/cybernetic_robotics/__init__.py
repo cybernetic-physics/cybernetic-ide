@@ -20,6 +20,7 @@ from .g1 import G1Robot, G1Status, connect
 from .official import OfficialG1ManagedSession, OfficialG1Sim
 from .scene import SceneWorkspace
 from .safety import evaluate_lowstate_safety
+from .sdk_audit import audit_official_g1_examples
 from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
 from .unitree import AgvClient, AudioClient, LocoClient
@@ -29,6 +30,7 @@ __all__ = [
     "CameraState",
     "AgvClient",
     "AudioClient",
+    "audit_official_g1_examples",
     "CyberneticRoboticsError",
     "evaluate_lowstate_safety",
     "G1Robot",

@@ -126,6 +126,22 @@ const tools = [
   tool("unitree_provider_status", "Summarize the active Unitree provider, command path, telemetry path, and limitations.", {}, [], {
     readOnlyHint: true,
   }),
+  tool(
+    "unitree_sdk_compatibility_audit",
+    "Compare cloned official Unitree G1 SDK2 Python examples with Cybernetic's current unitree_sdk2py shim support.",
+    {
+      upstream_root: {
+        type: "string",
+        default: "/Users/cuboniks/wagmi/unitree_sdk2_python",
+        description: "Path to the cloned official unitree_sdk2_python repository.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+  ),
   tool("unitree_prepare_sdk2_sidecar", "Prepare pinned official Unitree SDK2 Python, SDK2 C++, and Unitree MuJoCo sources for the opt-in SDK2 sidecar.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1034,6 +1050,8 @@ async function callTool(name, args) {
       return textResult(await unitreeSessionStatus());
     case "unitree_provider_status":
       return textResult(providerStatusFromDiagnostics(await unitreeSessionStatus()));
+    case "unitree_sdk_compatibility_audit":
+      return textResult(unitreeSdkCompatibilityAudit(args));
     case "unitree_prepare_sdk2_sidecar":
       return textResult(runChecked("node", ["script/prepare-unitree-g1-sdk2-sidecar.mjs"], { timeoutMs: 240000 }));
     case "unitree_sdk2_sidecar_status":
@@ -1218,6 +1236,34 @@ async function simStatus() {
     docker: inspect.status === 0 ? inspect.stdout.trim() : inspect.stderr.trim(),
     env,
     status,
+  };
+}
+
+function unitreeSdkCompatibilityAudit(args = {}) {
+  const upstreamRoot = typeof args.upstream_root === "string" && args.upstream_root
+    ? args.upstream_root
+    : "/Users/cuboniks/wagmi/unitree_sdk2_python";
+  const packageSrc = path.join(root, "packages/cybernetic-robotics/src");
+  const env = {
+    ...process.env,
+    PYTHONPATH: process.env.PYTHONPATH ? `${packageSrc}${path.delimiter}${process.env.PYTHONPATH}` : packageSrc,
+  };
+  const result = runChecked(
+    "python3",
+    ["-m", "cybernetic_robotics.cli", "sdk-audit", "--upstream-root", upstreamRoot],
+    { timeoutMs: 60_000, env },
+  );
+  let report = null;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    report = null;
+  }
+  return {
+    command: `python3 -m cybernetic_robotics.cli sdk-audit --upstream-root ${upstreamRoot}`,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
   };
 }
 
@@ -2278,6 +2324,12 @@ function roboticsToolReference() {
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),
       toolReference("g1_joint_state", "read", "Reads named joint mapping and limits.", "Simulator running."),
       toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),
+      toolReference(
+        "unitree_sdk_compatibility_audit",
+        "read",
+        "Scans cloned official Unitree G1 Python examples and reports shim import/method coverage.",
+        "Official unitree_sdk2_python checkout available under ~/wagmi or supplied path.",
+      ),
       toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
       toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),
       toolReference(

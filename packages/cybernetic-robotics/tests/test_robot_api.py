@@ -19,6 +19,7 @@ from cybernetic_robotics import (
     SimulatorClient,
     UnitreeSession,
     UnitreeTransportConfig,
+    audit_official_g1_examples,
     evaluate_lowstate_safety,
 )
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
@@ -27,7 +28,7 @@ from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action
 from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
-from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_, unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
 from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
@@ -671,6 +672,48 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_default_sport_mode_state_alias_matches_official_example_import(self):
+        state = unitree_go_msg_dds__SportModeState_()
+
+        self.assertIsInstance(state, SportModeState_)
+
+    def test_official_g1_sdk_audit_reports_supported_and_missing_surfaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            high = root / "example/g1/high_level"
+            high.mkdir(parents=True)
+            (high / "g1_loco_client_example.py").write_text(
+                "\n".join(
+                    [
+                        "from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient",
+                        "from unitree_sdk2py.idl.default import unitree_go_msg_dds__SportModeState_",
+                        "sport_client = LocoClient()",
+                        "sport_client.SetTimeout(10.0)",
+                        "sport_client.Init()",
+                        "sport_client.Move(0.1, 0, 0)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (high / "unsupported.py").write_text(
+                "\n".join(
+                    [
+                        "from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient",
+                        "sport_client = LocoClient()",
+                        "sport_client.TeleportToMoon()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            report = audit_official_g1_examples(root)
+
+        self.assertEqual(report["example_count"], 2)
+        self.assertEqual(report["fully_supported_examples"], 1)
+        self.assertEqual(report["partially_supported_examples"], 1)
+        missing_methods = report["summary"]["missing_methods"]
+        self.assertEqual(missing_methods[0]["method"], "TeleportToMoon")
 
     def test_unitree_session_diagnostics_reports_transport_and_topics(self):
         with FakeServer() as fake:
