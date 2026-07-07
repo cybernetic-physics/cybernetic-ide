@@ -47,6 +47,7 @@ making the user think about the transport layer.
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
 | `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
+| `examples/use_cybernetic_robotics_lib.py` | Polished package demo that exercises both `G1Robot` and the Unitree SDK2-shaped shim. |
 | `docs/src/unitree-g1-sdk-integration.md` | Architecture, end-user guide, developer guide, safety gates, and next milestones. |
 | `docs/src/cybernetic-robotics-python.md` | User and developer guide for the installable Python robotics package. |
 
@@ -112,6 +113,7 @@ Then try:
 ```sh
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/easy_g1_playground.py
 ```
 

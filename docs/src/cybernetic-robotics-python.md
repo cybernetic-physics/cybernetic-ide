@@ -58,6 +58,14 @@ python3 my_g1_script.py
 The context manager pauses the simulator when the block exits. That keeps
 beginner experiments from leaving a control script running by accident.
 
+The repo also includes a ready-to-run version that exercises both the beginner
+API and the Unitree SDK-shaped shim:
+
+```sh
+python3 examples/use_cybernetic_robotics_lib.py
+python3 examples/use_cybernetic_robotics_lib.py --mode unitree
+```
+
 ## CLI
 
 The package installs `cyber-g1`:
