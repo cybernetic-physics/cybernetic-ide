@@ -231,8 +231,8 @@ Tasks:
   tools in the default Robotics Agent profile.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
-- Add `sim_validate_behavior` that checks fallen state, command freshness, and
-  screenshot availability after a script runs.
+- Done: add `sim_validate_behavior` that checks fallen state, command
+  freshness, and screenshot availability after a script runs.
 - Add `unitree_example_scaffold` variants for arm action, locomotion,
   low-level joint target, scene edit, and telemetry monitor.
 - Add tool docs that list safety level, side effects, and expected simulator

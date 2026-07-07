@@ -1168,6 +1168,7 @@
               "sim_resume": true,
               "sim_reset": true,
               "sim_step": true,
+              "sim_validate_behavior": true,
               "sim_apply_pose": true,
               "viewer_camera_control": true,
               "viewer_snapshot": true,

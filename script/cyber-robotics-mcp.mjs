@@ -98,6 +98,29 @@ const tools = [
     { readOnlyHint: false },
   ),
   tool(
+    "sim_validate_behavior",
+    "Validate simulator health after a robot behavior and optionally capture a viewer snapshot.",
+    {
+      max_lowcmd_age_seconds: {
+        type: "number",
+        default: 5.0,
+        description: "Maximum acceptable age for the most recent lowcmd when control mode is lowcmd.",
+      },
+      require_snapshot: {
+        type: "boolean",
+        default: true,
+        description: "When true, capture a viewer frame and fail if it is unavailable.",
+      },
+      snapshot_path: {
+        type: "string",
+        default: ".runtime/behavior-validation/latest.jpg",
+        description: "Workspace-relative snapshot path when require_snapshot is true.",
+      },
+    },
+    [],
+    { readOnlyHint: false },
+  ),
+  tool(
     "sim_apply_pose",
     "Apply a named simulator pose, such as raise_right_hand or neutral.",
     {
@@ -506,6 +529,8 @@ async function callTool(name, args) {
       return textResult(await command({ command: "reset" }));
     case "sim_step":
       return textResult(await repeatStep(toInt(args.count, 1)));
+    case "sim_validate_behavior":
+      return textResult(await validateBehavior(args));
     case "sim_apply_pose":
       return textResult(await command({ command: "pose", pose: args.pose || DEFAULT_POSE }));
     case "viewer_camera_control":
@@ -639,6 +664,88 @@ async function repeatStep(count) {
     results.push(await command({ command: "step" }));
   }
   return { count: results.length, last: results.at(-1), results };
+}
+
+async function validateBehavior(args) {
+  const maxLowcmdAge = Number(args.max_lowcmd_age_seconds ?? 5.0);
+  const requireSnapshot = args.require_snapshot !== false;
+  const snapshotPath = args.snapshot_path || ".runtime/behavior-validation/latest.jpg";
+  const checks = [];
+  const status = await getJson("/status");
+  const simulation = status.simulation && typeof status.simulation === "object" ? status.simulation : {};
+  const lowstate = await getJson("/lowstate").catch((error) => ({ error: error.message }));
+  const render = simulation.render && typeof simulation.render === "object" ? simulation.render : {};
+  const lowcmd = simulation.lowcmd && typeof simulation.lowcmd === "object" ? simulation.lowcmd : null;
+
+  addCheck(checks, "simulator_ready", status.ready === true, status.ready === true ? "simulator reports ready" : "simulator is not ready");
+  addCheck(checks, "robot_not_fallen", simulation.fallen !== true, simulation.fallen === true ? "robot is fallen" : "robot is upright");
+  addCheck(checks, "render_ok", !render.last_error, render.last_error ? `render error: ${render.last_error}` : "render cache has no error");
+  addCheck(
+    checks,
+    "lowstate_available",
+    !lowstate.error && Array.isArray(lowstate.motor_state),
+    lowstate.error ? `lowstate unavailable: ${lowstate.error}` : `lowstate motors=${lowstate.motor_state.length}`,
+  );
+
+  const controlMode = String(simulation.control_mode || simulation.pose || "");
+  if (controlMode === "lowcmd" || lowcmd) {
+    const age = lowcmd?.received_at ? Date.now() / 1000 - Number(lowcmd.received_at) : Number.POSITIVE_INFINITY;
+    addCheck(
+      checks,
+      "lowcmd_fresh",
+      Number.isFinite(age) && age <= maxLowcmdAge,
+      Number.isFinite(age)
+        ? `last lowcmd age ${age.toFixed(3)}s, max ${maxLowcmdAge}s`
+        : "no lowcmd timestamp available",
+      { age_seconds: Number.isFinite(age) ? age : null, max_age_seconds: maxLowcmdAge },
+    );
+    addCheck(
+      checks,
+      "lowcmd_applied_targets",
+      Number(lowcmd?.applied_position_targets || 0) > 0 || Number(lowcmd?.motor_cmd_count || 0) > 0,
+      `lowcmd motor_cmd_count=${lowcmd?.motor_cmd_count ?? 0}, applied_position_targets=${lowcmd?.applied_position_targets ?? 0}`,
+    );
+  }
+
+  let snapshotValue = null;
+  if (requireSnapshot) {
+    try {
+      snapshotValue = await snapshotFile(snapshotPath, "jpeg");
+      addCheck(checks, "snapshot_available", snapshotValue.bytes > 0, `snapshot bytes=${snapshotValue.bytes}`, {
+        path: snapshotValue.path,
+        workspace_relative_path: snapshotValue.workspace_relative_path,
+        bytes: snapshotValue.bytes,
+      });
+    } catch (error) {
+      addCheck(checks, "snapshot_available", false, `snapshot failed: ${error.message}`);
+    }
+  }
+
+  const ok = checks.every((check) => check.ok);
+  return {
+    ok,
+    checks,
+    summary: {
+      ready: status.ready === true,
+      fallen: simulation.fallen === true,
+      control_mode: simulation.control_mode || null,
+      pose: simulation.pose || null,
+      paused: simulation.paused === true,
+      pelvis_height: simulation.pelvis_height ?? null,
+      mode_machine: lowstate.mode_machine ?? null,
+      mode_pr: lowstate.mode_pr ?? null,
+      crc: lowstate.crc ?? null,
+      model_path: simulation.model_path || null,
+      render_seq: render.render_seq ?? null,
+    },
+    snapshot: snapshotValue,
+    status,
+    lowstate,
+  };
+}
+
+function addCheck(checks, name, ok, message, extra = {}) {
+  checks.push({ name, ok: Boolean(ok), message, ...extra });
 }
 
 async function command(body) {

@@ -272,6 +272,9 @@ ad hoc scripts first. The default tool surface includes:
 - simulator lifecycle: `sim_prepare_runtime`, `sim_start`, `sim_stop`,
   `sim_restart`, `sim_status`, `sim_pause`, `sim_resume`, `sim_reset`, and
   `sim_step`;
+- simulator validation: `sim_validate_behavior`, which checks ready/fallen
+  state, render health, lowstate availability, lowcmd freshness, and optional
+  snapshot evidence after a script runs;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

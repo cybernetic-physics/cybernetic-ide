@@ -263,6 +263,7 @@ viewer_camera_control
 viewer_snapshot
 viewer_snapshot_file
 viewer_snapshot_series
+sim_validate_behavior
 scene_add_object
 scene_list_objects
 scene_remove_object
@@ -275,6 +276,10 @@ g1_lowcmd
 `viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the
 current camera frame to a workspace file, which is better when the agent needs
 to compare before/after views across multiple steps.
+`sim_validate_behavior` is the quick post-run health check: it verifies the
+simulator is ready, the robot is not fallen, the render cache is healthy,
+lowstate telemetry is available, recent lowcmds are fresh when applicable, and
+optionally writes a snapshot for visual evidence.
 `scene_add_object`, `scene_list_objects`, and `scene_remove_object` let agents
 iterate on simple MuJoCo scene objects. Scene edits write new MJCF copies under
 `.runtime/unitree-g1-mujoco/unitree_mujoco/cybernetic_scenes/`; the simulator
