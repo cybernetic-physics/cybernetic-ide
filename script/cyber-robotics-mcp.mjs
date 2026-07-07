@@ -565,8 +565,14 @@ const tools = [
   ),
   tool(
     "unitree_command_official_mujoco_lowcmd",
-    "Publish one bounded generic SDK2/CycloneDDS rt/lowcmd frame to an already-running managed official Unitree MuJoCo G1 session.",
+    "Publish one bounded generic SDK2/CycloneDDS Unitree HG LowCmd frame to an already-running managed official Unitree MuJoCo G1 session.",
     {
+      topic: {
+        type: "string",
+        enum: ["rt/lowcmd", "rt/arm_sdk"],
+        default: "rt/lowcmd",
+        description: "Official Unitree HG LowCmd topic to publish. Use rt/arm_sdk for official G1 arm SDK examples.",
+      },
       motor_cmd: {
         type: "array",
         items: {
@@ -2884,7 +2890,7 @@ function roboticsToolReference() {
       toolReference(
         "unitree_command_official_mujoco_lowcmd",
         "expert-robot-motion",
-        "Publishes one sanitized generic official rt/lowcmd frame to the managed Unitree MuJoCo session.",
+        "Publishes one sanitized generic official rt/lowcmd or rt/arm_sdk frame to the managed Unitree MuJoCo session.",
         "Managed official MuJoCo DDS session running and ready; inspect lowstate first.",
       ),
       toolReference(
@@ -4090,10 +4096,12 @@ function sdk2CommandOfficialMujocoLowcmd(options = {}) {
     mode_machine: clampInt(options.mode_machine, 0, 1000, 0),
     crc: clampInt(options.crc, 0, 0xffffffff, 0),
   };
+  const topic = ["rt/lowcmd", "rt/arm_sdk"].includes(options.topic) ? options.topic : "rt/lowcmd";
   const frames = clampInt(options.frames, 1, 60, 1);
   const timeoutSeconds = clampNumber(options.timeout_seconds, 0.5, 30, 6);
   const env = [
     "CYBER_UNITREE_ACTION=command_official_mujoco_lowcmd",
+    `CYBER_UNITREE_LOWCMD_TOPIC=${topic}`,
     `CYBER_UNITREE_LOWCMD_JSON=${JSON.stringify(payload)}`,
     `CYBER_UNITREE_LOWCMD_FRAMES=${frames}`,
     `CYBER_UNITREE_LOWCMD_TIMEOUT=${timeoutSeconds}`,
@@ -4112,7 +4120,7 @@ function sdk2CommandOfficialMujocoLowcmd(options = {}) {
   }
   return {
     command: `docker ${args.join(" ")}`,
-    parameters: { ...payload, frames, timeout_seconds: timeoutSeconds },
+    parameters: { topic, ...payload, frames, timeout_seconds: timeoutSeconds },
     session,
     stdout: result.stdout,
     stderr: result.stderr,

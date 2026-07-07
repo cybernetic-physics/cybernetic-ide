@@ -598,6 +598,9 @@ The current repo has the first narrow version of that API boundary:
   `CheckMode`, `SelectMode`, `ReleaseMode`, `SetSilent`, and `GetSilent`;
   `ReleaseMode` clears the selected mode and puts the simulator into damp so
   official-style low-level setup scripts have a meaningful local equivalent.
+- `examples/g1_arm_sdk_dds.py` mirrors Unitree's G1 arm SDK examples by
+  publishing `unitree_hg` `LowCmd_` frames to `rt/arm_sdk` and setting motor
+  command slot 29 to enable the arm SDK path.
 - The channel shim also supports read-only `rt/sportmodestate` and
   `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
   synthesized from local simulator status and lowstate.

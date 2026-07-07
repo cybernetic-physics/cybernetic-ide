@@ -835,10 +835,11 @@ def probe_official_mujoco_lowcmd_exchange(mujoco_root: str, domain: int, interfa
 
 def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
     raw_payload = os.environ.get("CYBER_UNITREE_LOWCMD_JSON", "{}")
+    write_topic = os.environ.get("CYBER_UNITREE_LOWCMD_TOPIC", "rt/lowcmd")
     report = {
         "action": "command_official_mujoco_lowcmd",
         "read_topic": "rt/lowstate",
-        "write_topic": "rt/lowcmd",
+        "write_topic": write_topic,
         "domain": domain,
         "interface": interface or None,
         "lowstate_sample_received": False,
@@ -858,6 +859,11 @@ def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
             },
         },
     }
+    if write_topic not in {"rt/lowcmd", "rt/arm_sdk"}:
+        report["ok"] = False
+        report["error"] = f"unsupported Unitree HG LowCmd topic: {write_topic}"
+        report["supported_topics"] = ["rt/lowcmd", "rt/arm_sdk"]
+        return report
     try:
         payload = json.loads(raw_payload)
         if not isinstance(payload, dict):
@@ -898,7 +904,7 @@ def command_official_mujoco_lowcmd(domain: int, interface: str | None) -> dict:
         low_cmd = apply_lowcmd_payload(low_cmd, payload, sample, crc)
         report["lowcmd_summary"] = summarize_lowcmd(low_cmd)
 
-        publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+        publisher = ChannelPublisher(write_topic, LowCmd_)
         publisher.Init()
         for _ in range(report["frames"]):
             report["lowcmd_write_attempts"] += 1
@@ -2930,6 +2936,20 @@ def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | Non
     except Exception as exc:  # pragma: no cover - diagnostic path
         report["channels"]["rt/lowcmd"] = {"role": "publisher", "created": False, "error": str(exc)}
         report["errors"].append(f"rt/lowcmd publisher failed: {exc}")
+
+    try:
+        arm_sdk = unitree_hg_msg_dds__LowCmd_()
+        publisher = ChannelPublisher("rt/arm_sdk", LowCmd_)
+        publisher.Init()
+        publisher.Close()
+        report["channels"]["rt/arm_sdk"] = {
+            "role": "publisher",
+            "created": True,
+            "sample_motor_count": len(arm_sdk.motor_cmd),
+        }
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        report["channels"]["rt/arm_sdk"] = {"role": "publisher", "created": False, "error": str(exc)}
+        report["errors"].append(f"rt/arm_sdk publisher failed: {exc}")
 
     try:
         subscriber = ChannelSubscriber("rt/lowstate", LowState_)

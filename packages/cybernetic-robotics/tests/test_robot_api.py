@@ -1110,14 +1110,35 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(official.calls[0]["motor_cmd"], motor_cmd)
         self.assertEqual(official.calls[0]["mode_machine"], 5)
 
-    def test_unitree_session_rejects_unsupported_dds_publish_topic(self):
-        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=object())
+    def test_unitree_session_routes_dds_arm_sdk_to_managed_official_session(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls: list[dict[str, object]] = []
 
-        response = session.publish_lowcmd("rt/arm_sdk", [], mode_pr=0, mode_machine=0, crc=0)
+            def lowcmd_session(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "topic": kwargs["topic"],
+                    "lowcmd_write_attempts": 1,
+                    "lowcmd_write_successes": 1,
+                    "lowcmd_summary": {"motor_count": 35},
+                }
 
-        self.assertFalse(response["ok"])
+        official = FakeOfficial()
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=official)
+        motor_cmd = [{"mode": 1, "q": 0.0, "kp": 40.0, "kd": 1.0} for _ in range(30)]
+        motor_cmd[29]["q"] = 1.0
+
+        response = session.publish_lowcmd("rt/arm_sdk", motor_cmd, mode_pr=0, mode_machine=2, crc=456)
+
+        self.assertTrue(response["ok"])
         self.assertEqual(response["provider"], "official_mujoco_dds_simulator")
-        self.assertEqual(response["supported_topics"], ["rt/lowcmd"])
+        self.assertEqual(response["topic"], "rt/arm_sdk")
+        self.assertTrue(response["official_dds_supported"])
+        self.assertEqual(official.calls[0]["topic"], "rt/arm_sdk")
+        self.assertEqual(official.calls[0]["motor_cmd"][29]["q"], 1.0)
 
     def test_unitree_lowstate_channel_can_read_official_dds_summary(self):
         class FakeOfficial:
@@ -1183,14 +1204,30 @@ class RobotApiTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (high / "g1_arm_sdk_example.py").write_text(
+                "\n".join(
+                    [
+                        "from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber",
+                        "from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_",
+                        "from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_",
+                        "arm_pub = ChannelPublisher('rt/arm_sdk', LowCmd_)",
+                        "lowstate_sub = ChannelSubscriber('rt/lowstate', LowState_)",
+                        "arm_pub.Init()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
 
             report = audit_official_g1_examples(root)
 
-        self.assertEqual(report["example_count"], 2)
-        self.assertEqual(report["fully_supported_examples"], 1)
+        self.assertEqual(report["example_count"], 3)
+        self.assertEqual(report["fully_supported_examples"], 2)
         self.assertEqual(report["partially_supported_examples"], 1)
         missing_methods = report["summary"]["missing_methods"]
         self.assertEqual(missing_methods[0]["method"], "TeleportToMoon")
+        arm_example = next(item for item in report["examples"] if item["path"].endswith("g1_arm_sdk_example.py"))
+        self.assertIn({"topic": "rt/arm_sdk", "direction": "publish", "supported": True, "status": "supported"}, arm_example["topics"])
+        self.assertFalse(report["summary"]["missing_topics"])
 
     def test_official_g1_sdk_behavior_smoke_runs_safe_facade_calls(self):
         with FakeServer() as fake:
@@ -2037,6 +2074,7 @@ class RobotApiTests(unittest.TestCase):
 
             result = official.lowcmd_session(
                 motor_cmd=[{"mode": 1, "q": -0.2, "kp": 12.0, "kd": 0.5}],
+                topic="rt/arm_sdk",
                 mode_pr=1,
                 mode_machine=5,
                 crc=12345,
@@ -2049,6 +2087,7 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 77)
         command = " ".join(captured["args"])
         self.assertIn("CYBER_UNITREE_ACTION=command_official_mujoco_lowcmd", command)
+        self.assertIn("CYBER_UNITREE_LOWCMD_TOPIC=rt/arm_sdk", command)
         self.assertIn("CYBER_UNITREE_LOWCMD_FRAMES=3", command)
         self.assertIn('"mode_machine":5', command)
 

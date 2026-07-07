@@ -20,10 +20,11 @@ class ExampleAudit:
     imports: list[dict[str, Any]]
     classes: list[dict[str, Any]]
     method_calls: list[dict[str, Any]]
+    topics: list[dict[str, Any]]
 
     @property
     def supported(self) -> bool:
-        return all(item["supported"] for item in self.imports + self.classes + self.method_calls)
+        return all(item["supported"] for item in self.imports + self.classes + self.method_calls + self.topics)
 
 
 def audit_official_g1_examples(upstream_root: str | Path = DEFAULT_UPSTREAM_ROOT) -> dict[str, Any]:
@@ -46,6 +47,7 @@ def audit_official_g1_examples(upstream_root: str | Path = DEFAULT_UPSTREAM_ROOT
                 "imports": item.imports,
                 "classes": item.classes,
                 "method_calls": item.method_calls,
+                "topics": item.topics,
             }
             for item in examples
         ],
@@ -66,11 +68,13 @@ def _audit_example(path: Path, root: Path) -> ExampleAudit:
     assignments = _client_assignments(tree)
     class_reports = _class_reports(assignments)
     method_reports = _method_reports(tree, assignments)
+    topic_reports = _topic_reports(tree)
     return ExampleAudit(
         path=str(path.relative_to(root)),
         imports=imports,
         classes=class_reports,
         method_calls=method_reports,
+        topics=topic_reports,
     )
 
 
@@ -161,6 +165,31 @@ def _method_reports(tree: ast.AST, assignments: dict[str, str]) -> list[dict[str
     return sorted(reports, key=lambda item: (item["class"], item["method"], item["variable"]))
 
 
+def _topic_reports(tree: ast.AST) -> list[dict[str, Any]]:
+    reports: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _call_name(node.func)
+        if call_name not in {"ChannelPublisher", "ChannelSubscriber"} or not node.args:
+            continue
+        topic = _literal_string(node.args[0])
+        if topic is None or topic in seen:
+            continue
+        seen.add(topic)
+        supported = topic in _supported_topics()
+        reports.append(
+            {
+                "topic": topic,
+                "direction": "publish" if call_name == "ChannelPublisher" else "subscribe",
+                "supported": supported,
+                "status": "supported" if supported else "missing_or_unsupported",
+            }
+        )
+    return sorted(reports, key=lambda item: (item["topic"], item["direction"]))
+
+
 def _module_supported(module: str) -> bool:
     try:
         importlib.import_module(module)
@@ -208,6 +237,12 @@ def _call_name(value: ast.AST) -> str | None:
     return None
 
 
+def _literal_string(value: ast.AST) -> str | None:
+    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+        return value.value
+    return None
+
+
 def _owner_name(value: ast.AST) -> str | None:
     if isinstance(value, ast.Name):
         return value.id
@@ -219,6 +254,16 @@ def _owner_name(value: ast.AST) -> str | None:
 
 def _known_official_classes() -> set[str]:
     return set(_shim_class_modules())
+
+
+def _supported_topics() -> set[str]:
+    return {
+        "rt/arm_sdk",
+        "rt/lowcmd",
+        "rt/lowstate",
+        "rt/sportmodestate",
+        "rt/wirelesscontroller",
+    }
 
 
 def _shim_class_modules() -> dict[str, list[str]]:
@@ -237,11 +282,13 @@ def _summarize(examples: list[ExampleAudit]) -> dict[str, Any]:
     missing_imports = _unique_missing(item for example in examples for item in example.imports)
     missing_classes = _unique_missing(item for example in examples for item in example.classes)
     missing_methods = _unique_missing(item for example in examples for item in example.method_calls)
+    missing_topics = _unique_missing(item for example in examples for item in example.topics)
     return {
         "missing_imports": missing_imports,
         "missing_classes": missing_classes,
         "missing_methods": missing_methods,
-        "next_steps": _next_steps(missing_imports, missing_classes, missing_methods),
+        "missing_topics": missing_topics,
+        "next_steps": _next_steps(missing_imports, missing_classes, missing_methods, missing_topics),
     }
 
 
@@ -259,7 +306,12 @@ def _unique_missing(items) -> list[dict[str, Any]]:
     return result
 
 
-def _next_steps(missing_imports: list[dict[str, Any]], missing_classes: list[dict[str, Any]], missing_methods: list[dict[str, Any]]) -> list[str]:
+def _next_steps(
+    missing_imports: list[dict[str, Any]],
+    missing_classes: list[dict[str, Any]],
+    missing_methods: list[dict[str, Any]],
+    missing_topics: list[dict[str, Any]],
+) -> list[str]:
     steps = []
     if missing_imports:
         steps.append("Add or document missing unitree_sdk2py import surfaces used by official G1 examples.")
@@ -267,6 +319,8 @@ def _next_steps(missing_imports: list[dict[str, Any]], missing_classes: list[dic
         steps.append("Add simulator-safe shims for missing official SDK client classes before porting those examples.")
     if missing_methods:
         steps.append("Implement missing methods as explicit simulator approximations or mark them unsupported with clear errors.")
+    if missing_topics:
+        steps.append("Route or explicitly reject missing official DDS topics at the UnitreeSession boundary.")
     if not steps:
-        steps.append("All inspected official G1 examples import and call available Cybernetic SDK shim surfaces; run behavior-level validation next.")
+        steps.append("All inspected official G1 examples import, call, and use DDS topics available through Cybernetic SDK shim surfaces; run behavior-level validation next.")
     return steps

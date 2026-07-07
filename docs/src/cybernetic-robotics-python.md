@@ -460,19 +460,27 @@ MuJoCo + SDK2/CycloneDDS session. `LocoClient` and `AgvClient` delegate to
 they use local HTTP, while `CYBER_UNITREE_TRANSPORT=rpc_bridge` routes the
 supported high-level sport/agv/arm subset through the managed Unitree RPC
 bridge.
-`ChannelPublisher("rt/lowcmd")` and `ChannelSubscriber("rt/lowstate")` also
-cross the same session boundary. With `CYBER_UNITREE_TRANSPORT=dds` in
-simulator mode, `ChannelSubscriber("rt/lowstate")` reads from the managed
-official session and `ChannelPublisher("rt/lowcmd")` can publish one bounded,
-sanitized frame through `OfficialG1Sim.lowcmd_session()`. Sustained generic
-lowcmd streaming is still future work; DDS-mode locomotion remains clearly
-marked as a local simulator compatibility fallback instead of being presented
-as official CycloneDDS control.
+`ChannelPublisher("rt/lowcmd")`, `ChannelPublisher("rt/arm_sdk")`, and
+`ChannelSubscriber("rt/lowstate")` also cross the same session boundary. With
+`CYBER_UNITREE_TRANSPORT=dds` in simulator mode,
+`ChannelSubscriber("rt/lowstate")` reads from the managed official session and
+the two LowCmd publishers can publish one bounded, sanitized frame through
+`OfficialG1Sim.lowcmd_session()`. The `rt/arm_sdk` path mirrors Unitree's G1
+arm SDK examples, including slot 29 as the arm-sdk enable slot. Sustained
+generic lowcmd streaming is still future work; DDS-mode locomotion remains
+clearly marked as a local simulator compatibility fallback instead of being
+presented as official CycloneDDS control.
 
 Run the full example:
 
 ```sh
 python3 examples/g1_lowcmd_sdk.py
+```
+
+Run the official-style arm SDK topic example:
+
+```sh
+python3 examples/g1_arm_sdk_dds.py
 ```
 
 ## Named Joint Targets

@@ -403,7 +403,10 @@ Tasks:
   simulator DDS mode now routes through the managed official MuJoCo session,
   reads a safety `rt/lowstate` sample, fills unspecified motors with hold
   values, clamps fields, recomputes CRC inside the sidecar, and writes a
-  bounded frame. Remaining: sustained generic lowcmd streaming with explicit
+  bounded frame. Done for the official arm SDK topic:
+  `ChannelPublisher("rt/arm_sdk")` now uses the same managed official session
+  path, matching Unitree's G1 arm examples that enable the arm SDK through
+  motor slot 29. Remaining: sustained generic lowcmd streaming with explicit
   watchdogs and lease/safety gates.
 
 Reasoning: preserving the user API while replacing the transport is the trick.

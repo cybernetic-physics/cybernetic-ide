@@ -182,6 +182,14 @@ class UnitreeSession:
                         "created": lowstate.get("created"),
                         "role": lowstate.get("role"),
                     }
+                arm_sdk = channels.get("rt/arm_sdk")
+                if isinstance(arm_sdk, dict):
+                    diagnostics["topics"]["rt/arm_sdk"] = {
+                        "source": "official_sdk2_sidecar",
+                        "created": arm_sdk.get("created"),
+                        "role": arm_sdk.get("role"),
+                        "sample_motor_count": arm_sdk.get("sample_motor_count"),
+                    }
 
         diagnostics["ok"] = bool(diagnostics["ok"] and not any("requires" in item for item in warnings))
         return diagnostics
@@ -501,19 +509,10 @@ class UnitreeSession:
             }
 
         if self.config.transport == DDS and self.config.mode == SIM:
-            if topic != "rt/lowcmd":
-                return {
-                    "ok": False,
-                    "transport": DDS,
-                    "provider": "official_mujoco_dds_simulator",
-                    "topic": topic,
-                    "error": f"managed official DDS session does not yet support publishing {topic}",
-                    "supported_topics": ["rt/lowcmd"],
-                    "next_step": "Add a reviewed sidecar command for this topic before routing SDK writes through official DDS.",
-                }
             official = self._official(timeout=timeout)
             response = official.lowcmd_session(
                 motor_cmd=motor_cmd,
+                topic=topic,
                 mode_pr=int(mode_pr),
                 mode_machine=int(mode_machine),
                 crc=int(crc),
