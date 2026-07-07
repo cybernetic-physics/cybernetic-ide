@@ -189,6 +189,10 @@ Tasks:
   bounded official `rt/lowcmd` target for `right_shoulder_roll`, publishes 220
   of 220 frames, and verifies via official `rt/lowstate` that the joint moved
   from `0.0` to about `-0.289 rad`.
+- Done: parameterize `unitree_probe_official_mujoco_arm_motion` for official
+  G1 arm joint, target delta, frame count, and PD gains; verified a non-default
+  `left_elbow` run with `delta=0.18`, 120 of 120 official `rt/lowcmd` writes,
+  and `rt/lowstate` motion from `0.0` to about `0.207 rad`.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -283,7 +287,8 @@ Tasks:
   Agent profile so agents can prove safe official lowcmd writes before
   attempting deliberate motion.
 - Done: expose `unitree_probe_official_mujoco_arm_motion` in the default
-  Robotics Agent profile so agents can prove bounded official lowcmd motion.
+  Robotics Agent profile so agents can prove bounded official lowcmd motion
+  with configurable arm joint, target delta, frame count, and gains.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command

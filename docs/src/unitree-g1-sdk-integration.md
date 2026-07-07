@@ -212,9 +212,13 @@ arm-motion demos against the official peer.
 through the same official path. It reads initial `rt/lowstate`, builds a
 CRC-valid `LowCmd_` that holds the sampled posture while applying a small target
 to one arm joint, publishes the command sequence, then reads `rt/lowstate`
-again and checks displacement. The current verified run moved
-`right_shoulder_roll` from `0.0` to about `-0.289 rad` with a `-0.25 rad`
-target, while keeping the probe short-lived and explicitly simulator-only.
+again and checks displacement. The MCP tool is now parameterized for the
+official G1 arm joints, target delta, frame count, and PD gains so agents can
+try bounded left/right arm motions without editing the sidecar. Verified local
+runs include `right_shoulder_roll` from `0.0` to about `-0.289 rad` with a
+`-0.25 rad` target and `left_elbow` from `0.0` to about `0.207 rad` with a
+`0.18 rad` target over 120 successful `rt/lowcmd` writes, while keeping the
+probe short-lived and explicitly simulator-only.
 
 Runtime environment knobs:
 

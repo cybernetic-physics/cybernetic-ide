@@ -62,6 +62,22 @@ const VIEW_PRESETS = {
     commands: [{ action: "reset" }, { action: "orbit", dx: 45, dy: -12 }],
   },
 };
+const OFFICIAL_G1_ARM_JOINTS = [
+  "left_shoulder_pitch",
+  "left_shoulder_roll",
+  "left_shoulder_yaw",
+  "left_elbow",
+  "left_wrist_roll",
+  "left_wrist_pitch",
+  "left_wrist_yaw",
+  "right_shoulder_pitch",
+  "right_shoulder_roll",
+  "right_shoulder_yaw",
+  "right_elbow",
+  "right_wrist_roll",
+  "right_wrist_pitch",
+  "right_wrist_yaw",
+];
 
 const root = findRepoRoot(process.env.CYBER_ROBOTICS_ROOT || process.cwd());
 const jobs = new Map();
@@ -139,11 +155,66 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
-  tool("unitree_probe_official_mujoco_arm_motion", "Run the official Unitree MuJoCo G1 peer and verify a bounded SDK2/CycloneDDS single-arm-joint motion through rt/lowcmd.", {}, [], {
-    readOnlyHint: false,
-    idempotentHint: true,
-    openWorldHint: true,
-  }),
+  tool(
+    "unitree_probe_official_mujoco_arm_motion",
+    "Run the official Unitree MuJoCo G1 peer and verify a bounded SDK2/CycloneDDS single-arm-joint motion through rt/lowcmd.",
+    {
+      joint: {
+        type: "string",
+        enum: OFFICIAL_G1_ARM_JOINTS,
+        default: "right_shoulder_roll",
+        description: "Official Unitree HG arm joint to move.",
+      },
+      delta: {
+        type: "number",
+        minimum: -0.5,
+        maximum: 0.5,
+        default: -0.25,
+        description: "Target offset in radians from the first observed lowstate position.",
+      },
+      frames: {
+        type: "integer",
+        minimum: 20,
+        maximum: 600,
+        default: 220,
+        description: "Number of lowcmd frames to publish.",
+      },
+      kp: {
+        type: "number",
+        minimum: 0,
+        maximum: 80,
+        default: 35.0,
+        description: "PD proportional gain for the moving joint.",
+      },
+      kd: {
+        type: "number",
+        minimum: 0,
+        maximum: 5,
+        default: 1.2,
+        description: "PD derivative gain for the moving joint.",
+      },
+      hold_kp: {
+        type: "number",
+        minimum: 0,
+        maximum: 80,
+        default: 18.0,
+        description: "PD proportional gain used to hold non-target joints near their sampled positions.",
+      },
+      hold_kd: {
+        type: "number",
+        minimum: 0,
+        maximum: 5,
+        default: 0.8,
+        description: "PD derivative gain used to hold non-target joints near their sampled positions.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  ),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -639,7 +710,7 @@ async function callTool(name, args) {
     case "unitree_probe_official_mujoco_lowcmd":
       return textResult(sdk2ProbeOfficialMujocoLowcmd());
     case "unitree_probe_official_mujoco_arm_motion":
-      return textResult(sdk2ProbeOfficialMujocoArmMotion());
+      return textResult(sdk2ProbeOfficialMujocoArmMotion(args));
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -1635,13 +1706,29 @@ function sdk2ProbeOfficialMujocoLowcmd() {
   };
 }
 
-function sdk2ProbeOfficialMujocoArmMotion() {
+function sdk2ProbeOfficialMujocoArmMotion(options = {}) {
   const envPath = sdk2ComposeEnvPath();
   if (!fs.existsSync(envPath)) {
     throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
   }
-  const actionEnv = "CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion";
-  const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
+  const joint = OFFICIAL_G1_ARM_JOINTS.includes(options.joint) ? options.joint : "right_shoulder_roll";
+  const delta = clampNumber(options.delta, -0.5, 0.5, -0.25);
+  const frames = clampInt(options.frames, 20, 600, 220);
+  const kp = clampNumber(options.kp, 0, 80, 35.0);
+  const kd = clampNumber(options.kd, 0, 5, 1.2);
+  const holdKp = clampNumber(options.hold_kp, 0, 80, 18.0);
+  const holdKd = clampNumber(options.hold_kd, 0, 5, 0.8);
+  const env = [
+    "CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion",
+    `CYBER_UNITREE_ARM_MOTION_JOINT=${joint}`,
+    `CYBER_UNITREE_ARM_MOTION_DELTA=${delta}`,
+    `CYBER_UNITREE_ARM_MOTION_FRAMES=${frames}`,
+    `CYBER_UNITREE_ARM_MOTION_KP=${kp}`,
+    `CYBER_UNITREE_ARM_MOTION_KD=${kd}`,
+    `CYBER_UNITREE_ARM_MOTION_HOLD_KP=${holdKp}`,
+    `CYBER_UNITREE_ARM_MOTION_HOLD_KD=${holdKd}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm", ...env.flatMap((entry) => ["-e", entry]), "unitree-g1-sdk2-sidecar"];
   const result = runChecked("docker", args, { timeoutMs: 300_000 });
   let report = null;
   const jsonStart = result.stdout.indexOf("{");
@@ -1655,10 +1742,23 @@ function sdk2ProbeOfficialMujocoArmMotion() {
   }
   return {
     command: `docker ${args.join(" ")}`,
+    parameters: { joint, delta, frames, kp, kd, hold_kp: holdKp, hold_kd: holdKd },
     stdout: result.stdout,
     stderr: result.stderr,
     report,
   };
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
+function clampInt(value, min, max, fallback) {
+  return Math.round(clampNumber(value, min, max, fallback));
 }
 
 function readComposeEnv() {

@@ -115,10 +115,17 @@ Probe whether a bounded official lowcmd changes a G1 arm joint:
 docker compose \
   --env-file .runtime/unitree-g1-sdk2/compose.env \
   -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
-  run --rm -e CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion \
+  -e CYBER_UNITREE_ARM_MOTION_JOINT=left_elbow \
+  -e CYBER_UNITREE_ARM_MOTION_DELTA=0.18 \
+  -e CYBER_UNITREE_ARM_MOTION_FRAMES=120 \
   unitree-g1-sdk2-sidecar
 ```
 
-The current verified local result targets `right_shoulder_roll`, writes 220 of
-220 frames, and reads the joint moving from `0.0` to about `-0.289 rad` through
-official `rt/lowstate`.
+The MCP wrapper exposes the same knobs as bounded parameters: arm joint, target
+delta, frame count, moving-joint `kp`/`kd`, and hold-joint `kp`/`kd`. Verified
+local results include the default `right_shoulder_roll` probe writing 220 of
+220 frames and moving from `0.0` to about `-0.289 rad`, plus a parameterized
+`left_elbow` probe writing 120 of 120 frames and moving from `0.0` to about
+`0.207 rad` through official `rt/lowstate`.
