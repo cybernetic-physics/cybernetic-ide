@@ -133,6 +133,7 @@ class G1ArmActionClient:
         ]
         return 0, actions
 
+
 class LocoClient:
     """Simulator-backed subset of Unitree's official G1 `LocoClient`.
 
@@ -149,6 +150,10 @@ class LocoClient:
         self.last_response: dict[str, Any] | None = None
         self.first_shake_hand_stage_ = False
         self._simulator = SimulatorClient.from_env(timeout=self.timeout)
+        self._session = UnitreeSession(
+            UnitreeTransportConfig.from_env(RobotEndpoints.from_env()),
+            simulator=self._simulator,
+        )
 
     def SetTimeout(self, timeout: float):
         self.timeout = float(timeout)
@@ -298,9 +303,9 @@ class LocoClient:
 
     def _call_loco(self, action: str, **fields: Any) -> dict[str, Any]:
         try:
-            self.last_response = self._simulator.loco(action=action, **fields)
+            self.last_response = self._session.execute_loco_command(action, **fields)
         except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
-            self.last_response = {"ok": False, "error": str(error), "action": action}
+            self.last_response = {"ok": False, "error": str(error), "action": action, "transport": self._session.config.transport}
         return self.last_response
 
     def _code(self, response: dict[str, Any]) -> int:

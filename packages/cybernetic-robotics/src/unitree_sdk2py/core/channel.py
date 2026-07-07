@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import threading
 import time
 
+from cybernetic_robotics.session import UnitreeSession
 from cybernetic_robotics.simulator import SimulatorClient
 
 
@@ -48,14 +49,16 @@ class ChannelPublisher:
         if self.name not in {"rt/lowcmd", "rt/arm_sdk"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
-        SimulatorClient.from_env(timeout=timeout or 5.0).lowcmd(
+        response = _session_from_env(timeout or 5.0).publish_lowcmd(
+            self.name,
             motor_cmd,
-            topic=self.name,
             mode_pr=int(getattr(message, "mode_pr", 0)),
             mode_machine=int(getattr(message, "mode_machine", 0)),
             crc=int(getattr(message, "crc", 0)),
+            timeout=timeout or 5.0,
         )
-        return True
+        self.last_response = response
+        return bool(response.get("ok"))
 
     def Close(self):
         self.inited = False
@@ -88,7 +91,13 @@ class ChannelSubscriber:
             raise RuntimeError(f"ChannelSubscriber {self.name} is not initialized")
         client = SimulatorClient.from_env(timeout=float(timeout or 5.0))
         if self.name == "rt/lowstate":
-            return _lowstate_from_json(client.lowstate())
+            response = _session_from_env(float(timeout or 5.0)).read_lowstate()
+            self.last_response = response
+            if isinstance(response.get("lowstate"), dict):
+                return _lowstate_from_json(response["lowstate"], metadata=response)
+            if isinstance(response.get("lowstate_summary"), dict):
+                return _lowstate_from_summary(response["lowstate_summary"], metadata=response)
+            raise RuntimeError(response.get("error") or "lowstate unavailable through active Unitree provider")
         if self.name == "rt/sportmodestate":
             return _sportmode_from_status(client.status().raw)
         if self.name == "rt/wirelesscontroller":
@@ -115,10 +124,17 @@ def _motor_cmd_to_json(cmd) -> dict:
     }
 
 
-def _lowstate_from_json(value: dict):
+def _session_from_env(timeout: float) -> UnitreeSession:
+    session = UnitreeSession.from_env()
+    session.simulator.timeout = float(timeout)
+    return session
+
+
+def _lowstate_from_json(value: dict, *, metadata: dict | None = None):
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
 
     state = unitree_hg_msg_dds__LowState_()
+    _attach_metadata(state, metadata)
     state.mode_pr = int(value.get("mode_pr", 0))
     state.mode_machine = int(value.get("mode_machine", 0))
     state.crc = int(value.get("crc", 0))
@@ -140,6 +156,34 @@ def _lowstate_from_json(value: dict):
         target.dq = float(motor.get("dq", 0.0))
         target.tau_est = float(motor.get("tau_est", 0.0))
     return state
+
+
+def _lowstate_from_summary(value: dict, *, metadata: dict | None = None):
+    from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
+
+    state = unitree_hg_msg_dds__LowState_()
+    _attach_metadata(state, metadata)
+    state.mode_machine = int(value.get("mode_machine") or 0)
+    for motor in value.get("first_motors", []):
+        index = int(motor.get("index", -1))
+        if 0 <= index < len(state.motor_state):
+            target = state.motor_state[index]
+            target.q = float(motor.get("q", 0.0))
+            target.dq = float(motor.get("dq", 0.0))
+            target.tau_est = float(motor.get("tau_est", 0.0))
+            target.temperature[:] = list(motor.get("temperature", target.temperature))[:2]
+    imu = value.get("imu") if isinstance(value.get("imu"), dict) else {}
+    state.imu_state.quaternion[:] = list(imu.get("quaternion", state.imu_state.quaternion))[:4]
+    state.imu_state.gyroscope[:] = list(imu.get("gyroscope", state.imu_state.gyroscope))[:3]
+    state.imu_state.accelerometer[:] = list(imu.get("accelerometer", state.imu_state.accelerometer))[:3]
+    return state
+
+
+def _attach_metadata(state, metadata: dict | None) -> None:
+    metadata = metadata or {}
+    state.transport = metadata.get("transport")
+    state.provider = metadata.get("provider")
+    state.compatibility_fallback = bool(metadata.get("compatibility_fallback", False))
 
 
 def _sportmode_from_status(value: dict):

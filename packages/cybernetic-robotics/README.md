@@ -178,6 +178,10 @@ the managed official MuJoCo + SDK2/CycloneDDS session and verifies movement via
 official `rt/lowstate`. `G1ArmActionClient.ExecuteAction()` now reaches that
 path through `UnitreeSession.execute_arm_action()`, so the SDK facade has one
 provider boundary for local HTTP today and DDS-backed controls as they land.
+`LocoClient` and the lowcmd/lowstate channel shims use that same boundary. In
+DDS mode, locomotion and generic lowcmd publishes are labeled as local simulator
+compatibility fallbacks until official sport RPC and generic lowcmd streaming
+are promoted into the managed sidecar.
 
 G1 locomotion examples can use Unitree's `LocoClient` shape:
 

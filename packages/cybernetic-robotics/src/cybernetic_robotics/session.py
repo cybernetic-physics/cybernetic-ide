@@ -308,9 +308,106 @@ class UnitreeSession:
             "next_step": "Use simulator mode for SDK2/DDS development, then add reviewed real-mode safety gates.",
         }
 
+    def execute_loco_command(self, action: str, **fields: Any) -> dict[str, Any]:
+        """Execute a Unitree-shaped locomotion command through the active provider.
+
+        The official G1 `LocoClient` is RPC-over-DDS. Cybernetic has not yet
+        promoted that RPC path into the managed SDK2 sidecar, so simulator DDS
+        mode keeps the local HTTP compatibility behavior but marks it loudly as
+        a fallback rather than an official DDS locomotion command.
+        """
+
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "action": action,
+                "error": "real Unitree locomotion is locked until the real-hardware provider and safety gates are implemented",
+                "next_step": "Implement and review the real SDK2 LocoClient provider before enabling physical locomotion.",
+            }
+
+        response = self.simulator.loco(action=action, **fields)
+        if self.config.transport == DDS:
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "local_http_simulator_compatibility",
+                "official_dds_supported": False,
+                "compatibility_fallback": True,
+                "next_step": "Promote Unitree LocoClient RPCs into the managed official SDK2/CycloneDDS sidecar.",
+            }
+        return {
+            **response,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "compatibility_fallback": False,
+        }
+
+    def publish_lowcmd(
+        self,
+        topic: str,
+        motor_cmd: list[dict[str, Any]],
+        *,
+        mode_pr: int = 0,
+        mode_machine: int = 0,
+        crc: int = 0,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """Publish low-level motor commands through the active provider boundary."""
+
+        if topic not in {"rt/lowcmd", "rt/arm_sdk"}:
+            raise NotImplementedError(f"Cybernetic Unitree session publisher does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree lowcmd publishing is locked until the real-hardware provider and safety gates are implemented",
+                "next_step": "Implement reviewed real-mode lowcmd safety gates before enabling physical command publishing.",
+            }
+
+        previous_timeout = self.simulator.timeout
+        if timeout is not None:
+            self.simulator.timeout = float(timeout)
+        try:
+            response = self.simulator.lowcmd(
+                motor_cmd,
+                topic=topic,
+                mode_pr=int(mode_pr),
+                mode_machine=int(mode_machine),
+                crc=int(crc),
+            )
+        finally:
+            self.simulator.timeout = previous_timeout
+        if self.config.transport == DDS:
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "local_http_simulator_compatibility",
+                "official_dds_supported": False,
+                "compatibility_fallback": True,
+                "next_step": "Promote generic lowcmd streaming into the managed official SDK2/CycloneDDS sidecar.",
+            }
+        return {
+            **response,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "compatibility_fallback": False,
+        }
+
     def read_lowstate(self) -> dict[str, Any]:
         """Read lowstate telemetry through the active provider when possible."""
 
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "error": "real Unitree lowstate reading is locked until the real-hardware provider and safety gates are implemented",
+                "next_step": "Implement the reviewed real-mode DDS telemetry provider before reading physical robot state.",
+            }
         if self.config.transport == DDS and self.config.mode == SIM:
             response = self._official().lowstate_session()
             return {

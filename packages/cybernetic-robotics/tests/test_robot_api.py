@@ -603,11 +603,43 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(FakeG1Handler.loco["control_owner"], "internal")
                 self.assertEqual(FakeG1Handler.loco["internal_mode"], 2)
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
+                self.assertEqual(loco.last_response["transport"], "local_http")
+                self.assertEqual(loco.last_response["provider"], "local_http_simulator")
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_loco_client_marks_dds_mode_as_compatibility_fallback(self):
+        with FakeServer() as fake:
+            previous = {
+                "CYBER_G1_GAME_CONTROL_URL": os.environ.get("CYBER_G1_GAME_CONTROL_URL"),
+                "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+                "CYBER_UNITREE_MODE": os.environ.get("CYBER_UNITREE_MODE"),
+            }
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            os.environ["CYBER_UNITREE_TRANSPORT"] = "dds"
+            os.environ["CYBER_UNITREE_MODE"] = "sim"
+            try:
+                loco = LocoClient()
+                loco.SetTimeout(2.0)
+                loco.Init()
+
+                code = loco.Move(0.2, 0.0, 0.0)
+
+                self.assertEqual(code, 0)
+                self.assertEqual(loco.last_response["transport"], "dds")
+                self.assertEqual(loco.last_response["provider"], "local_http_simulator_compatibility")
+                self.assertTrue(loco.last_response["compatibility_fallback"])
+                self.assertFalse(loco.last_response["official_dds_supported"])
+                self.assertIn("LocoClient RPCs", loco.last_response["next_step"])
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
 
     def test_unitree_style_g1_agv_client_uses_simulator_motion(self):
         with FakeServer() as fake:
@@ -682,6 +714,8 @@ class RobotApiTests(unittest.TestCase):
                 publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
                 publisher.Init()
                 self.assertTrue(publisher.Write(lowcmd))
+                self.assertEqual(publisher.last_response["provider"], "local_http_simulator")
+                self.assertFalse(publisher.last_response["compatibility_fallback"])
 
                 subscriber = ChannelSubscriber("rt/lowstate", LowState_)
                 subscriber.Init()
@@ -696,6 +730,7 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(lowstate.crc, 12345)
                 self.assertTrue(lowstate.lowcmd_active)
                 self.assertFalse(lowstate.lowcmd_stale)
+                self.assertEqual(lowstate.provider, "local_http_simulator")
                 self.assertAlmostEqual(lowstate.lowcmd_age_seconds, 0.0)
                 self.assertAlmostEqual(lowstate.lowcmd_watchdog_seconds, 2.0)
                 self.assertAlmostEqual(lowstate.motor_state[1].q, 0.1)
@@ -709,6 +744,37 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_lowstate_channel_can_read_official_dds_summary(self):
+        class FakeOfficial:
+            def lowstate_session(self):
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "lowstate_summary": {
+                        "mode_machine": 5,
+                        "motor_count": 35,
+                        "first_motors": [
+                            {"index": 0, "q": 0.12, "dq": 0.03, "tau_est": 0.2, "temperature": [31, 32]},
+                            {"index": 1, "q": -0.2, "dq": 0.01, "tau_est": 0.1, "temperature": [30, 30]},
+                        ],
+                        "imu": {"quaternion": [1.0, 0.0, 0.0, 0.0], "gyroscope": [0.1, 0.2, 0.3]},
+                    },
+                }
+
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=FakeOfficial())
+
+        with patch("unitree_sdk2py.core.channel.UnitreeSession.from_env", return_value=session):
+            subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+            subscriber.Init()
+            lowstate = subscriber.Read()
+
+        self.assertEqual(lowstate.provider, "official_mujoco_dds_simulator")
+        self.assertEqual(lowstate.transport, "dds")
+        self.assertEqual(lowstate.mode_machine, 5)
+        self.assertAlmostEqual(lowstate.motor_state[0].q, 0.12)
+        self.assertEqual(lowstate.motor_state[0].temperature, [31, 32])
+        self.assertEqual(lowstate.imu_state.quaternion, [1.0, 0.0, 0.0, 0.0])
 
     def test_unitree_default_sport_mode_state_alias_matches_official_example_import(self):
         state = unitree_go_msg_dds__SportModeState_()

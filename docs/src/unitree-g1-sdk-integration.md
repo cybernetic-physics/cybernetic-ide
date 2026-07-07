@@ -538,6 +538,12 @@ The current repo has the first narrow version of that API boundary:
   there, so local simulator mode still uses GameControl HTTP while simulator DDS
   mode routes supported hand-raise poses through the managed official Unitree
   MuJoCo + SDK2/CycloneDDS session.
+- `LocoClient`, `ChannelPublisher("rt/lowcmd")`, and
+  `ChannelSubscriber("rt/lowstate")` now cross the same `UnitreeSession`
+  boundary. DDS-mode locomotion and generic lowcmd writes are still local
+  simulator compatibility fallbacks and are labeled that way in responses;
+  official `rt/lowstate` reads can flow through the managed session summary
+  path when the official peer is running.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,
@@ -600,6 +606,10 @@ The current repo has the first narrow version of that API boundary:
   routed through that provider boundary: local HTTP in default simulator mode,
   managed official MuJoCo + SDK2/CycloneDDS for supported hand-raise poses when
   `CYBER_UNITREE_TRANSPORT=dds`.
+- `UnitreeSession.execute_loco_command()`, `publish_lowcmd()`, and
+  `read_lowstate()` now cover the remaining normal SDK shim paths. This makes
+  fallback status explicit for DDS-mode `LocoClient` and lowcmd publishing, and
+  gives agents one place to inspect when promoting them to official DDS.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

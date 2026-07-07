@@ -356,12 +356,16 @@ it is still simulator-only and does not replace Unitree's full CycloneDDS
 transport or a real whole-body balance controller.
 
 Transport selection lives in `UnitreeSession`. The high-level
-`G1ArmActionClient` now delegates `ExecuteAction()` to
+`G1ArmActionClient` delegates `ExecuteAction()` to
 `UnitreeSession.execute_arm_action()`: by default that uses the local HTTP
 simulator, while `CYBER_UNITREE_TRANSPORT=dds` in simulator mode routes the
 currently supported bounded hand-raise poses to the managed official Unitree
-MuJoCo + SDK2/CycloneDDS session. This is the same provider boundary that will
-carry future DDS locomotion and lowcmd streaming work.
+MuJoCo + SDK2/CycloneDDS session. `LocoClient`, `ChannelPublisher("rt/lowcmd")`,
+and `ChannelSubscriber("rt/lowstate")` also cross the same session boundary.
+Until the managed sidecar grows official sport RPC and generic lowcmd streaming,
+DDS-mode locomotion and lowcmd calls are clearly marked as local simulator
+compatibility fallbacks instead of being presented as official CycloneDDS
+control.
 
 Run the full example:
 

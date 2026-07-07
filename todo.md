@@ -273,11 +273,15 @@ Tasks:
   `UnitreeSession.execute_arm_action()` so `G1ArmActionClient.ExecuteAction()`
   uses one provider boundary for local HTTP versus the managed official DDS
   session.
+- Done: route `LocoClient`, generic `ChannelPublisher("rt/lowcmd")`, and
+  `ChannelSubscriber("rt/lowstate")` through `UnitreeSession` too. DDS-mode
+  locomotion and lowcmd writes are still compatibility fallbacks, but they are
+  now explicitly labeled instead of pretending to be official CycloneDDS.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;
-  next candidates are `LocoClient`, generic `ChannelPublisher("rt/lowcmd")`,
-  and `ChannelSubscriber("rt/lowstate")`.
+  next candidates are official sport RPC for `LocoClient` and true sustained
+  SDK2/CycloneDDS generic lowcmd streaming.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must
