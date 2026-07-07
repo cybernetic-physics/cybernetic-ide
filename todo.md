@@ -277,6 +277,10 @@ Tasks:
   `ChannelSubscriber("rt/lowstate")` through `UnitreeSession` too. DDS-mode
   locomotion and lowcmd writes are still compatibility fallbacks, but they are
   now explicitly labeled instead of pretending to be official CycloneDDS.
+- Done: add `OfficialG1Sim.loco_rpc_session()` and MCP
+  `unitree_probe_official_mujoco_loco_rpc` so agents can test whether the
+  managed official Unitree MuJoCo peer actually serves G1 sport RPC topics
+  before routing `LocoClient` there.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

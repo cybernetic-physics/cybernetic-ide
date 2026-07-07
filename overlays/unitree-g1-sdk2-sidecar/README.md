@@ -116,6 +116,24 @@ docker compose \
 The MCP wrapper is `unitree_read_official_mujoco_lowstate`. Python users can
 call `OfficialG1Sim.lowstate_session()`.
 
+Probe whether the managed official peer answers G1 sport/LocoClient RPCs:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=probe_official_mujoco_loco_rpc \
+  -e CYBER_UNITREE_LOCO_RPC_TIMEOUT=2.0 \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper is `unitree_probe_official_mujoco_loco_rpc`. Python users can
+call `OfficialG1Sim.loco_rpc_session()`. This is deliberately a probe before a
+provider: it proves whether the official G1 peer serves
+`rt/api/sport/request` / `rt/api/sport/response` before the local `LocoClient`
+facade routes locomotion there.
+
 Command the managed official session with a bounded arm pose:
 
 ```sh

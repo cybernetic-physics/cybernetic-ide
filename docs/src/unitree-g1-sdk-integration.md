@@ -533,6 +533,11 @@ The current repo has the first narrow version of that API boundary:
   session, reads official `rt/lowstate`, commands an arm pose through the
   sustained `rt/lowcmd` peer, reads lowstate again, and stops the session unless
   `--keep-running` is passed.
+- `OfficialG1Sim.loco_rpc_session()` and MCP
+  `unitree_probe_official_mujoco_loco_rpc` probe the managed official peer's
+  G1 sport RPC surface on `rt/api/sport/request` and
+  `rt/api/sport/response`. This is the evidence gate before `LocoClient` can
+  stop being a labeled local-HTTP compatibility fallback in DDS mode.
 - `UnitreeSession.execute_arm_action()` is the transport-aware command boundary
   for high-level SDK arm actions. `G1ArmActionClient.ExecuteAction()` delegates
   there, so local simulator mode still uses GameControl HTTP while simulator DDS
@@ -610,6 +615,10 @@ The current repo has the first narrow version of that API boundary:
   `read_lowstate()` now cover the remaining normal SDK shim paths. This makes
   fallback status explicit for DDS-mode `LocoClient` and lowcmd publishing, and
   gives agents one place to inspect when promoting them to official DDS.
+- `unitree_probe_official_mujoco_loco_rpc` is the first official sport-RPC
+  probe. It uses Unitree's own Python `LocoClient` against the managed official
+  MuJoCo session and reports whether any `rt/api/sport/*` call receives a
+  response.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

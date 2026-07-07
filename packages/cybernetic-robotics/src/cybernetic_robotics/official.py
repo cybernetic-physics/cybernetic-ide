@@ -118,6 +118,29 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def loco_rpc_session(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
+        """Probe official G1 LocoClient sport RPCs against a managed session."""
+
+        env = {
+            "CYBER_UNITREE_ACTION": "probe_official_mujoco_loco_rpc",
+            "CYBER_UNITREE_LOCO_RPC_TIMEOUT": str(_clamp_float(timeout, 0.2, 10.0)),
+            "CYBER_UNITREE_LOCO_RPC_STOP_MOVE": "1" if include_stop else "0",
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        probe = report.get("loco_rpc_probe") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(probe, dict) and probe.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "request_topic": probe.get("request_topic") if isinstance(probe, dict) else "rt/api/sport/request",
+            "response_topic": probe.get("response_topic") if isinstance(probe, dict) else "rt/api/sport/response",
+            "probe": probe,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
         """Start the managed official Unitree MuJoCo DDS peer session.
 
@@ -395,6 +418,9 @@ class OfficialG1ManagedSession:
 
     def lowstate(self) -> dict[str, Any]:
         return self.sim.lowstate_session()
+
+    def loco_rpc(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
+        return self.sim.loco_rpc_session(include_stop=include_stop, timeout=timeout)
 
     def arm_pose(self, preset: str = "raise_right_hand", **kwargs: Any) -> dict[str, Any]:
         return self.sim.arm_pose_session(preset, **kwargs)

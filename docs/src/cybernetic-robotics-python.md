@@ -134,6 +134,7 @@ official = OfficialG1Sim.discover()
 
 with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
+    print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
     sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
 ```
@@ -152,7 +153,11 @@ the evidence bundle, and leaves the session running only when `--keep-running`
 is passed. If a script needs
 manual control instead of the context manager, use `official.start_session()`,
 `official.session_status()`, `official.lowstate_session()`, and
-`official.stop_session()`. With
+`official.loco_rpc_session()`, and `official.stop_session()`.
+`official.loco_rpc_session()` probes whether the managed official peer answers
+G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
+`rt/api/sport/response`; use that evidence before promoting local locomotion
+facade calls to official DDS routing. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
 
@@ -458,6 +463,7 @@ unitree_session_status
 unitree_sdk_compatibility_audit
 unitree_sdk_behavior_smoke
 unitree_read_official_mujoco_lowstate
+unitree_probe_official_mujoco_loco_rpc
 unitree_official_mujoco_evidence_bundle
 robotics_tool_reference
 unitree_sdk_scaffold_python

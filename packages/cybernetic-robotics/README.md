@@ -131,6 +131,7 @@ official = OfficialG1Sim.discover()
 
 with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
+    print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
     sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
 ```
@@ -138,7 +139,10 @@ with official.session() as sim:
 Pass `keep_running=True` to leave the Docker peer up for follow-up MCP or CLI
 commands. `arm_pose_evidence()` writes a reviewable JSON bundle with before and
 after official `rt/lowstate` summaries, the bounded command parameters, moved
-joints, and agent hints.
+joints, and agent hints. `loco_rpc()` probes whether the managed official peer
+answers G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
+`rt/api/sport/response` before local locomotion calls are promoted to official
+DDS routing.
 
 `cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
 Python examples with the local `unitree_sdk2py` shim. It reports import, class,

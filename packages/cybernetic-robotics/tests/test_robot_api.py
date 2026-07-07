@@ -1483,6 +1483,50 @@ class RobotApiTests(unittest.TestCase):
         command = " ".join(captured["args"])
         self.assertIn("CYBER_UNITREE_ACTION=read_official_mujoco_lowstate", command)
 
+    def test_official_g1_sim_can_probe_managed_session_loco_rpc(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "loco_rpc_probe": {
+                            "ok": True,
+                            "request_topic": "rt/api/sport/request",
+                            "response_topic": "rt/api/sport/response",
+                            "client_initialized": True,
+                            "calls": [{"name": "GetFsmId", "ok": True, "return": [0, 500]}],
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.loco_rpc_session(include_stop=True, timeout=1.5)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["request_topic"], "rt/api/sport/request")
+        self.assertEqual(result["probe"]["calls"][0]["return"], [0, 500])
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=probe_official_mujoco_loco_rpc", command)
+        self.assertIn("CYBER_UNITREE_LOCO_RPC_STOP_MOVE=1", command)
+        self.assertIn("CYBER_UNITREE_LOCO_RPC_TIMEOUT=1.5", command)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -205,6 +205,26 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
+  tool(
+    "unitree_probe_official_mujoco_loco_rpc",
+    "Probe whether the managed official Unitree MuJoCo G1 DDS peer serves the G1 LocoClient sport RPC topics.",
+    {
+      include_stop: {
+        type: "boolean",
+        default: false,
+        description: "Also issue a safe StopMove RPC after the read probe.",
+      },
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.2,
+        maximum: 10,
+        default: 2,
+        description: "Per-RPC timeout used by the official Unitree LocoClient.",
+      },
+    },
+    [],
+    { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  ),
   tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1093,6 +1113,8 @@ async function callTool(name, args) {
       return textResult(sdk2OfficialMujocoSessionStatus());
     case "unitree_read_official_mujoco_lowstate":
       return textResult(sdk2ReadOfficialMujocoLowstate());
+    case "unitree_probe_official_mujoco_loco_rpc":
+      return textResult(sdk2ProbeOfficialMujocoLocoRpc(args));
     case "unitree_stop_official_mujoco_session":
       return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
@@ -2397,6 +2419,12 @@ function roboticsToolReference() {
       toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
       toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),
       toolReference(
+        "unitree_probe_official_mujoco_loco_rpc",
+        "read-with-optional-stop",
+        "May send a safe StopMove RPC when include_stop is true.",
+        "Managed official MuJoCo DDS session running and ready.",
+      ),
+      toolReference(
         "unitree_official_mujoco_evidence_bundle",
         "robot-motion-with-evidence",
         "May start official MuJoCo session, commands a bounded arm pose, and writes JSON lowstate evidence.",
@@ -2791,6 +2819,47 @@ function sdk2ReadOfficialMujocoLowstate() {
   }
   const actionEnv = "CYBER_UNITREE_ACTION=read_official_mujoco_lowstate";
   const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ProbeOfficialMujocoLocoRpc(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+  const includeStop = options.include_stop === true;
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.2, 10, 2);
+  const env = [
+    "CYBER_UNITREE_ACTION=probe_official_mujoco_loco_rpc",
+    `CYBER_UNITREE_LOCO_RPC_TIMEOUT=${timeoutSeconds}`,
+    `CYBER_UNITREE_LOCO_RPC_STOP_MOVE=${includeStop ? 1 : 0}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm"];
+  for (const entry of env) {
+    args.push("-e", entry);
+  }
+  args.push("unitree-g1-sdk2-sidecar");
   const result = runChecked("docker", args, { timeoutMs: 120_000 });
   let report = null;
   const jsonStart = result.stdout.indexOf("{");

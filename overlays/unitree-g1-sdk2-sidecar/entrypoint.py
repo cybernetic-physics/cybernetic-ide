@@ -1301,6 +1301,79 @@ def command_official_mujoco_arm_pose(domain: int, interface: str | None) -> dict
     return report
 
 
+def probe_official_mujoco_loco_rpc(domain: int, interface: str | None) -> dict:
+    """Probe the official G1 sport/LocoClient RPC service on a managed session."""
+
+    timeout = float(os.environ.get("CYBER_UNITREE_LOCO_RPC_TIMEOUT", "2.0"))
+    include_stop = os.environ.get("CYBER_UNITREE_LOCO_RPC_STOP_MOVE", "0") == "1"
+    report = {
+        "action": "probe_official_mujoco_loco_rpc",
+        "request_topic": "rt/api/sport/request",
+        "response_topic": "rt/api/sport/response",
+        "domain": domain,
+        "interface": interface or None,
+        "timeout_seconds": timeout,
+        "client_initialized": False,
+        "calls": [],
+        "safe_motion_call_enabled": include_stop,
+    }
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+        client = LocoClient()
+        client.SetTimeout(timeout)
+        client.Init()
+        report["client_initialized"] = True
+
+        def record_call(name: str, fn) -> None:
+            started = time.monotonic()
+            entry = {"name": name}
+            try:
+                value = fn()
+                entry["ok"] = _loco_call_ok(value)
+                entry["return"] = _jsonable_return(value)
+            except Exception as exc:
+                entry["ok"] = False
+                entry["error"] = str(exc)
+            entry["elapsed_seconds"] = round(time.monotonic() - started, 4)
+            report["calls"].append(entry)
+
+        record_call("GetFsmId", client.GetFsmId)
+        if include_stop:
+            record_call("StopMove", client.StopMove)
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    report["ok"] = bool(report["client_initialized"] and any(call.get("ok") for call in report["calls"]))
+    if report["ok"]:
+        report["next_step"] = "Route CYBER_UNITREE_TRANSPORT=dds LocoClient calls to this official sport RPC path with safety gating."
+    elif report["client_initialized"]:
+        report["next_step"] = "The official LocoClient initialized but no sport RPC call succeeded; official unitree_mujoco may not serve rt/api/sport on this peer."
+    else:
+        report["next_step"] = "Fix official Unitree SDK2 Python LocoClient initialization before promoting locomotion to DDS."
+    return report
+
+
+def _loco_call_ok(value) -> bool:
+    if isinstance(value, tuple) and value:
+        return value[0] == 0
+    if isinstance(value, int):
+        return value == 0
+    return value is None
+
+
+def _jsonable_return(value):
+    if isinstance(value, tuple):
+        return [_jsonable_return(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, (list, dict)):
+        return value
+    return repr(value)
+
+
 def probe_official_sdk2(sdk2_python_root: str, domain: int, interface: str | None) -> dict:
     report = {
         "python_path_inserted": False,
@@ -1445,6 +1518,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "command_official_mujoco_arm_pose":
         report["arm_pose_command"] = command_official_mujoco_arm_pose(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_official_mujoco_loco_rpc":
+        report["loco_rpc_probe"] = probe_official_mujoco_loco_rpc(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "read_official_mujoco_lowstate":
         report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)
