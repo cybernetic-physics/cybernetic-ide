@@ -626,6 +626,11 @@ The current repo has the first narrow version of that API boundary:
   SDK/Dex3 state, visual scene metadata, provider diagnostics, checks, and
   optional screenshots beside the workspace so Codex/Claude-style agents can
   prove what changed after a scene edit, SDK command, or policy run.
+- `robot_behavior_trace` wraps that evidence path around one selected
+  simulator or G1 SDK-shaped command. It writes before/after evidence bundles,
+  then summarizes changed joints plus hand SDK/Dex3 deltas in a compact trace
+  manifest. Use it for agent-visible behavior proofs where a final screenshot
+  alone would be too weak.
 - `UnitreeSession.execute_arm_action()` is the first normal SDK facade method
   routed through that provider boundary: local HTTP in default simulator mode,
   managed official MuJoCo + SDK2/CycloneDDS for supported hand-raise poses when

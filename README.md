@@ -334,6 +334,9 @@ ad hoc scripts first. The default tool surface includes:
   lowstate, named joint state, hand state, provider diagnostics, visual scene
   metadata, and optional screenshots into one reviewable JSON artifact for
   Agent-panel work;
+- behavior tracing: `robot_behavior_trace`, which runs one selected simulator
+  or G1 SDK-shaped command and writes before/after evidence bundles plus joint
+  and hand telemetry deltas for review;
 - learned policy runtime: `sim_policy_status`, `sim_policy_start`, and
   `sim_policy_stop`, which control the optional LocoMuJoCo-trained yoga policy
   when a deploy bundle is mounted into the simulator;
@@ -453,6 +456,9 @@ the next engineering step.
 Use `robot_evidence_bundle` after an agent edits a scene, runs a script, or
 commands a pose; it persists the telemetry and screenshot evidence needed to
 review the result without relying on a transient chat description.
+Use `robot_behavior_trace` when the agent is about to run a single deliberate
+motion command and needs before/after proof in one artifact; it writes sibling
+evidence bundles plus a compact delta summary for joints and hand state.
 - `CYBER_G1_GAME_CONTROL_URL`: GameControl base URL for Python examples.
 - `CYBER_G1_WS_HOST` and `CYBER_G1_WS_PORT`: WebSocket host/port for
   `examples/control_g1_sim.py`.

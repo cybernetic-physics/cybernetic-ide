@@ -738,6 +738,65 @@ const tools = [
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
   tool(
+    "robot_behavior_trace",
+    "Execute one simulator G1 command and write before/after evidence bundles with telemetry and screenshot deltas.",
+    {
+      output_path: {
+        type: "string",
+        default: ".runtime/robot-behavior-traces/latest.json",
+        description: "Workspace-relative JSON trace manifest path.",
+      },
+      label: {
+        type: "string",
+        default: "latest",
+        description: "Filesystem-safe label used for trace and snapshot filenames.",
+      },
+      command: {
+        type: "string",
+        enum: [
+          "sim_pose",
+          "sim_reset",
+          "sim_pause",
+          "sim_resume",
+          "sim_step",
+          "g1_execute_action",
+          "g1_loco_command",
+          "g1_agv_command",
+          "g1_motion_switcher",
+          "g1_apply_joint_targets",
+          "g1_lowcmd",
+          "g1_hand_sdk",
+          "g1_dex3_command",
+          "safety_stop",
+        ],
+        default: "g1_execute_action",
+      },
+      command_args: {
+        type: "object",
+        description: "Arguments passed to the selected command, for example {\"action\":\"raise_right_hand\"}.",
+      },
+      settle_steps: {
+        type: "integer",
+        minimum: 0,
+        maximum: 60,
+        default: 3,
+        description: "Number of simulator step commands to issue after the command before capturing after evidence.",
+      },
+      include_snapshots: {
+        type: "boolean",
+        default: true,
+        description: "Capture before/after viewer frames beside the evidence bundles.",
+      },
+      snapshot_format: {
+        type: "string",
+        enum: ["jpeg", "png"],
+        default: "jpeg",
+      },
+    },
+    ["command"],
+    { readOnlyHint: false, idempotentHint: false, openWorldHint: true },
+  ),
+  tool(
     "sim_apply_pose",
     "Apply a named simulator pose, such as raise_right_hand or neutral.",
     {
@@ -1446,6 +1505,8 @@ async function callTool(name, args) {
       return textResult(await validateBehavior(args));
     case "robot_evidence_bundle":
       return textResult(await robotEvidenceBundle(args));
+    case "robot_behavior_trace":
+      return textResult(await robotBehaviorTrace(args));
     case "sim_apply_pose":
       return textResult(await command({ command: "pose", pose: args.pose || DEFAULT_POSE }));
     case "sim_policy_status":
@@ -2153,6 +2214,178 @@ async function robotEvidenceBundle(args = {}) {
   };
   await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
+}
+
+async function robotBehaviorTrace(args = {}) {
+  const manifestPath = safeWorkspacePath(args.output_path || ".runtime/robot-behavior-traces/latest.json");
+  const baseDir = path.dirname(manifestPath);
+  const label = safeSegment(args.label || path.basename(manifestPath, path.extname(manifestPath)) || "latest");
+  const format = args.snapshot_format === "png" ? "png" : "jpeg";
+  const includeSnapshots = args.include_snapshots !== false;
+  const settleSteps = clampInt(args.settle_steps, 0, 60, 3);
+  const commandName = String(args.command || "g1_execute_action");
+  const commandArgs = args.command_args && typeof args.command_args === "object" ? args.command_args : {};
+  await fsp.mkdir(baseDir, { recursive: true });
+
+  const before = await robotEvidenceBundle({
+    output_path: path.relative(root, path.join(baseDir, `${label}-before.json`)),
+    label: `${label}-before`,
+    include_snapshot: includeSnapshots,
+    include_snapshot_series: false,
+    snapshot_format: format,
+  });
+
+  let commandResult;
+  let commandError = null;
+  try {
+    commandResult = await executeTraceCommand(commandName, commandArgs);
+  } catch (error) {
+    commandError = error.message;
+    commandResult = { ok: false, error: error.message };
+  }
+
+  let settleResult = null;
+  if (!commandError && settleSteps > 0) {
+    settleResult = await repeatStep(settleSteps).catch((error) => ({ ok: false, error: error.message }));
+  }
+
+  const after = await robotEvidenceBundle({
+    output_path: path.relative(root, path.join(baseDir, `${label}-after.json`)),
+    label: `${label}-after`,
+    include_snapshot: includeSnapshots,
+    include_snapshot_series: false,
+    snapshot_format: format,
+  });
+
+  const checks = [
+    {
+      name: "before_evidence_ok",
+      ok: before.ok === true,
+      message: before.ok === true ? "before evidence checks passed" : "before evidence has failing checks",
+    },
+    {
+      name: "command_ok",
+      ok: commandResult?.ok !== false && !commandError,
+      message: commandError || "command returned without error",
+    },
+    {
+      name: "after_evidence_ok",
+      ok: after.ok === true,
+      message: after.ok === true ? "after evidence checks passed" : "after evidence has failing checks",
+    },
+  ];
+
+  const manifest = {
+    ok: checks.every((check) => check.ok),
+    label,
+    captured_at: new Date().toISOString(),
+    output_path: manifestPath,
+    workspace_relative_output_path: path.relative(root, manifestPath),
+    command: {
+      name: commandName,
+      args: commandArgs,
+      result: commandResult,
+      settle_steps: settleSteps,
+      settle_result: settleResult,
+    },
+    checks,
+    deltas: summarizeTraceDeltas(before, after),
+    before: {
+      manifest_path: before.output_path,
+      workspace_relative_manifest_path: before.workspace_relative_output_path,
+      summary: before.summary,
+      snapshot: before.snapshot,
+    },
+    after: {
+      manifest_path: after.output_path,
+      workspace_relative_manifest_path: after.workspace_relative_output_path,
+      summary: after.summary,
+      snapshot: after.snapshot,
+    },
+    agent_hints: [
+      "Open the before/after manifests for full telemetry and screenshot evidence.",
+      "Use deltas.changed_joints to confirm expected arm or locomotion effects.",
+      "Use deltas.hand_sdk_changed and deltas.dex3_changed for hand-intent evidence.",
+    ],
+  };
+  await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
+
+async function executeTraceCommand(name, commandArgs) {
+  switch (name) {
+    case "sim_pose":
+      return command({ command: "pose", pose: commandArgs.pose || DEFAULT_POSE });
+    case "sim_reset":
+      return command({ command: "reset" });
+    case "sim_pause":
+      return command({ command: "pause" });
+    case "sim_resume":
+      return command({ command: "resume" });
+    case "sim_step":
+      return repeatStep(clampInt(commandArgs.count, 1, 100, 1));
+    case "g1_execute_action":
+      return executeG1Action(commandArgs.action || DEFAULT_POSE);
+    case "g1_loco_command":
+      return executeG1LocoCommand(commandArgs);
+    case "g1_agv_command":
+      return executeG1AgvCommand(commandArgs);
+    case "g1_motion_switcher":
+      return executeG1MotionSwitcher(commandArgs);
+    case "g1_apply_joint_targets":
+      return executeG1JointTargets(commandArgs);
+    case "g1_lowcmd":
+      return executeG1Lowcmd(commandArgs);
+    case "g1_hand_sdk":
+      return executeG1HandSdk(commandArgs);
+    case "g1_dex3_command":
+      return executeG1Dex3Command(commandArgs);
+    case "safety_stop":
+      return safetyStop();
+    default:
+      throw new Error(`Unsupported robot_behavior_trace command: ${name}`);
+  }
+}
+
+function summarizeTraceDeltas(before, after) {
+  const beforeJoints = before?.joint_state?.by_name && typeof before.joint_state.by_name === "object" ? before.joint_state.by_name : {};
+  const afterJoints = after?.joint_state?.by_name && typeof after.joint_state.by_name === "object" ? after.joint_state.by_name : {};
+  const changedJoints = [];
+  for (const jointName of Object.keys(afterJoints).sort()) {
+    const beforeJoint = beforeJoints[jointName] || {};
+    const afterJoint = afterJoints[jointName] || {};
+    const beforeQ = Number(beforeJoint.q);
+    const afterQ = Number(afterJoint.q);
+    if (!Number.isFinite(beforeQ) || !Number.isFinite(afterQ)) {
+      continue;
+    }
+    const deltaQ = afterQ - beforeQ;
+    if (Math.abs(deltaQ) >= 0.001) {
+      changedJoints.push({
+        joint_name: jointName,
+        before_q: beforeQ,
+        after_q: afterQ,
+        delta_q: deltaQ,
+      });
+    }
+  }
+  changedJoints.sort((left, right) => Math.abs(right.delta_q) - Math.abs(left.delta_q));
+
+  const beforeHandSdk = before?.hand_state?.hand_sdk || {};
+  const afterHandSdk = after?.hand_state?.hand_sdk || {};
+  const beforeDex3 = before?.hand_state?.dex3 || {};
+  const afterDex3 = after?.hand_state?.dex3 || {};
+
+  return {
+    changed_joint_count: changedJoints.length,
+    changed_joints: changedJoints.slice(0, 16),
+    hand_sdk_changed: JSON.stringify(beforeHandSdk) !== JSON.stringify(afterHandSdk),
+    dex3_changed: JSON.stringify(beforeDex3) !== JSON.stringify(afterDex3),
+    before_hand_sdk_intent: beforeHandSdk.intent || null,
+    after_hand_sdk_intent: afterHandSdk.intent || null,
+    before_dex3_hands: Object.keys(beforeDex3.hands || {}),
+    after_dex3_hands: Object.keys(afterDex3.hands || {}),
+  };
 }
 
 function settledValue(result) {
@@ -2933,6 +3166,12 @@ function roboticsToolReference() {
         "evidence-write",
         "Writes simulator status, lowstate, joint state, provider diagnostics, and optional screenshots into one JSON bundle.",
         "Simulator HTTP endpoint reachable; renderer needed for image evidence.",
+      ),
+      toolReference(
+        "robot_behavior_trace",
+        "robot-motion-with-evidence",
+        "Runs one selected G1/simulator command and writes before/after evidence bundles plus telemetry deltas.",
+        "Simulator HTTP endpoint reachable; use safety_stop after exploratory motion.",
       ),
       toolReference(
         "viewer_camera_control",

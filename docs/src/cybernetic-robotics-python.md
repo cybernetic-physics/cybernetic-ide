@@ -589,6 +589,7 @@ viewer_snapshot_file
 viewer_snapshot_series
 sim_validate_behavior
 robot_evidence_bundle
+robot_behavior_trace
 unitree_provider_status
 unitree_session_status
 unitree_sdk_compatibility_audit
@@ -631,6 +632,12 @@ writes a workspace JSON manifest containing `/status`, `/lowstate`,
 diagnostics, check results, and optional current/series screenshots. Use it
 after scene edits, SDK scripts, or pose commands when the agent needs durable
 evidence instead of a transient viewer glance.
+`robot_behavior_trace` is the one-call version for deliberate motion: it
+captures a before evidence bundle, runs one selected simulator or G1
+SDK-shaped command, optionally steps the simulator, captures an after bundle,
+and writes a compact trace manifest with changed joints plus hand SDK/Dex3
+deltas. Use it when the agent needs to prove what a command changed rather
+than just inspect the final state.
 `g1_safety_check` is the quick pre-motion check: it reads `/status` and
 `/lowstate`, then applies Unitree G1-inspired termination predicates for bad
 orientation, high joint velocity, high angular velocity, motor temperature,
