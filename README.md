@@ -229,10 +229,11 @@ Dockerized MuJoCo command:
 That direct pose command is intentionally transitional. The user-facing API is
 already aligned with Unitree SDK2; the backend can move toward official
 `unitree_mujoco` + SDK2/CycloneDDS topics without changing example code.
-For the current opt-in official path, `examples/g1_official_raise_hand.py` and
-`cyber-g1 official raise-hand` launch the official sidecar peer and verify a
-bounded multi-joint `raise_right_hand` pose through real `rt/lowcmd` /
-`rt/lowstate`.
+For the current opt-in official path, `cyber-g1 official status` checks SDK2
+imports, CycloneDDS domain initialization, channel creation, and official
+MuJoCo peer readiness. `examples/g1_official_raise_hand.py` and `cyber-g1
+official raise-hand` launch the official sidecar peer and verify a bounded
+multi-joint `raise_right_hand` pose through real `rt/lowcmd` / `rt/lowstate`.
 
 ## Running the G1 LocoClient Demo
 

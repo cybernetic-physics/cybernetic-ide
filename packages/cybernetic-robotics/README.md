@@ -55,6 +55,7 @@ with G1Robot.connect() as robot:
 cyber-g1 status
 cyber-g1 diagnostics
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 official status
 cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10
 cyber-g1 step --count 20
@@ -64,8 +65,9 @@ cyber-g1 demo
 `cyber-g1 diagnostics` is the quickest way to see what the SDK-shaped bridge is
 actually using. It reports `transport=local_http|dds`, `mode=sim|real`, DDS
 domain/interface, simulator reachability, and `rt/lowcmd` / `rt/lowstate`
-freshness. The `dds` transport is intentionally diagnostic-only until the
-official SDK2/CycloneDDS sidecar is wired in.
+freshness. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode it also runs
+the official sidecar status probe and reports SDK2 import, CycloneDDS domain,
+channel creation, and official MuJoCo peer readiness.
 
 The same data is available from Python:
 
@@ -91,15 +93,18 @@ print(result["ok"], result["moved_joints"])
 Or from the CLI:
 
 ```sh
+cyber-g1 official status
 cyber-g1 official raise-hand
 python3 examples/g1_official_raise_hand.py
 ```
 
-This launches the official `unitree_mujoco` G1 peer in the sidecar, publishes a
-bounded multi-joint HG `LowCmd_` pose over `rt/lowcmd`, and verifies moved
-joints through official `rt/lowstate`. It is deliberately short-lived and
-simulator-only. The long-lived DDS session provider is still the next backend
-step.
+`official status` is read-only: it checks the sidecar setup, SDK2 imports,
+CycloneDDS domain initialization, channel creation, source revisions, and
+official MuJoCo peer plan. `official raise-hand` launches the official
+`unitree_mujoco` G1 peer in the sidecar, publishes a bounded multi-joint HG
+`LowCmd_` pose over `rt/lowcmd`, and verifies moved joints through official
+`rt/lowstate`. Both are deliberately short-lived and simulator-only. The
+long-lived DDS session provider is still the next backend step.
 
 ## Unitree SDK2-Shaped API
 

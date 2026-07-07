@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
 
     official = subcommands.add_parser("official")
     official_subcommands = official.add_subparsers(dest="official_command", required=True)
+    official_subcommands.add_parser("status")
     official_raise = official_subcommands.add_parser("raise-hand")
     _add_official_pose_options(official_raise)
     official_pose = official_subcommands.add_parser("pose")
@@ -133,6 +134,8 @@ def _add_official_pose_options(parser: argparse.ArgumentParser) -> None:
 
 def _official_command(args: argparse.Namespace) -> int:
     official = OfficialG1Sim.discover()
+    if args.official_command == "status":
+        return _print(official.status())
     options = {
         "frames": args.frames,
         "kp": args.kp,

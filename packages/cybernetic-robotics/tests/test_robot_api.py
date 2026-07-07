@@ -492,6 +492,39 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_unitree_session_diagnostics_uses_official_sidecar_for_sim_dds(self):
+        class FakeOfficial:
+            def status(self):
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_sdk2_sidecar",
+                    "sdk2_probe": {
+                        "domain_initialized": True,
+                        "domain": 1,
+                        "network_interface": "lo",
+                        "channels": {
+                            "rt/lowcmd": {"role": "publisher", "created": True, "sample_motor_count": 35},
+                            "rt/lowstate": {"role": "subscriber", "created": True},
+                        },
+                    },
+                    "official_mujoco_peer": {"binary_exists": True, "scene_exists": True},
+                    "expected_topics": ["rt/lowcmd", "rt/lowstate"],
+                    "next_step": "launch official unitree_mujoco",
+                }
+
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            config = UnitreeTransportConfig(transport="dds", mode="sim", endpoints=endpoints)
+            diagnostics = UnitreeSession(config, SimulatorClient(endpoints), official=FakeOfficial()).diagnostics()
+
+        self.assertTrue(diagnostics["ok"])
+        self.assertTrue(diagnostics["implemented"])
+        self.assertTrue(diagnostics["official_sidecar"]["ok"])
+        self.assertTrue(diagnostics["official_sidecar"]["domain_initialized"])
+        self.assertEqual(diagnostics["topics"]["rt/lowcmd"]["source"], "official_sdk2_sidecar")
+        self.assertEqual(diagnostics["topics"]["rt/lowcmd"]["sample_motor_count"], 35)
+        self.assertTrue(diagnostics["topics"]["rt/lowstate"]["created"])
+
     def test_lowcmd_rejects_malformed_command_lists(self):
         with FakeServer() as fake:
             client = SimulatorClient(RobotEndpoints(game_control_url=fake.url))
@@ -624,6 +657,40 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ARM_POSE_PRESET=raise_right_hand", command)
         self.assertIn("CYBER_UNITREE_ARM_POSE_FRAMES=600", command)
         self.assertIn("unitree-g1-sdk2-sidecar", command)
+
+    def test_official_g1_sim_status_reports_sdk2_sidecar_readiness(self):
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "expected_topics": ["rt/lowcmd", "rt/lowstate"],
+                        "sdk2_probe": {
+                            "domain_initialized": True,
+                            "channels": {
+                                "rt/lowcmd": {"created": True, "sample_motor_count": 35},
+                                "rt/lowstate": {"created": True},
+                            },
+                        },
+                        "official_mujoco_peer": {"binary_exists": True, "scene_exists": True},
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            status = OfficialG1Sim(root, _runner=fake_runner).status()
+
+        self.assertTrue(status["ok"])
+        self.assertEqual(status["source"], "official_unitree_mujoco_sdk2_sidecar")
+        self.assertEqual(status["expected_topics"], ["rt/lowcmd", "rt/lowstate"])
+        self.assertTrue(status["official_mujoco_peer"]["binary_exists"])
 
 
 if __name__ == "__main__":

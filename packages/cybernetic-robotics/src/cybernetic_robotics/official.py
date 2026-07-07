@@ -74,6 +74,26 @@ class OfficialG1Sim:
     def raise_left_hand(self, **kwargs: Any) -> dict[str, Any]:
         return self.arm_pose("raise_left_hand", **kwargs)
 
+    def status(self) -> dict[str, Any]:
+        """Inspect the official SDK2 sidecar without commanding motion."""
+
+        completed = self._run_sidecar({})
+        report = _parse_json_report(completed.stdout)
+        sdk2_probe = report.get("sdk2_probe") if isinstance(report, dict) else None
+        peer = report.get("official_mujoco_peer") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(sdk2_probe, dict) and sdk2_probe.get("domain_initialized")),
+            "source": "official_unitree_mujoco_sdk2_sidecar",
+            "sdk2_probe": sdk2_probe,
+            "official_mujoco_peer": peer,
+            "expected_topics": report.get("expected_topics", []) if isinstance(report, dict) else [],
+            "sources": report.get("sources", {}) if isinstance(report, dict) else {},
+            "next_step": report.get("next_step") if isinstance(report, dict) else None,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, {})),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def arm_pose(
         self,
         preset: str = "raise_right_hand",

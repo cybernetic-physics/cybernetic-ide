@@ -230,13 +230,15 @@ verified `raise_right_hand` preset moved five target joints
 the developer-facing "raise hand" SDK demo than isolated joint pokes.
 
 The Python package now exposes that same official proof path through
-`OfficialG1Sim` and `cyber-g1 official raise-hand`, so a developer can stay in
-the Cybernetic SDK instead of hand-writing MCP or Docker Compose commands:
+`OfficialG1Sim`, `cyber-g1 official status`, and `cyber-g1 official
+raise-hand`, so a developer can stay in the Cybernetic SDK instead of
+hand-writing MCP or Docker Compose commands:
 
 ```python
 from cybernetic_robotics import OfficialG1Sim
 
 official = OfficialG1Sim.discover()
+print(official.status()["ok"])
 print(official.raise_right_hand()["moved_joints"])
 ```
 
@@ -496,7 +498,10 @@ The current repo has the first narrow version of that API boundary:
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the current transport boundary:
   `local_http` versus planned `dds`, sim/real mode, DDS domain/interface,
-  simulator reachability, and topic freshness.
+  simulator reachability, and topic freshness. With
+  `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, Python diagnostics now also
+  call the official sidecar status probe and report SDK2 import, CycloneDDS
+  domain, channel creation, and official MuJoCo peer readiness.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

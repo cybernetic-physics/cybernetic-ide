@@ -200,6 +200,9 @@ Tasks:
 - Done: add `OfficialG1Sim` and `cyber-g1 official raise-hand` so Python users
   can trigger that official Unitree MuJoCo + SDK2/CycloneDDS hand-raise proof
   without writing Docker Compose or MCP boilerplate.
+- Done: add `OfficialG1Sim.status()`, `cyber-g1 official status`, and
+  `CYBER_UNITREE_TRANSPORT=dds` Python session diagnostics that report official
+  sidecar SDK2/CycloneDDS channel creation and MuJoCo peer readiness.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -210,10 +213,11 @@ Tasks:
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,
-  sim/real mode, DDS domain, interface, topic freshness, and lowcmd timestamps.
-- Remaining: connect `unitree_session_status` and the Python SDK facade to the
-  real SDK2/CycloneDDS sidecar session instead of keeping DDS as a separate
-  opt-in probe path.
+  sim/real mode, DDS domain, interface, topic freshness, lowcmd timestamps, and
+  official sidecar readiness when `transport=dds` in simulator mode.
+- Remaining: connect `unitree_session_status` and the normal Python SDK facade
+  to a long-lived real SDK2/CycloneDDS sidecar session instead of only
+  short-lived official probes.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

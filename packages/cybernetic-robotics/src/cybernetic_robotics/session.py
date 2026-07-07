@@ -73,9 +73,11 @@ class UnitreeSession:
         self,
         config: UnitreeTransportConfig | None = None,
         simulator: SimulatorClient | None = None,
+        official: Any | None = None,
     ):
         self.config = config or UnitreeTransportConfig.from_env()
         self.simulator = simulator or SimulatorClient(self.config.endpoints)
+        self.official = official
 
     @classmethod
     def from_env(cls) -> "UnitreeSession":
@@ -90,13 +92,26 @@ class UnitreeSession:
             "channel_factory": channel_factory,
             "warnings": [],
             "simulator": None,
+            "official_sidecar": None,
             "topics": {},
         }
         warnings = diagnostics["warnings"]
 
-        if self.config.transport == DDS:
+        official_status: dict[str, Any] | None = None
+        if self.config.transport == DDS and self.config.mode == SIM:
+            try:
+                official_status = self._official_status()
+                diagnostics["official_sidecar"] = _summarize_official_status(official_status)
+                if diagnostics["official_sidecar"]["ok"]:
+                    diagnostics["implemented"] = True
+                else:
+                    warnings.append("official SDK2 sidecar status did not pass")
+            except Exception as error:  # noqa: BLE001 - diagnostics should expose setup problems.
+                warnings.append(f"official SDK2 sidecar unavailable: {error}")
+                diagnostics["official_sidecar"] = {"ok": False, "error": str(error)}
+        elif self.config.transport == DDS:
             warnings.append(
-                "dds transport is selected but Cybernetic's Python package still uses the local_http simulator shim"
+                "dds transport is selected outside simulator mode; real hardware control still requires a long-lived official provider"
             )
         if self.config.mode == REAL:
             if not self.config.network_interface:
@@ -125,7 +140,8 @@ class UnitreeSession:
                 "message_count": lowcmd.get("motor_cmd_count"),
             }
         except Exception as error:  # noqa: BLE001 - diagnostics should report, not hide, runtime state.
-            diagnostics["ok"] = False
+            if self.config.transport != DDS:
+                diagnostics["ok"] = False
             diagnostics["simulator"] = {"reachable": False, "error": str(error)}
 
         try:
@@ -143,8 +159,37 @@ class UnitreeSession:
         except Exception as error:  # noqa: BLE001
             diagnostics["topics"]["rt/lowstate"] = {"available": False, "error": str(error)}
 
+        if official_status:
+            sdk2_probe = official_status.get("sdk2_probe") or {}
+            channels = sdk2_probe.get("channels") if isinstance(sdk2_probe, dict) else {}
+            if isinstance(channels, dict):
+                lowcmd = channels.get("rt/lowcmd")
+                if isinstance(lowcmd, dict):
+                    diagnostics["topics"]["rt/lowcmd"] = {
+                        **diagnostics["topics"].get("rt/lowcmd", {}),
+                        "source": "official_sdk2_sidecar",
+                        "created": lowcmd.get("created"),
+                        "role": lowcmd.get("role"),
+                        "sample_motor_count": lowcmd.get("sample_motor_count"),
+                    }
+                lowstate = channels.get("rt/lowstate")
+                if isinstance(lowstate, dict):
+                    diagnostics["topics"]["rt/lowstate"] = {
+                        **diagnostics["topics"].get("rt/lowstate", {}),
+                        "source": "official_sdk2_sidecar",
+                        "created": lowstate.get("created"),
+                        "role": lowstate.get("role"),
+                    }
+
         diagnostics["ok"] = bool(diagnostics["ok"] and not any("requires" in item for item in warnings))
         return diagnostics
+
+    def _official_status(self) -> dict[str, Any]:
+        if self.official is not None:
+            return self.official.status()
+        from .official import OfficialG1Sim
+
+        return OfficialG1Sim.discover().status()
 
 
 def _choice(value: str | None, allowed: set[str], default: str) -> str:
@@ -173,3 +218,25 @@ def _channel_factory() -> dict[str, Any]:
         }
     except Exception as error:  # noqa: BLE001
         return {"initialized": False, "error": str(error)}
+
+
+def _summarize_official_status(status: dict[str, Any]) -> dict[str, Any]:
+    sdk2_probe = status.get("sdk2_probe") or {}
+    peer = status.get("official_mujoco_peer") or {}
+    return {
+        "ok": bool(status.get("ok")),
+        "source": status.get("source"),
+        "domain_initialized": bool(sdk2_probe.get("domain_initialized")) if isinstance(sdk2_probe, dict) else False,
+        "dds_domain_id": sdk2_probe.get("domain") if isinstance(sdk2_probe, dict) else None,
+        "network_interface": sdk2_probe.get("network_interface") if isinstance(sdk2_probe, dict) else None,
+        "lowcmd_channel_created": bool((sdk2_probe.get("channels") or {}).get("rt/lowcmd", {}).get("created"))
+        if isinstance(sdk2_probe, dict)
+        else False,
+        "lowstate_channel_created": bool((sdk2_probe.get("channels") or {}).get("rt/lowstate", {}).get("created"))
+        if isinstance(sdk2_probe, dict)
+        else False,
+        "official_mujoco_binary_exists": bool(peer.get("binary_exists")) if isinstance(peer, dict) else False,
+        "official_mujoco_scene_exists": bool(peer.get("scene_exists")) if isinstance(peer, dict) else False,
+        "expected_topics": status.get("expected_topics", []),
+        "next_step": status.get("next_step"),
+    }
