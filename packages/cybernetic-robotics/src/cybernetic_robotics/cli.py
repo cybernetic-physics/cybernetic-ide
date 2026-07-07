@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
     sdk_audit = subcommands.add_parser("sdk-audit")
     sdk_audit.add_argument("--upstream-root", default="/Users/cuboniks/wagmi/unitree_sdk2_python")
     sdk_smoke = subcommands.add_parser("sdk-smoke")
-    sdk_smoke.add_argument("--kind", choices=["all", "arm", "loco", "lowcmd"], default="all")
+    sdk_smoke.add_argument("--kind", choices=["all", "arm", "loco", "lowcmd", "hand"], default="all")
     sdk_smoke.add_argument("--output", type=Path)
     sdk_smoke.add_argument("--transport", choices=["local_http", "rpc_bridge", "dds"])
     subcommands.add_parser("pause")

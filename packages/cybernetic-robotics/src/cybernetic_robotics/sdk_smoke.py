@@ -30,6 +30,8 @@ def run_official_g1_sdk_smoke(
             results["loco"] = _smoke_loco()
         if requested in {"all", "lowcmd"}:
             results["lowcmd"] = _smoke_lowcmd()
+        if requested in {"all", "hand"}:
+            results["hand"] = _smoke_hand()
 
         robot = G1Robot.connect(endpoints=endpoints)
         status = robot.status()
@@ -69,7 +71,7 @@ def run_official_g1_sdk_smoke(
 
 def _normalize_kind(kind: str) -> str:
     value = (kind or "all").strip().lower()
-    if value not in {"all", "arm", "loco", "lowcmd"}:
+    if value not in {"all", "arm", "loco", "lowcmd", "hand"}:
         raise ValueError(f"unknown SDK smoke kind: {kind}")
     return value
 
@@ -209,4 +211,58 @@ def _smoke_lowcmd() -> dict[str, Any]:
         "lowcmd_active": bool(getattr(final_state, "lowcmd_active", False)),
         "right_shoulder_pitch": final_state.motor_state[22].q,
         "right_elbow": final_state.motor_state[25].q,
+    }
+
+
+def _smoke_hand() -> dict[str, Any]:
+    from unitree_sdk2py.core.channel import ChannelFactoryInitialize, ChannelPublisher, ChannelSubscriber
+    from unitree_sdk2py.idl.default import unitree_go_msg_dds__MotorCmds_, unitree_hg_msg_dds__HandCmd_
+    from unitree_sdk2py.idl.unitree_go.msg.dds_ import MotorCmds_
+    from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_, HandState_
+
+    ChannelFactoryInitialize(0, "cyber-sim")
+
+    simple = unitree_go_msg_dds__MotorCmds_()
+    simple.cmds[0].mode = 100
+    for cmd in simple.cmds:
+        cmd.tau = 0.25
+
+    hand_sdk_publisher = ChannelPublisher("rt/hand_sdk", MotorCmds_)
+    hand_sdk_publisher.Init()
+    hand_sdk_ok = hand_sdk_publisher.Write(simple)
+
+    dex3 = unitree_hg_msg_dds__HandCmd_()
+    for index, cmd in enumerate(dex3.motor_cmd):
+        cmd.mode = 0x10 | index
+        cmd.q = 0.25
+        cmd.kp = 1.5
+        cmd.kd = 0.1
+
+    dex3_publisher = ChannelPublisher("rt/dex3/right/cmd", HandCmd_)
+    dex3_publisher.Init()
+    dex3_ok = dex3_publisher.Write(dex3)
+
+    dex3_subscriber = ChannelSubscriber("rt/lf/dex3/right/state", HandState_)
+    dex3_subscriber.Init()
+    dex3_state = dex3_subscriber.Read()
+    dex3_subscriber.Close()
+    dex3_publisher.Close()
+    hand_sdk_publisher.Close()
+
+    return {
+        "ok": bool(hand_sdk_ok and dex3_ok),
+        "client": "ChannelPublisher/ChannelSubscriber",
+        "topics": {
+            "hand_sdk_write": "rt/hand_sdk",
+            "dex3_write": "rt/dex3/right/cmd",
+            "dex3_read": "rt/lf/dex3/right/state",
+        },
+        "hand_sdk": hand_sdk_publisher.last_response.get("hand_sdk"),
+        "dex3": {
+            "provider": getattr(dex3_state, "provider", None),
+            "hand": getattr(dex3_state, "hand", None),
+            "intent": getattr(dex3_state, "intent", None),
+            "first_motor_q": dex3_state.motor_state[0].q if dex3_state.motor_state else None,
+            "first_pressure": dex3_state.press_sensor_state[0].pressure if dex3_state.press_sensor_state else None,
+        },
     }

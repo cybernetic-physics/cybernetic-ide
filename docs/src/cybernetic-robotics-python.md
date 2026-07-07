@@ -562,6 +562,7 @@ cyber-g1 sdk-smoke --kind all
 cyber-g1 sdk-smoke --kind arm
 cyber-g1 sdk-smoke --kind loco
 cyber-g1 sdk-smoke --kind lowcmd
+cyber-g1 sdk-smoke --kind hand
 cyber-g1 sdk-smoke --kind all --output .runtime/sdk-smoke/latest.json
 cyber-g1 sdk-smoke --kind loco --transport rpc_bridge
 ```
@@ -658,6 +659,7 @@ bridge for evidence, snapshots, and safety stops.
 `unitree_sdk_behavior_smoke` runs the same SDK-shaped smoke path from the Agent
 panel and writes `.runtime/sdk-smoke/latest.json` by default, or a caller-chosen
 workspace-relative JSON path via `output_path`. It also accepts
+`kind=hand` for simple hand SDK plus Dex3 topic checks, and
 `transport=rpc_bridge` so an Agent-panel assistant can prove that ordinary
 Unitree facade calls are using the managed bridge.
 

@@ -149,7 +149,7 @@ const tools = [
     {
       kind: {
         type: "string",
-        enum: ["all", "arm", "loco", "lowcmd"],
+        enum: ["all", "arm", "loco", "lowcmd", "hand"],
         default: "all",
         description: "Subset of official-style SDK behavior surfaces to smoke test.",
       },
@@ -1613,7 +1613,7 @@ function unitreeSdkCompatibilityAudit(args = {}) {
 }
 
 function unitreeSdkBehaviorSmoke(args = {}) {
-  const kind = ["all", "arm", "loco", "lowcmd"].includes(args.kind) ? args.kind : "all";
+  const kind = ["all", "arm", "loco", "lowcmd", "hand"].includes(args.kind) ? args.kind : "all";
   const transport = ["local_http", "rpc_bridge", "dds"].includes(args.transport) ? args.transport : null;
   const outputPath = typeof args.output_path === "string" && args.output_path
     ? args.output_path

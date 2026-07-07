@@ -723,9 +723,10 @@ The current repo has the first narrow version of that API boundary:
   behavior parity.
 - `cyber-g1 sdk-smoke` and MCP `unitree_sdk_behavior_smoke` run conservative
   behavior-level checks through the same official-style imports: arm action,
-  locomotion method calls, and lowcmd/lowstate channel publish/read. This proves
-  the local simulator facade responds to safe SDK-shaped calls, but it still
-  does not prove whole-body balance or sim-to-real equivalence. The CLI accepts
+  locomotion method calls, lowcmd/lowstate channel publish/read, simple hand
+  SDK, and Dex3 hand state. This proves the local simulator facade responds to
+  safe SDK-shaped calls, but it still does not prove whole-body balance,
+  physical hand actuation, or sim-to-real equivalence. The CLI accepts
   `--output .runtime/sdk-smoke/latest.json`; the MCP tool writes that same
   workspace-relative JSON report path by default unless the agent passes a
   different `output_path`.

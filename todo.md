@@ -244,6 +244,9 @@ Tasks:
   and developers can run safe behavior-level checks through official-style arm,
   loco, and lowcmd/lowstate imports against the simulator facade, with optional
   durable JSON evidence under `.runtime/sdk-smoke/`.
+- Done: extend `cyber-g1 sdk-smoke --kind hand` and MCP
+  `unitree_sdk_behavior_smoke kind=hand` to validate both simple `rt/hand_sdk`
+  and Dex3 `HandCmd_`/`HandState_` surfaces.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose

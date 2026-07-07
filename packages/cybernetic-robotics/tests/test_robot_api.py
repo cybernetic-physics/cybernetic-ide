@@ -1420,12 +1420,15 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("arm", report["results"])
         self.assertIn("loco", report["results"])
         self.assertIn("lowcmd", report["results"])
+        self.assertIn("hand", report["results"])
         self.assertEqual(report["results"]["arm"]["code"], 0)
         self.assertTrue(report["results"]["lowcmd"]["lowcmd_active"])
+        self.assertEqual(report["results"]["hand"]["dex3"]["intent"], "grip")
         self.assertTrue(report["status"]["lowcmd_active"])
         self.assertTrue(report["safety"]["safe_to_command"])
         self.assertEqual(written["kind"], "all")
         self.assertIn("lowcmd", written["results"])
+        self.assertIn("hand", written["results"])
         self.assertEqual(written["output_path"], str(output))
         self.assertEqual(report["output_path"], str(output))
 
@@ -1444,6 +1447,25 @@ class RobotApiTests(unittest.TestCase):
         self.assertTrue(report["ok"])
         self.assertEqual(set(report["results"]), {"arm"})
         self.assertEqual(report["status"]["pose"], "raise_right_hand")
+
+    def test_official_g1_sdk_behavior_smoke_can_run_hand_surface(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                report = run_official_g1_sdk_smoke("hand", RobotEndpoints(game_control_url=fake.url))
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(set(report["results"]), {"hand"})
+        self.assertEqual(report["results"]["hand"]["hand_sdk"]["intent"], "close")
+        self.assertEqual(report["results"]["hand"]["dex3"]["hand"], "right")
+        self.assertEqual(report["results"]["hand"]["dex3"]["intent"], "grip")
+        self.assertAlmostEqual(report["results"]["hand"]["dex3"]["first_motor_q"], 0.25)
 
     def test_official_g1_sdk_behavior_smoke_can_use_rpc_bridge_transport(self):
         class FakeOfficial:
