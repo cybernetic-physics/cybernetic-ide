@@ -89,7 +89,13 @@ arm = G1ArmActionClient()
 arm.SetTimeout(10.0)
 arm.Init()
 arm.ExecuteAction(action_map["right hand up"])
+arm.ExecuteAction(action_map["high five"])
 ```
+
+The simulator maps Unitree's preset G1 arm actions to deterministic static
+poses. This includes `right hand up`, `high five`, `hands up`, `clap`, `hug`,
+`heart`, `face wave`, `high wave`, `shake hand`, and release. The method shape
+matches the official SDK; the local behavior is a visual approximation.
 
 G1 locomotion examples can use Unitree's `LocoClient` shape:
 

@@ -336,9 +336,14 @@ class RobotApiTests(unittest.TestCase):
                 arm.Init()
 
                 code = arm.ExecuteAction(action_map["right hand up"])
+                high_five_code = arm.ExecuteAction(action_map["high five"])
+                list_code, actions = arm.GetActionList()
 
                 self.assertEqual(code, 0)
-                self.assertEqual(arm.last_response["pose"], "raise_right_hand")
+                self.assertEqual(high_five_code, 0)
+                self.assertEqual(list_code, 0)
+                self.assertTrue(all(action["simulated"] for action in actions))
+                self.assertEqual(arm.last_response["pose"], "high_five")
                 self.assertEqual(current_channel_factory_config().domain_id, 3)
             finally:
                 if previous is None:

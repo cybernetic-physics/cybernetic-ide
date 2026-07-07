@@ -13,6 +13,25 @@ const DEFAULT_WS_URL = "ws://127.0.0.1:8788";
 const DEFAULT_CONTAINER = "unitree-g1-mujoco";
 const DEFAULT_POSE = "raise_right_hand";
 const MAX_LOG_BYTES = 256_000;
+const G1_ACTION_POSES = {
+  release_arm: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
+  neutral: { sdk_action: "release arm", action_id: 99, pose: "neutral" },
+  two_hand_kiss: { sdk_action: "two-hand kiss", action_id: 11, pose: "two_hand_kiss" },
+  left_kiss: { sdk_action: "left kiss", action_id: 12, pose: "left_kiss" },
+  right_kiss: { sdk_action: "right kiss", action_id: 13, pose: "right_kiss" },
+  hands_up: { sdk_action: "hands up", action_id: 15, pose: "hands_up" },
+  clap: { sdk_action: "clap", action_id: 17, pose: "clap" },
+  high_five: { sdk_action: "high five", action_id: 18, pose: "high_five" },
+  hug: { sdk_action: "hug", action_id: 19, pose: "hug" },
+  heart: { sdk_action: "heart", action_id: 20, pose: "heart" },
+  right_heart: { sdk_action: "right heart", action_id: 21, pose: "right_heart" },
+  reject: { sdk_action: "reject", action_id: 22, pose: "reject" },
+  raise_right_hand: { sdk_action: "right hand up", action_id: 23, pose: "raise_right_hand" },
+  x_ray: { sdk_action: "x-ray", action_id: 24, pose: "x_ray" },
+  face_wave: { sdk_action: "face wave", action_id: 25, pose: "face_wave" },
+  high_wave: { sdk_action: "high wave", action_id: 26, pose: "high_wave" },
+  shake_hand: { sdk_action: "shake hand", action_id: 27, pose: "shake_hand" },
+};
 const VIEW_PRESETS = {
   current: {
     description: "Current viewer camera without moving it.",
@@ -267,7 +286,7 @@ const tools = [
     "g1_execute_action",
     "Execute a high-level G1 action through the Unitree SDK facade protocol.",
     {
-      action: { type: "string", enum: ["raise_right_hand", "release_arm", "neutral"] },
+      action: { type: "string", enum: Object.keys(G1_ACTION_POSES) },
     },
     ["action"],
     { readOnlyHint: false },
@@ -586,11 +605,7 @@ async function callTool(name, args) {
       return textResult(await scaffoldPython(args));
     case "g1_list_actions":
       return textResult({
-        actions: [
-          { action: "raise_right_hand", sdk_action: "right hand up", action_id: 23 },
-          { action: "release_arm", sdk_action: "release arm", action_id: 99 },
-          { action: "neutral", sdk_action: "release arm", action_id: 99 },
-        ],
+        actions: Object.entries(G1_ACTION_POSES).map(([action, value]) => ({ action, ...value })),
       });
     case "g1_execute_action":
       return textResult(await executeG1Action(args.action));
@@ -1202,8 +1217,8 @@ async function scaffoldPython(args) {
 }
 
 async function executeG1Action(action) {
-  const pose = action === "release_arm" || action === "neutral" ? "neutral" : "raise_right_hand";
-  return command({ command: "pose", pose });
+  const spec = G1_ACTION_POSES[action] || G1_ACTION_POSES.raise_right_hand;
+  return command({ command: "pose", pose: spec.pose });
 }
 
 async function protocolProbeHttp(requestPath) {

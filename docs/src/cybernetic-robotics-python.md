@@ -116,12 +116,26 @@ local simulator:
 
 | Action name | Action ID | Simulator pose |
 | --- | ---: | --- |
+| `two-hand kiss` | `11` | `two_hand_kiss` |
+| `left kiss` | `12` | `left_kiss` |
+| `right kiss` | `13` | `right_kiss` |
+| `hands up` | `15` | `hands_up` |
+| `clap` | `17` | `clap` |
+| `high five` | `18` | `high_five` |
+| `hug` | `19` | `hug` |
+| `heart` | `20` | `heart` |
+| `right heart` | `21` | `right_heart` |
+| `reject` | `22` | `reject` |
 | `right hand up` | `23` | `raise_right_hand` |
+| `x-ray` | `24` | `x_ray` |
+| `face wave` | `25` | `face_wave` |
+| `high wave` | `26` | `high_wave` |
+| `shake hand` | `27` | `shake_hand` |
 | `release arm` | `99` | `neutral` |
 
-Unsupported actions return a non-zero result and list the action map. That
-makes missing simulator coverage obvious while keeping the official SDK2 method
-shape.
+These simulator actions are deterministic static MuJoCo poses, not Unitree's
+full arm-action controller. They intentionally keep the official SDK2 method
+shape while making the shipped G1 arm-action examples useful in local sim.
 
 ## Unitree G1 LocoClient-Shaped Code
 

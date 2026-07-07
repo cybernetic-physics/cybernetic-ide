@@ -60,7 +60,21 @@ action_map = {
 
 _ACTION_POSES = {
     action_map["release arm"]: "neutral",
+    action_map["two-hand kiss"]: "two_hand_kiss",
+    action_map["left kiss"]: "left_kiss",
+    action_map["right kiss"]: "right_kiss",
+    action_map["hands up"]: "hands_up",
+    action_map["clap"]: "clap",
+    action_map["high five"]: "high_five",
+    action_map["hug"]: "hug",
+    action_map["heart"]: "heart",
+    action_map["right heart"]: "right_heart",
+    action_map["reject"]: "reject",
     action_map["right hand up"]: "raise_right_hand",
+    action_map["x-ray"]: "x_ray",
+    action_map["face wave"]: "face_wave",
+    action_map["high wave"]: "high_wave",
+    action_map["shake hand"]: "shake_hand",
 }
 
 

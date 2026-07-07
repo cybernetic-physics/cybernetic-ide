@@ -151,7 +151,12 @@ arm = G1ArmActionClient()
 arm.SetTimeout(10.0)
 arm.Init()
 arm.ExecuteAction(action_map["right hand up"])
+arm.ExecuteAction(action_map["high five"])
 ```
+
+The local simulator maps Unitree's preset G1 arm actions to deterministic
+static poses, including `right hand up`, `high five`, `hands up`, `clap`,
+`hug`, `heart`, `face wave`, `high wave`, `shake hand`, and release.
 
 Run it from the terminal:
 

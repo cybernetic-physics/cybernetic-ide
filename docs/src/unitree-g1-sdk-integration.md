@@ -354,6 +354,10 @@ The current repo has the first narrow version of that API boundary:
   low-level `rt/lowcmd` / `rt/lowstate` channel examples.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
+- The simulator now maps Unitree's preset G1 arm actions to deterministic
+  static poses for local development, including `high five`, `hands up`,
+  `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,
+  `reject`, `x-ray`, and release.
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
   including official-style FSM, balance, swing-height, and stand-height
   getters/setters.
