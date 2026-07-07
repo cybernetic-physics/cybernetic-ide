@@ -331,8 +331,9 @@ ad hoc scripts first. The default tool surface includes:
   state, render health, lowstate availability, lowcmd freshness, and optional
   snapshot evidence after a script runs;
 - evidence capture: `robot_evidence_bundle`, which writes simulator status,
-  lowstate, named joint state, provider diagnostics, visual scene metadata, and
-  optional screenshots into one reviewable JSON artifact for Agent-panel work;
+  lowstate, named joint state, hand state, provider diagnostics, visual scene
+  metadata, and optional screenshots into one reviewable JSON artifact for
+  Agent-panel work;
 - learned policy runtime: `sim_policy_status`, `sim_policy_start`, and
   `sim_policy_stop`, which control the optional LocoMuJoCo-trained yoga policy
   when a deploy bundle is mounted into the simulator;

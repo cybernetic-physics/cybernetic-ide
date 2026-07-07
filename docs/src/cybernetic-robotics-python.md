@@ -627,10 +627,10 @@ lowstate telemetry is available, recent lowcmds are fresh when applicable, and
 optionally writes a snapshot for visual evidence.
 `robot_evidence_bundle` is the broader Agent-panel evidence capture path. It
 writes a workspace JSON manifest containing `/status`, `/lowstate`,
-`/joint_state`, visual scene metadata, provider diagnostics, check results, and
-optional current/series screenshots. Use it after scene edits, SDK scripts, or
-pose commands when the agent needs durable evidence instead of a transient
-viewer glance.
+`/joint_state`, hand SDK/Dex3 state, visual scene metadata, provider
+diagnostics, check results, and optional current/series screenshots. Use it
+after scene edits, SDK scripts, or pose commands when the agent needs durable
+evidence instead of a transient viewer glance.
 `g1_safety_check` is the quick pre-motion check: it reads `/status` and
 `/lowstate`, then applies Unitree G1-inspired termination predicates for bad
 orientation, high joint velocity, high angular velocity, motor temperature,

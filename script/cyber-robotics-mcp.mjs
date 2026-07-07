@@ -2026,6 +2026,13 @@ async function robotEvidenceBundle(args = {}) {
   const checks = [];
   const simulation = status?.simulation && typeof status.simulation === "object" ? status.simulation : {};
   const render = simulation?.render && typeof simulation.render === "object" ? simulation.render : {};
+  const handSdk = simulation?.hand_sdk && typeof simulation.hand_sdk === "object" ? simulation.hand_sdk : {};
+  const dex3 = simulation?.dex3 && typeof simulation.dex3 === "object" ? simulation.dex3 : {};
+  const dex3Hands = dex3?.hands && typeof dex3.hands === "object" ? dex3.hands : {};
+  const handState = {
+    hand_sdk: handSdk,
+    dex3,
+  };
 
   addCheck(
     checks,
@@ -2044,6 +2051,14 @@ async function robotEvidenceBundle(args = {}) {
     "joint_state_available",
     !jointState.error && Array.isArray(jointState.joints),
     jointState.error ? `joint_state unavailable: ${jointState.error}` : `joint_state joints=${jointState.joints?.length ?? 0}`,
+  );
+  addCheck(
+    checks,
+    "hand_state_available",
+    Object.keys(handSdk).length > 0 || Object.keys(dex3Hands).length > 0,
+    Object.keys(handSdk).length > 0 || Object.keys(dex3Hands).length > 0
+      ? `hand state captured: hand_sdk=${Object.keys(handSdk).length > 0}, dex3_hands=${Object.keys(dex3Hands).length}`
+      : "hand state unavailable in simulator status",
   );
   addCheck(
     checks,
@@ -2116,6 +2131,8 @@ async function robotEvidenceBundle(args = {}) {
       model_path: simulation.model_path || null,
       motor_count: Array.isArray(lowstate.motor_state) ? lowstate.motor_state.length : null,
       joint_count: Array.isArray(jointState.joints) ? jointState.joints.length : null,
+      hand_sdk_intent: handSdk.intent || null,
+      dex3_hands: Object.keys(dex3Hands),
       render_seq: render.render_seq ?? null,
       provider: providerStatus.provider || null,
       provider_ok: providerStatus.ok === true,
@@ -2123,12 +2140,13 @@ async function robotEvidenceBundle(args = {}) {
     simulator: status,
     lowstate,
     joint_state: jointState,
+    hand_state: handState,
     visual_scene: scene,
     provider_status: providerStatus,
     snapshot: snapshotValue,
     snapshot_series: snapshotSeriesValue,
     agent_hints: [
-      "Use lowstate and joint_state as telemetry evidence; screenshots are visual evidence.",
+      "Use lowstate, joint_state, and hand_state as telemetry evidence; screenshots are visual evidence.",
       "Use checks to decide whether a behavior is reviewable before explaining success to the user.",
       "Use provider_status to distinguish local HTTP shim, rpc_bridge, DDS sidecar, and unsupported real-hardware paths.",
     ],

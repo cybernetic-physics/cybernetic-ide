@@ -622,10 +622,10 @@ The current repo has the first narrow version of that API boundary:
   which backend is active: provider name, command path, telemetry path, motion
   surfaces, limitations, and next step.
 - `robot_evidence_bundle` is the default agent-native review artifact for the
-  simulator path. It persists `/status`, `/lowstate`, `/joint_state`, visual
-  scene metadata, provider diagnostics, checks, and optional screenshots beside
-  the workspace so Codex/Claude-style agents can prove what changed after a
-  scene edit, SDK command, or policy run.
+  simulator path. It persists `/status`, `/lowstate`, `/joint_state`, hand
+  SDK/Dex3 state, visual scene metadata, provider diagnostics, checks, and
+  optional screenshots beside the workspace so Codex/Claude-style agents can
+  prove what changed after a scene edit, SDK command, or policy run.
 - `UnitreeSession.execute_arm_action()` is the first normal SDK facade method
   routed through that provider boundary: local HTTP in default simulator mode,
   managed official MuJoCo + SDK2/CycloneDDS for supported hand-raise poses when

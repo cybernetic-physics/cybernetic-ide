@@ -536,7 +536,7 @@ Tasks:
 - Done: add `sim_validate_behavior` that checks fallen state, command
   freshness, and screenshot availability after a script runs.
 - Done: add `robot_evidence_bundle` so agents can persist simulator status,
-  lowstate, named joint state, provider diagnostics, scene metadata, and
+  lowstate, named joint state, hand state, provider diagnostics, scene metadata, and
   optional screenshots in one reviewable artifact after robotics work.
 - Done: expose `sim_policy_status`, `sim_policy_start`, and `sim_policy_stop`
   in the default Robotics Agent profile so agents can inspect or run the
