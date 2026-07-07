@@ -193,8 +193,11 @@ impl ViewerPhase {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct CameraDrag {
+    start_position: Point<Pixels>,
     last_position: Point<Pixels>,
     mode: CameraDragMode,
+    button: MouseButton,
+    active: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -464,15 +467,9 @@ impl CyberRobotViewer {
         &mut self,
         mode: CameraDragMode,
         event: &MouseDownEvent,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.camera_drag = Some(CameraDrag {
-            last_position: event.position,
-            mode,
-        });
-        window.prevent_default();
-        cx.stop_propagation();
+        self.begin_camera_drag(mode, event.button, event.position);
         cx.notify();
     }
 
@@ -482,9 +479,11 @@ impl CyberRobotViewer {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.camera_drag = None;
-        window.prevent_default();
-        cx.stop_propagation();
+        let captured_drag = self.finish_camera_drag();
+        if captured_drag {
+            window.prevent_default();
+            cx.stop_propagation();
+        }
         cx.notify();
     }
 
@@ -494,31 +493,18 @@ impl CyberRobotViewer {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(mut drag) = self.camera_drag else {
-            return;
-        };
-        if event.pressed_button.is_none() {
-            self.camera_drag = None;
+        let previous_drag = self.camera_drag;
+        let command = self.update_camera_drag(event.position, event.pressed_button);
+
+        if self.camera_drag != previous_drag {
             cx.notify();
-            return;
         }
 
-        let delta = event.position - drag.last_position;
-        let dx = delta.x.as_f32();
-        let dy = delta.y.as_f32();
-        if dx.abs() < CAMERA_DRAG_THRESHOLD_PX && dy.abs() < CAMERA_DRAG_THRESHOLD_PX {
-            return;
+        if let Some(command) = command {
+            self.request_camera_frame(command, window, cx);
+            window.prevent_default();
+            cx.stop_propagation();
         }
-
-        drag.last_position = event.position;
-        self.camera_drag = Some(drag);
-        let command = match drag.mode {
-            CameraDragMode::Orbit => CameraCommand::Orbit { dx, dy },
-            CameraDragMode::Pan => CameraCommand::Pan { dx, dy },
-        };
-        self.request_camera_frame(command, window, cx);
-        window.prevent_default();
-        cx.stop_propagation();
     }
 
     fn handle_camera_scroll(
@@ -583,6 +569,64 @@ impl CyberRobotViewer {
         });
     }
 
+    fn begin_camera_drag(
+        &mut self,
+        mode: CameraDragMode,
+        button: MouseButton,
+        position: Point<Pixels>,
+    ) {
+        self.camera_drag = Some(CameraDrag {
+            start_position: position,
+            last_position: position,
+            mode,
+            button,
+            active: false,
+        });
+    }
+
+    fn finish_camera_drag(&mut self) -> bool {
+        let captured_drag = self.camera_drag.map(|drag| drag.active).unwrap_or(false);
+        self.camera_drag = None;
+        captured_drag
+    }
+
+    fn update_camera_drag(
+        &mut self,
+        position: Point<Pixels>,
+        pressed_button: Option<MouseButton>,
+    ) -> Option<CameraCommand> {
+        let Some(mut drag) = self.camera_drag else {
+            return None;
+        };
+
+        if pressed_button != Some(drag.button) {
+            self.camera_drag = None;
+            return None;
+        }
+
+        let reference_position = if drag.active {
+            drag.last_position
+        } else {
+            drag.start_position
+        };
+        let delta = position - reference_position;
+        let dx = delta.x.as_f32();
+        let dy = delta.y.as_f32();
+        if dx.abs() < CAMERA_DRAG_THRESHOLD_PX && dy.abs() < CAMERA_DRAG_THRESHOLD_PX {
+            self.camera_drag = Some(drag);
+            return None;
+        }
+
+        drag.last_position = position;
+        drag.active = true;
+        self.camera_drag = Some(drag);
+
+        match drag.mode {
+            CameraDragMode::Orbit => Some(CameraCommand::Orbit { dx, dy }),
+            CameraDragMode::Pan => Some(CameraCommand::Pan { dx, dy }),
+        }
+    }
+
     fn render_robot_stage(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let telemetry = self.telemetry.clone();
         let is_connected = self.phase == ViewerPhase::Connected;
@@ -626,26 +670,28 @@ impl CyberRobotViewer {
             .size_full()
             .overflow_hidden()
             .bg(rgb(0x1f3347))
-            .cursor(if self.camera_drag.is_some() {
-                CursorStyle::ClosedHand
-            } else {
-                CursorStyle::OpenHand
-            })
+            .cursor(
+                if self.camera_drag.map(|drag| drag.active).unwrap_or(false) {
+                    CursorStyle::ClosedHand
+                } else {
+                    CursorStyle::OpenHand
+                },
+            )
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                cx.listener(|this, event: &MouseDownEvent, _window, cx| {
                     let mode = if event.modifiers.shift {
                         CameraDragMode::Pan
                     } else {
                         CameraDragMode::Orbit
                     };
-                    this.start_camera_drag(mode, event, window, cx);
+                    this.start_camera_drag(mode, event, cx);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
-                    this.start_camera_drag(CameraDragMode::Pan, event, window, cx);
+                cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                    this.start_camera_drag(CameraDragMode::Pan, event, cx);
                 }),
             )
             .on_mouse_up(
@@ -1704,6 +1750,98 @@ mod tests {
         fn tab_content_text(&self, _detail: usize, _cx: &App) -> SharedString {
             "g1 control code".into()
         }
+    }
+
+    fn mouse_point(x: f32, y: f32) -> Point<Pixels> {
+        Point { x: px(x), y: px(y) }
+    }
+
+    #[gpui::test]
+    async fn camera_drag_stays_pending_until_pointer_moves_past_threshold(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let viewer = cx.new(CyberRobotViewer::test_connected);
+
+        viewer.update(cx, |viewer, _| {
+            viewer.begin_camera_drag(
+                CameraDragMode::Orbit,
+                MouseButton::Left,
+                mouse_point(10.0, 10.0),
+            );
+
+            assert_eq!(
+                viewer.update_camera_drag(mouse_point(12.0, 12.0), Some(MouseButton::Left)),
+                None,
+                "small pointer moves should not capture the mouse or command the camera"
+            );
+            assert_eq!(
+                viewer.camera_drag,
+                Some(CameraDrag {
+                    start_position: mouse_point(10.0, 10.0),
+                    last_position: mouse_point(10.0, 10.0),
+                    mode: CameraDragMode::Orbit,
+                    button: MouseButton::Left,
+                    active: false,
+                })
+            );
+            assert!(
+                !viewer.finish_camera_drag(),
+                "a pending click should be released as a normal click"
+            );
+        });
+    }
+
+    #[gpui::test]
+    async fn camera_drag_captures_only_after_threshold_and_releases_as_captured(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let viewer = cx.new(CyberRobotViewer::test_connected);
+
+        viewer.update(cx, |viewer, _| {
+            viewer.begin_camera_drag(
+                CameraDragMode::Orbit,
+                MouseButton::Left,
+                mouse_point(10.0, 10.0),
+            );
+
+            assert_eq!(
+                viewer.update_camera_drag(mouse_point(30.0, 14.0), Some(MouseButton::Left)),
+                Some(CameraCommand::Orbit { dx: 20.0, dy: 4.0 })
+            );
+            assert_eq!(
+                viewer.camera_drag.map(|drag| drag.active),
+                Some(true),
+                "crossing the drag threshold should mark the gesture as captured"
+            );
+            assert!(
+                viewer.finish_camera_drag(),
+                "an active drag should consume the matching mouse-up"
+            );
+            assert_eq!(viewer.camera_drag, None);
+        });
+    }
+
+    #[gpui::test]
+    async fn camera_drag_clears_when_pressed_button_is_lost(cx: &mut gpui::TestAppContext) {
+        let viewer = cx.new(CyberRobotViewer::test_connected);
+
+        viewer.update(cx, |viewer, _| {
+            viewer.begin_camera_drag(
+                CameraDragMode::Pan,
+                MouseButton::Right,
+                mouse_point(10.0, 10.0),
+            );
+
+            assert_eq!(
+                viewer.update_camera_drag(mouse_point(40.0, 40.0), None),
+                None,
+                "losing the pressed button should not send a stale camera command"
+            );
+            assert_eq!(
+                viewer.camera_drag, None,
+                "lost mouse-up/out events should not leave the viewer in drag mode"
+            );
+        });
     }
 
     #[gpui::test]
