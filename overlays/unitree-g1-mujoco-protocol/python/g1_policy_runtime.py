@@ -59,6 +59,70 @@ def inject_mimic_sites(spec, bundle):
     return spec
 
 
+FOOT_CAPSULE_NAMES = [
+    f"{side}_foot_{i}_col" for side in ("left", "right") for i in range(1, 5)
+]
+
+
+def name_foot_capsules(spec):
+    """Name the 29-DOF model's foot collision capsules like the training model.
+
+    The stock XML leaves them unnamed; explicit contact pairs need names.
+    """
+    for side in ("left", "right"):
+        ankle = None
+        for body in spec.bodies:
+            if body.name == f"{side}_ankle_roll_link":
+                ankle = body
+        if ankle is None:
+            raise ValueError(f"missing body {side}_ankle_roll_link")
+        capsules = [g for g in ankle.geoms
+                    if g.type in (mujoco.mjtGeom.mjGEOM_CAPSULE, mujoco.mjtGeom.mjGEOM_SPHERE)]
+        if len(capsules) != 4:
+            raise ValueError(f"{side} foot: expected 4 contact geoms, found {len(capsules)}")
+        for i, geom in enumerate(capsules, start=1):
+            if not geom.name:
+                geom.name = f"{side}_foot_{i}_col"
+    return spec
+
+
+def reduce_robot_contacts(spec):
+    """Restrict robot collisions to explicit foot-capsule<->floor pairs.
+
+    Mirrors MjxUnitreeG1._modify_spec_for_mjx on the 29-DOF model: robot geoms
+    stop colliding by contype/conaffinity and only the eight foot capsules
+    contact the floor. Non-robot geoms (floor, scene objects) keep their
+    default contype behavior.
+    """
+    floor = None
+    for geom in spec.geoms:
+        if geom.name == "floor":
+            floor = geom
+    if floor is None:
+        raise ValueError("scene has no 'floor' geom")
+
+    name_foot_capsules(spec)
+
+    # every non-world body in the stock scene belongs to the robot
+    for body in spec.bodies:
+        if body.name == "world":
+            continue
+        for geom in body.geoms:
+            geom.contype = 0
+            geom.conaffinity = 0
+
+    for name in FOOT_CAPSULE_NAMES:
+        spec.add_pair(geomname1="floor", geomname2=name)
+    return spec
+
+
+def apply_training_solver_options(model):
+    """Match the MJX training solver settings (iterations, EULERDAMP off)."""
+    model.opt.iterations = 2
+    model.opt.ls_iterations = 4
+    model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_EULERDAMP
+
+
 def _rotmat_to_rotvec(mat):
     """Rotation matrix (3,3) -> rotation vector, matching scipy's as_rotvec."""
     quat = np.zeros(4)

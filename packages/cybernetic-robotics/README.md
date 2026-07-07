@@ -103,8 +103,10 @@ CycloneDDS domain initialization, channel creation, source revisions, and
 official MuJoCo peer plan. `official raise-hand` launches the official
 `unitree_mujoco` G1 peer in the sidecar, publishes a bounded multi-joint HG
 `LowCmd_` pose over `rt/lowcmd`, and verifies moved joints through official
-`rt/lowstate`. Both are deliberately short-lived and simulator-only. The
-long-lived DDS session provider is still the next backend step.
+`rt/lowstate`. Both are deliberately short-lived and simulator-only.
+After the MCP starts the managed `unitree-g1-sdk2-session`,
+`official.raise_right_hand_session()` sends the same pose to that already
+running official peer instead of launching another one.
 
 ## Unitree SDK2-Shaped API
 
@@ -128,6 +130,9 @@ The simulator maps Unitree's preset G1 arm actions to deterministic static
 poses. This includes `right hand up`, `high five`, `hands up`, `clap`, `hug`,
 `heart`, `face wave`, `high wave`, `shake hand`, and release. The method shape
 matches the official SDK; the local behavior is a visual approximation.
+With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, `right hand up` routes to
+the managed official MuJoCo + SDK2/CycloneDDS session and verifies movement via
+official `rt/lowstate`.
 
 G1 locomotion examples can use Unitree's `LocoClient` shape:
 
@@ -257,8 +262,9 @@ overwriting the pinned upstream Unitree assets.
 - `CYBER_G1_WS_HOST`: fallback WebSocket host, default `127.0.0.1`.
 - `CYBER_G1_WS_PORT`: fallback WebSocket port, default `8788`.
 - `CYBER_ROBOTICS_ROOT`: Cybernetic IDE repo root for harness and scene helpers.
-- `CYBER_UNITREE_TRANSPORT`: `local_http` today, `dds` for planned official
-  SDK2/CycloneDDS diagnostics.
+- `CYBER_UNITREE_TRANSPORT`: `local_http` for the lightweight viewer harness,
+  or `dds` in simulator mode for official SDK2/CycloneDDS diagnostics and the
+  managed `right hand up` arm action path.
 - `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
 - `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
 - `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be

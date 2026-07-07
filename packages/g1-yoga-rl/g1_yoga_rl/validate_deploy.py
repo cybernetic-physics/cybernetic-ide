@@ -27,7 +27,6 @@ SIM_29DOF_XML = (REPO_ROOT / ".runtime/unitree-g1-mujoco/unitree_mujoco/"
 RUNTIME_PATH = (REPO_ROOT / "overlays/unitree-g1-mujoco-protocol/python/"
                 "g1_policy_runtime.py")
 
-SECTIONS = [("plain", 0, 57), ("current-site", 57, 225), ("reference-goal", 225, 450)]
 
 
 def load_runtime():
@@ -51,6 +50,15 @@ def main() -> None:
     runtime = load_runtime()
     bundle = dict(np.load(args.bundle, allow_pickle=True))
 
+    n_hinge = len(bundle["joint_names"]) - 1
+    n_rel_sites = len(bundle["site_names"]) - 1
+    plain_dim = 5 + n_hinge + 6 + n_hinge
+    site_dim = 12 * n_rel_sites
+    ref_dim = int(bundle["goal_ref"].shape[1])
+    sections = [("plain", 0, plain_dim),
+                ("current-site", plain_dim, plain_dim + site_dim),
+                ("reference-goal", plain_dim + site_dim, plain_dim + site_dim + ref_dim)]
+
     sim_spec = mujoco.MjSpec.from_file(str(SIM_29DOF_XML))
     runtime.inject_mimic_sites(sim_spec, bundle)
     sim_model = sim_spec.compile()
@@ -62,8 +70,8 @@ def main() -> None:
     frames = args.frames or [0, 150, 400, 700, 1300, 1750, 2200, 2650, 3100, 3550, 4000]
     frames = [f for f in frames if f < n_frames]
 
-    print(f"{'frame':>6s} " + " ".join(f"{name:>16s}" for name, _, _ in SECTIONS))
-    worst = np.zeros(len(SECTIONS))
+    print(f"{'frame':>6s} " + " ".join(f"{name:>16s}" for name, _, _ in sections))
+    worst = np.zeros(len(sections))
     for frame in frames:
         fix_start(env, frame)
         env.reset(jax.random.PRNGKey(0))
@@ -79,7 +87,7 @@ def main() -> None:
         deploy = controller.build_obs(sim_data)
 
         diffs = []
-        for i, (name, lo, hi) in enumerate(SECTIONS):
+        for i, (name, lo, hi) in enumerate(sections):
             diff = float(np.max(np.abs(truth[lo:hi] - deploy[lo:hi])))
             worst[i] = max(worst[i], diff)
             diffs.append(diff)
@@ -87,7 +95,7 @@ def main() -> None:
 
     print("worst  " + " ".join(f"{d:16.2e}" for d in worst))
     limits = {"plain": 1e-4, "current-site": 5e-3, "reference-goal": 1e-5}
-    failed = [name for (name, _, _), d in zip(SECTIONS, worst) if d > limits[name]]
+    failed = [name for (name, _, _), d in zip(sections, worst) if d > limits[name]]
     if failed:
         raise SystemExit(f"OBS MISMATCH beyond tolerance in sections: {failed}")
     print("[validate] obs builder matches training-side truth within tolerance")

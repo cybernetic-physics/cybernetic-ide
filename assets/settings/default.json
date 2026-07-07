@@ -1177,6 +1177,7 @@
               "unitree_probe_official_mujoco_lowcmd": true,
               "unitree_probe_official_mujoco_arm_motion": true,
               "unitree_probe_official_mujoco_arm_pose": true,
+              "unitree_command_official_mujoco_arm_pose": true,
               "sim_pause": true,
               "sim_resume": true,
               "sim_reset": true,

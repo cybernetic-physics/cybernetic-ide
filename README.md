@@ -234,6 +234,10 @@ imports, CycloneDDS domain initialization, channel creation, and official
 MuJoCo peer readiness. `examples/g1_official_raise_hand.py` and `cyber-g1
 official raise-hand` launch the official sidecar peer and verify a bounded
 multi-joint `raise_right_hand` pose through real `rt/lowcmd` / `rt/lowstate`.
+When the MCP starts `unitree-g1-sdk2-session` and
+`CYBER_UNITREE_TRANSPORT=dds` is set, the same
+`G1ArmActionClient.ExecuteAction(action_map["right hand up"])` facade routes to
+that managed official MuJoCo DDS session.
 
 ## Running the G1 LocoClient Demo
 
@@ -343,6 +347,9 @@ ad hoc scripts first. The default tool surface includes:
 - official SDK2 pose probe: `unitree_probe_official_mujoco_arm_pose`, which
   sends a bounded multi-joint arm pose such as `raise_right_hand` over
   official `rt/lowcmd` and reports which joints moved in `rt/lowstate`;
+- managed official SDK2 pose command: `unitree_command_official_mujoco_arm_pose`,
+  which sends the same bounded multi-joint pose to an already-running
+  `unitree-g1-sdk2-session` instead of launching a second MuJoCo peer;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

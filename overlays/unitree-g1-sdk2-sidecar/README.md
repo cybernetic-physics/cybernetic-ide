@@ -39,13 +39,14 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion`, launches the
   same peer, sends a bounded single-arm-joint `rt/lowcmd` target, and verifies
   motion by reading the changed joint position from `rt/lowstate`.
+- when `CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose`, connects to an
+  already-running managed official peer, sends a bounded multi-joint arm pose
+  over `rt/lowcmd`, and verifies movement from `rt/lowstate`.
 
 It still does **not** replace the local HTTP viewer/control bridge as the
 default transport. The sidecar has now proven official `rt/lowstate` sample
-exchange, safe official `rt/lowcmd` hold-frame publishing, and bounded
-single-joint arm motion. The next provider milestone is keeping that DDS
-connection alive as a session transport and then routing the Cybernetic Python
-facade through it.
+exchange, safe official `rt/lowcmd` hold-frame publishing, bounded arm motion,
+and a managed-session command path for the Unitree-shaped Python facade.
 
 Prepare sources:
 
@@ -96,9 +97,26 @@ docker compose \
 The MCP wrappers `unitree_start_official_mujoco_session`,
 `unitree_official_mujoco_session_status`, and
 `unitree_stop_official_mujoco_session` manage that container and parse the
-initial ready report from Docker logs. This is the first durable official G1
-DDS peer lifecycle; the Python SDK facade still needs a long-lived client
-provider that connects to it.
+initial ready report from Docker logs. This is the durable official G1 DDS peer
+lifecycle used by the managed arm-pose command path.
+
+Command the managed official session with a bounded arm pose:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose \
+  -e CYBER_UNITREE_ARM_POSE_PRESET=raise_right_hand \
+  -e CYBER_UNITREE_ARM_POSE_FRAMES=180 \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper is `unitree_command_official_mujoco_arm_pose`. Python users can
+hit the same path with `OfficialG1Sim.raise_right_hand_session()` or, with
+`CYBER_UNITREE_TRANSPORT=dds`, the familiar
+`G1ArmActionClient.ExecuteAction(action_map["right hand up"])` call.
 
 Probe whether the official peer publishes SDK2 lowstate samples:
 

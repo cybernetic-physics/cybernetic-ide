@@ -242,9 +242,11 @@ print(official.status()["ok"])
 print(official.raise_right_hand()["moved_joints"])
 ```
 
-This wrapper still runs the short-lived sidecar probe. It does not replace the
-planned long-lived DDS session provider, but it is the first Python API surface
-that drives the official Unitree MuJoCo + SDK2/CycloneDDS path end to end.
+`OfficialG1Sim.raise_right_hand()` still runs the short-lived sidecar probe.
+`OfficialG1Sim.raise_right_hand_session()` targets the managed
+`unitree-g1-sdk2-session` container after the MCP starts it, so Python code can
+command the already-running official peer over SDK2/CycloneDDS without spawning
+a second MuJoCo process.
 
 The MCP server now also exposes the first managed official peer lifecycle:
 `unitree_start_official_mujoco_session`,
@@ -252,9 +254,11 @@ The MCP server now also exposes the first managed official peer lifecycle:
 `unitree_stop_official_mujoco_session`. These tools run
 `CYBER_UNITREE_ACTION=serve_official_mujoco` in a named Docker container
 (`unitree-g1-sdk2-session`), parse its ready report from logs, and stop/remove
-it cleanly. That gives agents a durable official G1 DDS peer to target while
-the normal Python SDK facade is being moved from short-lived probes to a
-long-lived provider.
+it cleanly. Agents can then call `unitree_command_official_mujoco_arm_pose` to
+send a bounded `raise_right_hand` or custom arm pose to that live peer. In
+Python, setting `CYBER_UNITREE_TRANSPORT=dds` routes
+`G1ArmActionClient.ExecuteAction(action_map["right hand up"])` through the same
+managed official session.
 
 Runtime environment knobs:
 
@@ -516,6 +520,9 @@ The current repo has the first narrow version of that API boundary:
 - MCP now has managed official peer lifecycle tools for starting, inspecting,
   and stopping the `unitree-g1-sdk2-session` container that runs upstream
   `unitree_mujoco` under Xvfb as a sustained DDS peer.
+- MCP now has `unitree_command_official_mujoco_arm_pose` for commanding that
+  managed session, and the Python `G1ArmActionClient` routes `right hand up`
+  through it when `CYBER_UNITREE_TRANSPORT=dds` is set in simulator mode.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

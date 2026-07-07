@@ -297,6 +297,71 @@ const tools = [
       openWorldHint: true,
     },
   ),
+  tool(
+    "unitree_command_official_mujoco_arm_pose",
+    "Send a bounded SDK2/CycloneDDS multi-joint arm pose to an already-running managed official Unitree MuJoCo G1 session.",
+    {
+      preset: {
+        type: "string",
+        enum: OFFICIAL_G1_ARM_POSE_PRESETS,
+        default: "raise_right_hand",
+        description: "Built-in bounded arm pose to publish when joint_deltas is omitted.",
+      },
+      joint_deltas: {
+        type: "object",
+        additionalProperties: { type: "number", minimum: -0.5, maximum: 0.5 },
+        description: "Optional map of official G1 arm joint name to target offset in radians. Values are clamped to +/-0.5.",
+      },
+      frames: {
+        type: "integer",
+        minimum: 20,
+        maximum: 600,
+        default: 180,
+        description: "Number of lowcmd frames to publish.",
+      },
+      kp: {
+        type: "number",
+        minimum: 0,
+        maximum: 80,
+        default: 30.0,
+        description: "PD proportional gain for moving pose joints.",
+      },
+      kd: {
+        type: "number",
+        minimum: 0,
+        maximum: 5,
+        default: 1.0,
+        description: "PD derivative gain for moving pose joints.",
+      },
+      hold_kp: {
+        type: "number",
+        minimum: 0,
+        maximum: 80,
+        default: 18.0,
+        description: "PD proportional gain used to hold non-target joints near their sampled positions.",
+      },
+      hold_kd: {
+        type: "number",
+        minimum: 0,
+        maximum: 5,
+        default: 0.8,
+        description: "PD derivative gain used to hold non-target joints near their sampled positions.",
+      },
+      min_moved_joints: {
+        type: "integer",
+        minimum: 1,
+        maximum: 8,
+        default: 2,
+        description: "Minimum target joints that must move beyond the threshold for the command to pass.",
+      },
+    },
+    [],
+    {
+      readOnlyHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  ),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -801,6 +866,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoArmMotion(args));
     case "unitree_probe_official_mujoco_arm_pose":
       return textResult(sdk2ProbeOfficialMujocoArmPose(args));
+    case "unitree_command_official_mujoco_arm_pose":
+      return textResult(sdk2CommandOfficialMujocoArmPose(args));
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -2059,6 +2126,58 @@ function sdk2ProbeOfficialMujocoArmPose(options = {}) {
   return {
     command: `docker ${args.join(" ")}`,
     parameters: { preset, joint_deltas: jointDeltas, frames, kp, kd, hold_kp: holdKp, hold_kd: holdKd, min_moved_joints: minMovedJoints },
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2CommandOfficialMujocoArmPose(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    throw new Error("Managed official MuJoCo session is not running and ready. Run unitree_start_official_mujoco_session first.");
+  }
+  const preset = OFFICIAL_G1_ARM_POSE_PRESETS.includes(options.preset) ? options.preset : "raise_right_hand";
+  const jointDeltas = normalizeJointDeltas(options.joint_deltas);
+  const frames = clampInt(options.frames, 20, 600, 180);
+  const kp = clampNumber(options.kp, 0, 80, 30.0);
+  const kd = clampNumber(options.kd, 0, 5, 1.0);
+  const holdKp = clampNumber(options.hold_kp, 0, 80, 18.0);
+  const holdKd = clampNumber(options.hold_kd, 0, 5, 0.8);
+  const minMovedJoints = clampInt(options.min_moved_joints, 1, 8, 2);
+  const env = [
+    "CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose",
+    `CYBER_UNITREE_ARM_POSE_PRESET=${preset}`,
+    `CYBER_UNITREE_ARM_POSE_FRAMES=${frames}`,
+    `CYBER_UNITREE_ARM_POSE_KP=${kp}`,
+    `CYBER_UNITREE_ARM_POSE_KD=${kd}`,
+    `CYBER_UNITREE_ARM_POSE_HOLD_KP=${holdKp}`,
+    `CYBER_UNITREE_ARM_POSE_HOLD_KD=${holdKd}`,
+    `CYBER_UNITREE_ARM_POSE_MIN_MOVED_JOINTS=${minMovedJoints}`,
+  ];
+  if (Object.keys(jointDeltas).length > 0) {
+    env.push(`CYBER_UNITREE_ARM_POSE_DELTAS=${JSON.stringify(jointDeltas)}`);
+  }
+  const args = [...sdk2ComposeArgs(), "run", "--rm", ...env.flatMap((entry) => ["-e", entry]), "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 300_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    parameters: { preset, joint_deltas: jointDeltas, frames, kp, kd, hold_kp: holdKp, hold_kd: holdKd, min_moved_joints: minMovedJoints },
+    session,
     stdout: result.stdout,
     stderr: result.stderr,
     report,

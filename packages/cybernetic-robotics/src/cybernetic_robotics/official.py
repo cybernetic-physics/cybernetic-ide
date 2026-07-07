@@ -74,6 +74,12 @@ class OfficialG1Sim:
     def raise_left_hand(self, **kwargs: Any) -> dict[str, Any]:
         return self.arm_pose("raise_left_hand", **kwargs)
 
+    def raise_right_hand_session(self, **kwargs: Any) -> dict[str, Any]:
+        return self.arm_pose_session("raise_right_hand", **kwargs)
+
+    def raise_left_hand_session(self, **kwargs: Any) -> dict[str, Any]:
+        return self.arm_pose_session("raise_left_hand", **kwargs)
+
     def status(self) -> dict[str, Any]:
         """Inspect the official SDK2 sidecar without commanding motion."""
 
@@ -141,6 +147,66 @@ class OfficialG1Sim:
             "moved_joints": list(probe.get("moved_joints", [])) if isinstance(probe, dict) else [],
             "lowcmd_write_successes": probe.get("lowcmd_write_successes") if isinstance(probe, dict) else None,
             "probe": probe,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
+    def arm_pose_session(
+        self,
+        preset: str = "raise_right_hand",
+        *,
+        joint_deltas: dict[str, float] | None = None,
+        frames: int = 180,
+        kp: float = 30.0,
+        kd: float = 1.0,
+        hold_kp: float = 18.0,
+        hold_kd: float = 0.8,
+        min_moved_joints: int = 2,
+    ) -> dict[str, Any]:
+        """Command an already-running official MuJoCo DDS session.
+
+        This targets the managed `unitree-g1-sdk2-session` container started by
+        the Cybernetic MCP instead of launching a second short-lived MuJoCo peer.
+        """
+
+        if preset not in ARM_POSE_PRESETS:
+            raise ValueError(f"unknown official G1 arm pose preset: {preset}")
+
+        normalized_deltas = _normalize_joint_deltas(joint_deltas)
+        env = {
+            "CYBER_UNITREE_ACTION": "command_official_mujoco_arm_pose",
+            "CYBER_UNITREE_ARM_POSE_PRESET": preset,
+            "CYBER_UNITREE_ARM_POSE_FRAMES": str(_clamp_int(frames, 20, 600)),
+            "CYBER_UNITREE_ARM_POSE_KP": str(_clamp_float(kp, 0.0, 80.0)),
+            "CYBER_UNITREE_ARM_POSE_KD": str(_clamp_float(kd, 0.0, 5.0)),
+            "CYBER_UNITREE_ARM_POSE_HOLD_KP": str(_clamp_float(hold_kp, 0.0, 80.0)),
+            "CYBER_UNITREE_ARM_POSE_HOLD_KD": str(_clamp_float(hold_kd, 0.0, 5.0)),
+            "CYBER_UNITREE_ARM_POSE_MIN_MOVED_JOINTS": str(_clamp_int(min_moved_joints, 1, 8)),
+        }
+        if normalized_deltas:
+            env["CYBER_UNITREE_ARM_POSE_DELTAS"] = json.dumps(normalized_deltas, sort_keys=True)
+
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        command = report.get("arm_pose_command") if isinstance(report, dict) else None
+        return {
+            "ok": bool(isinstance(command, dict) and command.get("ok")),
+            "preset": preset,
+            "source": "official_unitree_mujoco_managed_session",
+            "parameters": {
+                "joint_deltas": normalized_deltas,
+                "frames": int(env["CYBER_UNITREE_ARM_POSE_FRAMES"]),
+                "kp": float(env["CYBER_UNITREE_ARM_POSE_KP"]),
+                "kd": float(env["CYBER_UNITREE_ARM_POSE_KD"]),
+                "hold_kp": float(env["CYBER_UNITREE_ARM_POSE_HOLD_KP"]),
+                "hold_kd": float(env["CYBER_UNITREE_ARM_POSE_HOLD_KD"]),
+                "min_moved_joints": int(env["CYBER_UNITREE_ARM_POSE_MIN_MOVED_JOINTS"]),
+            },
+            "moved_joints": list(command.get("moved_joints", [])) if isinstance(command, dict) else [],
+            "lowcmd_write_successes": command.get("lowcmd_write_successes") if isinstance(command, dict) else None,
+            "command_result": command,
             "report": report,
             "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
             "stdout_tail": completed.stdout[-12000:],

@@ -3,11 +3,12 @@
 `g1-yoga-rl` is the research package for the Cybernetic IDE Unitree G1
 "yoga teacher" balance-policy track.
 
-It is intentionally small right now. The goal is to turn the LocoMuJoCo audit
-into runnable, reviewable artifacts before training a policy:
+It turns the LocoMuJoCo audit into runnable, reviewable artifacts before
+training a policy:
 
-- project Cybernetic's 29-DOF yoga pose registry onto LocoMuJoCo's reduced
-  Unitree G1 joint set;
+- build a LocoMuJoCo-compatible training environment on Cybernetic's exact
+  29-DOF deploy scene, with mimic sites injected and contacts reduced to the
+  same foot-capsule/floor pattern used by the MJX training environment;
 - generate smooth target trajectories that can become LocoMuJoCo
   `Trajectory` objects;
 - benchmark local CPU MuJoCo and MJX stepping speed on the Mac;
@@ -34,8 +35,7 @@ uv pip install -e 'packages/g1-yoga-rl[locomujoco]'
 
 ## Commands
 
-Project the Cybernetic simulator pose registry onto the LocoMuJoCo Unitree G1
-joint set:
+Project the Cybernetic simulator pose registry onto the G1 joint set:
 
 ```sh
 g1-yoga-project-poses --output .runtime/g1-yoga-rl/yoga_pose_projection.json
@@ -72,8 +72,8 @@ g1-yoga-export \
   --out .runtime/g1-yoga-rl/policies/yoga_policy.npz
 ```
 
-Evaluate the exported policy in the original LocoMuJoCo CPU environment before
-trying to deploy it into Cybernetic's 29-DOF simulator:
+Evaluate the exported policy in the Cybernetic 29-DOF LocoMuJoCo environment
+before trying to deploy it into the Docker simulator:
 
 ```sh
 g1-yoga-eval \
@@ -159,9 +159,10 @@ Generated `.npz` datasets are intentionally not committed. Store them under
 The simulator-side runtime lives at
 `overlays/unitree-g1-mujoco-protocol/python/g1_policy_runtime.py`. It is a
 plain NumPy/MuJoCo module that injects the LocoMuJoCo mimic sites into the
-29-DOF G1 model, reconstructs the policy observation, maps the 23-DOF policy
-actuators onto the 29-DOF model by driven joint name, and PD-holds the extra
-wrist/waist actuators. The live Docker protocol server loads it when
+29-DOF G1 model, names the stock foot collision capsules, reduces robot
+contacts to explicit foot/floor pairs, matches the training solver options, and
+reconstructs the policy observation by joint/site name. The live Docker
+protocol server loads it when
 `UNITREE_G1_POLICY_BUNDLE` points at a packed bundle and exposes the
 `yoga_policy` simulator command.
 

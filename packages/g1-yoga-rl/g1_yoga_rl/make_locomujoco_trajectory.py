@@ -14,12 +14,11 @@ def main() -> int:
     parser.add_argument("--replay", action="store_true", help="Replay the trajectory in LocoMuJoCo after saving.")
     args = parser.parse_args()
 
-    from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
-
+    from .cyber_env import make_cyber_env
     from .yoga_traj import FULL_FLOW, STABLE_FLOW, build_yoga_trajectory
 
     pose_names = args.poses or (FULL_FLOW if args.flow == "full" else STABLE_FLOW)
-    env = MjxUnitreeG1(headless=not args.replay)
+    env = make_cyber_env(headless=not args.replay)
     trajectory = build_yoga_trajectory(env, pose_names, glide_seconds=args.glide, hold_seconds=args.hold)
     frame_count = int(trajectory.data.qpos.shape[0])
 

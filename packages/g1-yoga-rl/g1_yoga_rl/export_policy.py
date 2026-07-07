@@ -44,7 +44,7 @@ def main() -> None:
     import mujoco
     import numpy as np
 
-    from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
+    from .cyber_env import make_cyber_env
 
     with open(args.agent, "rb") as f:
         saved = pickle.load(f)
@@ -65,7 +65,7 @@ def main() -> None:
         export[f"b{i}"] = np.asarray(actor[layer]["bias"])
 
     # action scaling + name orders from the training env's model
-    env = MjxUnitreeG1(headless=True)
+    env = make_cyber_env(headless=True)
     model = env.get_model()
     action_indices = np.asarray(env._action_indices)
     low = model.actuator_ctrlrange[action_indices, 0]

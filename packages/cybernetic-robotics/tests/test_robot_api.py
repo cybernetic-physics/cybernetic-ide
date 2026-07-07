@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from cybernetic_robotics import G1Robot, OfficialG1Sim, ProtocolError, RobotEndpoints, SimulatorClient, UnitreeSession, UnitreeTransportConfig
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
@@ -354,6 +355,49 @@ class RobotApiTests(unittest.TestCase):
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
+    def test_unitree_style_arm_action_routes_to_official_dds_session(self):
+        previous = {
+            "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+            "CYBER_UNITREE_MODE": os.environ.get("CYBER_UNITREE_MODE"),
+        }
+        os.environ["CYBER_UNITREE_TRANSPORT"] = "dds"
+        os.environ["CYBER_UNITREE_MODE"] = "sim"
+
+        class FakeOfficial:
+            @classmethod
+            def discover(cls, *, timeout: int = 300):
+                return cls(timeout)
+
+            def __init__(self, timeout: int):
+                self.timeout = timeout
+
+            def raise_right_hand_session(self):
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "moved_joints": ["right_shoulder_pitch", "right_elbow"],
+                }
+
+        try:
+            with patch("cybernetic_robotics.official.OfficialG1Sim", FakeOfficial):
+                arm = G1ArmActionClient()
+                arm.SetTimeout(2.0)
+                arm.Init()
+
+                code = arm.ExecuteAction(action_map["right hand up"])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(arm.last_response["ok"])
+            self.assertEqual(arm.last_response["transport"], "dds")
+            self.assertEqual(arm.last_response["unitree_action_id"], action_map["right hand up"])
+            self.assertEqual(arm.last_response["moved_joints"], ["right_shoulder_pitch", "right_elbow"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_unitree_style_loco_client_uses_same_simulator(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
@@ -691,6 +735,49 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(status["source"], "official_unitree_mujoco_sdk2_sidecar")
         self.assertEqual(status["expected_topics"], ["rt/lowcmd", "rt/lowstate"])
         self.assertTrue(status["official_mujoco_peer"]["binary_exists"])
+
+    def test_official_g1_sim_can_command_managed_session(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "arm_pose_command": {
+                            "ok": True,
+                            "preset": "raise_left_hand",
+                            "moved_joints": ["left_shoulder_pitch", "left_elbow"],
+                            "lowcmd_write_successes": 120,
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=77, _runner=fake_runner)
+
+            result = official.raise_left_hand_session(frames=120, min_moved_joints=1)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["moved_joints"], ["left_shoulder_pitch", "left_elbow"])
+        self.assertEqual(result["lowcmd_write_successes"], 120)
+        self.assertEqual(captured["timeout"], 77)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose", command)
+        self.assertIn("CYBER_UNITREE_ARM_POSE_PRESET=raise_left_hand", command)
+        self.assertIn("CYBER_UNITREE_ARM_POSE_FRAMES=120", command)
 
 
 if __name__ == "__main__":

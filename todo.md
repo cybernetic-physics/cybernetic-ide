@@ -214,13 +214,18 @@ Tasks:
   `unitree_official_mujoco_session_status`, and
   `unitree_stop_official_mujoco_session`; live validation started
   `unitree-g1-sdk2-session`, parsed the ready report, and removed it cleanly.
+- Done: add `CYBER_UNITREE_ACTION=command_official_mujoco_arm_pose`, expose it
+  as MCP `unitree_command_official_mujoco_arm_pose`, enable it in the Robotics
+  default profile, and route
+  `G1ArmActionClient.ExecuteAction(action_map["right hand up"])` through the
+  managed official MuJoCo DDS session when `CYBER_UNITREE_TRANSPORT=dds`.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
   mounting for deploy bundles.
 - Remaining: promote the proven lowstate/lowcmd/motion probes into a long-lived
-  DDS session transport, then map the Cybernetic Python facade onto that
-  transport for normal developer scripts.
+  DDS session transport for locomotion, richer arm action coverage, and lower
+  latency streaming beyond the current bounded managed-session arm pose path.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,

@@ -40,8 +40,10 @@ def main() -> None:
 
     spec = mujoco.MjSpec.from_file(str(SCENE_29DOF_XML))
     runtime.inject_mimic_sites(spec, bundle)
+    runtime.reduce_robot_contacts(spec)
     model = spec.compile()
     model.opt.timestep = PHYSICS_DT
+    runtime.apply_training_solver_options(model)
     data = mujoco.MjData(model)
     controller = runtime.YogaPolicyController(model, bundle)
 

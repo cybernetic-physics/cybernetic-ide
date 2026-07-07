@@ -115,9 +115,11 @@ revisions, and the official MuJoCo peer plan. `raise_right_hand()` and
 `cyber-g1 official raise-hand` launch the official peer, publish a bounded
 multi-joint HG `LowCmd_` pose over `rt/lowcmd`, and verify moved joints through
 official `rt/lowstate`. These calls are simulator-only and short-lived by
-design. With `CYBER_UNITREE_TRANSPORT=dds`, `cyber-g1 diagnostics` includes the
-official sidecar status evidence while the future provider work makes the same
-bridge long-lived behind the normal Unitree-shaped API.
+design. If the MCP has started the managed `unitree-g1-sdk2-session`,
+`official.raise_right_hand_session()` sends the same bounded pose to that
+already-running peer instead of launching another one. With
+`CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
+`right hand up` through that managed official session.
 
 ## Unitree SDK2-Shaped Code
 
@@ -135,6 +137,12 @@ arm.SetTimeout(10.0)
 arm.Init()
 arm.ExecuteAction(action_map["right hand up"])
 ```
+
+For the local HTTP transport, that call maps to the lightweight Cybernetic
+viewer harness. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, it uses
+the managed official MuJoCo + SDK2/CycloneDDS session, so the user script keeps
+the Unitree SDK shape while the backend talks to `rt/lowcmd` and verifies
+motion from `rt/lowstate`.
 
 The compatibility package currently implements high-level arm actions,
 locomotion actions, G1 audio intent, and the low-level channels needed by the

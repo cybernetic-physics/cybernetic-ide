@@ -33,14 +33,15 @@ def main() -> None:
 
     from loco_mujoco.core.utils.math import calculate_relative_site_quatities
     from loco_mujoco.core.utils.mujoco import mj_jntid2qposid, mj_jntid2qvelid
-    from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
     from loco_mujoco.trajectory import Trajectory
+
+    from .cyber_env import make_cyber_env
 
     policy = dict(np.load(args.policy, allow_pickle=True))
     trajectory = Trajectory.load(str(args.traj))
     traj_data = trajectory.data
 
-    env = MjxUnitreeG1(headless=True)
+    env = make_cyber_env(headless=True)
     model = env.get_model()
 
     # site table for injection into the 29-DOF sim model
@@ -61,7 +62,10 @@ def main() -> None:
 
     n_frames = int(traj_data.qpos.shape[0])
     rel_body_ids = model.site_bodyid[site_ids]
-    goal_ref = np.zeros((n_frames, 57 + 168), dtype=np.float32)
+    n_hinge = model.njnt - 1
+    n_rel_sites = len(site_names) - 1
+    goal_dim = (5 + n_hinge) + (6 + n_hinge) + 12 * n_rel_sites
+    goal_ref = np.zeros((n_frames, goal_dim), dtype=np.float32)
     for k in range(n_frames):
         frame = traj_data.get(0, k, np)
         rpos, rangles, rvel = calculate_relative_site_quatities(

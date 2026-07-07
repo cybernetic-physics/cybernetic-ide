@@ -26,20 +26,24 @@ REWARD_PARAMS = dict(
 
 
 def build_env(traj_path: Path, horizon: int = 1000):
-    from loco_mujoco.task_factories import CustomDatasetConf, ImitationFactory
-    from loco_mujoco.trajectory import Trajectory
+    """Imitation env on the 29-DOF deploy model spec (see cyber_env)."""
+    from loco_mujoco.trajectory import Trajectory, TrajectoryHandler
+
+    from .cyber_env import make_cyber_env
 
     trajectory = Trajectory.load(str(traj_path))
-    env = ImitationFactory.make(
-        "MjxUnitreeG1",
-        custom_dataset_conf=CustomDatasetConf(trajectory),
+    env = make_cyber_env(
         headless=True,
         horizon=horizon,
+        init_state_type="TrajInitialStateHandler",
+        terminal_state_type="RootPoseTrajTerminalStateHandler",
         goal_type="GoalTrajMimic",
         goal_params=dict(visualize_goal=False),
         reward_type="MimicReward",
         reward_params=dict(REWARD_PARAMS),
     )
+    handler = TrajectoryHandler(env.get_model(), control_dt=env.dt, traj=trajectory)
+    env.load_trajectory(traj=handler.traj, warn=False)
     # custom trajectories load as numpy; the MJX training path needs jax arrays
     env.th.to_jax()
     return env
