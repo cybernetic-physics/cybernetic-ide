@@ -8,8 +8,12 @@ from .simulator import SimulatorClient
 
 LOCO_SERVICE_NAME = "sport"
 LOCO_API_VERSION = "1.0.0.0"
+AGV_SERVICE_NAME = "agv"
+AGV_API_VERSION = "1.0.0.0"
 AUDIO_SERVICE_NAME = "voice"
 AUDIO_API_VERSION = "1.0.0.0"
+ROBOT_API_ID_AGV_MOVE = 8001
+ROBOT_API_ID_AGV_HEIGHT_ADJUST = 8002
 ROBOT_API_ID_LOCO_GET_FSM_ID = 7001
 ROBOT_API_ID_LOCO_GET_FSM_MODE = 7002
 ROBOT_API_ID_LOCO_GET_BALANCE_MODE = 7003
@@ -331,6 +335,82 @@ class LocoClient:
 
 def _code_and_data(response: dict[str, Any], data: Any):
     return (0, data) if response.get("ok") else (-1, None)
+
+
+class AgvClient:
+    """Simulator-backed subset of Unitree's official G1 `AgvClient`.
+
+    Upstream Unitree SDK2 exposes `unitree::robot::g1::AgvClient` for G1
+    wheeled-base style velocity and height-column commands. Cybernetic keeps
+    the Python call shape available at
+    `unitree_sdk2py.g1.agv.g1_agv_client.AgvClient` and maps it onto the local
+    simulator's locomotion state. `vy` is accepted for API compatibility, but
+    the upstream AGV API documents lateral motion as unsupported.
+    """
+
+    def __init__(self):
+        self.service_name = AGV_SERVICE_NAME
+        self.api_version: str | None = None
+        self.timeout = 1.0
+        self.last_response: dict[str, Any] | None = None
+        self.height_velocity = 0.0
+        self._simulator = SimulatorClient.from_env(timeout=self.timeout)
+
+    def SetTimeout(self, timeout: float):  # noqa: N802 - match Unitree SDK2 API.
+        self.timeout = float(timeout)
+        self._simulator.timeout = self.timeout
+
+    def Init(self):  # noqa: N802 - match Unitree SDK2 API.
+        self.api_version = AGV_API_VERSION
+        self._registered_apis = {ROBOT_API_ID_AGV_MOVE, ROBOT_API_ID_AGV_HEIGHT_ADJUST}
+
+    def Move(self, vx: float, vy: float, vyaw: float):  # noqa: N802 - match Unitree SDK2 API.
+        vx_clamped = _clamp_float(float(vx), -1.5, 1.5)
+        vyaw_clamped = _clamp_float(float(vyaw), -0.6, 0.6)
+        response = self._call_agv(
+            "move",
+            velocity=[vx_clamped, 0.0, vyaw_clamped],
+            requested_velocity=[float(vx), float(vy), float(vyaw)],
+            ignored_lateral_velocity=float(vy),
+            duration=1.0,
+        )
+        return self._code(response)
+
+    def HeightAdjust(self, vz: float):  # noqa: N802 - match Unitree SDK2 API.
+        self.height_velocity = _clamp_float(float(vz), -1.0, 1.0)
+        response = self._call_agv("height_adjust", height_velocity=self.height_velocity)
+        return self._code(response)
+
+    def _call_agv(self, action: str, **fields: Any) -> dict[str, Any]:
+        payload = {
+            "action": action,
+            "service": AGV_SERVICE_NAME,
+            "simulated": True,
+            **fields,
+        }
+        try:
+            if action == "move":
+                response = self._simulator.loco(
+                    action="set_velocity",
+                    velocity=payload["velocity"],
+                    duration=payload["duration"],
+                )
+            else:
+                response = self._simulator.command("agv", **payload)
+            if response.get("ok"):
+                self.last_response = {**response, **payload, "agv": payload}
+                return self.last_response
+        except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
+            payload["transport_error"] = str(error)
+        self.last_response = {"ok": action == "height_adjust", **payload}
+        return self.last_response
+
+    def _code(self, response: dict[str, Any]) -> int:
+        return 0 if response.get("ok") else -1
+
+
+def _clamp_float(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
 
 
 class AudioClient:

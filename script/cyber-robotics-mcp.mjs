@@ -682,6 +682,39 @@ const tools = [
     { readOnlyHint: false },
   ),
   tool(
+    "g1_agv_command",
+    "Execute a Unitree G1 AgvClient-shaped simulator command such as Move or HeightAdjust.",
+    {
+      command: {
+        type: "string",
+        enum: ["move", "height_adjust"],
+        default: "move",
+      },
+      vx: {
+        type: "number",
+        default: 0,
+        description: "Forward velocity in m/s, clamped to Unitree's documented AGV range [-1.5, 1.5].",
+      },
+      vy: {
+        type: "number",
+        default: 0,
+        description: "Accepted for API compatibility but ignored by the G1 AGV simulator path.",
+      },
+      vyaw: {
+        type: "number",
+        default: 0,
+        description: "Yaw velocity in rad/s, clamped to Unitree's documented AGV range [-0.6, 0.6].",
+      },
+      vz: {
+        type: "number",
+        default: 0,
+        description: "Height column velocity intent, clamped to [-1.0, 1.0].",
+      },
+    },
+    ["command"],
+    { readOnlyHint: false },
+  ),
+  tool(
     "g1_motion_switcher",
     "Execute a Unitree MotionSwitcherClient-shaped simulator command such as CheckMode, SelectMode, or ReleaseMode.",
     {
@@ -1034,6 +1067,8 @@ async function callTool(name, args) {
       return textResult(await executeG1Action(args.action));
     case "g1_loco_command":
       return textResult(await executeG1LocoCommand(args));
+    case "g1_agv_command":
+      return textResult(await executeG1AgvCommand(args));
     case "g1_motion_switcher":
       return textResult(await executeG1MotionSwitcher(args));
     case "g1_lowstate":
@@ -1718,6 +1753,45 @@ async function executeG1LocoCommand(args) {
   return command({ command: "loco", ...payload });
 }
 
+async function executeG1AgvCommand(args) {
+  const commandName = args.command || "move";
+  if (commandName === "height_adjust") {
+    const heightVelocity = clampNumber(args.vz, -1.0, 1.0, 0);
+    return command({
+      command: "agv",
+      action: "height_adjust",
+      service: "agv",
+      simulated: true,
+      height_velocity: heightVelocity,
+    }).catch((error) => ({
+      ok: true,
+      simulated: true,
+      service: "agv",
+      action: "height_adjust",
+      height_velocity: heightVelocity,
+      transport_warning: error.message,
+    }));
+  }
+  if (commandName !== "move") {
+    throw new Error(`Unsupported G1 AGV command: ${commandName}`);
+  }
+  const vx = clampNumber(args.vx, -1.5, 1.5, 0);
+  const vyaw = clampNumber(args.vyaw, -0.6, 0.6, 0);
+  return command({
+    command: "loco",
+    action: "set_velocity",
+    velocity: [vx, 0, vyaw],
+    duration: 1.0,
+    agv: {
+      service: "agv",
+      simulated: true,
+      requested_velocity: [Number(args.vx || 0), Number(args.vy || 0), Number(args.vyaw || 0)],
+      ignored_lateral_velocity: Number(args.vy || 0),
+      limits: { vx: [-1.5, 1.5], vyaw: [-0.6, 0.6] },
+    },
+  });
+}
+
 async function executeG1MotionSwitcher(args) {
   const commandName = args.command || "check_mode";
   if (commandName === "check_mode") {
@@ -1992,6 +2066,7 @@ function roboticsToolReference() {
       ),
       toolReference("g1_execute_action", "robot-motion", "Applies a high-level G1 pose.", "Simulator running; use safety_stop afterward."),
       toolReference("g1_loco_command", "robot-motion", "Changes locomotion FSM or velocity.", "Simulator running; prefer small velocities and safety_stop afterward."),
+      toolReference("g1_agv_command", "robot-motion", "Runs Unitree G1 AgvClient-shaped move or height intent.", "Simulator running; lateral AGV velocity is ignored."),
       toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),

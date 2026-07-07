@@ -156,6 +156,24 @@ loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
 ```
 
+Current G1 AGV examples can use the newer Unitree `AgvClient` shape:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+agv = AgvClient()
+agv.Init()
+agv.Move(0.3, 0.0, 0.2)
+agv.HeightAdjust(0.25)
+```
+
+In the local simulator, AGV movement routes through the same kinematic velocity
+path as `LocoClient`. The lateral `vy` argument is accepted for SDK
+compatibility but ignored, matching Unitree's AGV documentation.
+
 Low-level examples that follow Unitree's official pattern can also use the
 motion switcher before publishing `rt/lowcmd`:
 

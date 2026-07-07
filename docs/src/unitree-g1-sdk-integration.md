@@ -410,6 +410,8 @@ For G1, the friendly first surface is high-level SDK control:
 - `sport` / `LocoClient`: damping, zero torque, sit, stand, squat, high/low
   stand, balance, velocity movement, wave, shake hand, speed mode, and
   internal/user-control switching in the C++ client.
+- `agv` / `AgvClient`: current G1 forward/yaw velocity and height-column
+  commands. Unitree documents lateral `vy` as unsupported for this surface.
 - `arm` / `G1ArmActionClient`: preset and custom arm actions, with a release
   action for actions that hold.
 - `rt/lowstate`: motor state, IMU, mode fields, wireless state, and other low
@@ -514,6 +516,11 @@ The current repo has the first narrow version of that API boundary:
   `SetSpeedMode`, `SwitchToUserCtrl`, and `SwitchToInternalCtrl`; in the local
   simulator these are stateful compatibility flags around the kinematic
   velocity path, not a whole-body balance controller.
+- `examples/g1_agv_sdk.py` uses the newer Unitree-shaped
+  `unitree_sdk2py.g1.agv.g1_agv_client.AgvClient` import path. `Move` is
+  clamped to Unitree's documented AGV ranges and routes through the local
+  kinematic velocity path; `HeightAdjust` is recorded as simulator intent until
+  there is a modeled height-column actuator.
 - `examples/g1_wave_hand_sdk.py` isolates the official-style
   `LocoClient.WaveHand()` call and writes before/after screenshots plus a
   manifest for agent review.

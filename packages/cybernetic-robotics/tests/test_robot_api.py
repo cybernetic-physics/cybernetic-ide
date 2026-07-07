@@ -23,6 +23,7 @@ from cybernetic_robotics import (
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
+from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
@@ -522,6 +523,29 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(FakeG1Handler.loco["control_owner"], "internal")
                 self.assertEqual(FakeG1Handler.loco["internal_mode"], 2)
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_g1_agv_client_uses_simulator_motion(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                agv = AgvClient()
+                agv.SetTimeout(2.0)
+                agv.Init()
+
+                move_code = agv.Move(2.0, 0.4, 1.4)
+                height_code = agv.HeightAdjust(2.5)
+
+                self.assertEqual(move_code, 0)
+                self.assertEqual(height_code, 0)
+                self.assertEqual(agv.api_version, "1.0.0.0")
+                self.assertEqual(FakeG1Handler.loco["velocity"], [1.5, 0.0, 0.6])
+                self.assertEqual(agv.last_response["height_velocity"], 1.0)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

@@ -20,6 +20,7 @@ surfaces a developer is likely to reach for first:
 
 - `unitree_sdk2py.g1.arm.g1_arm_action_client.G1ArmActionClient`
 - `unitree_sdk2py.g1.loco.g1_loco_client.LocoClient`
+- `unitree_sdk2py.g1.agv.g1_agv_client.AgvClient`
 - `unitree_sdk2py.core.channel.ChannelPublisher("rt/lowcmd", LowCmd_)`
 - `unitree_sdk2py.core.channel.ChannelSubscriber("rt/lowstate", LowState_)`
 
@@ -49,6 +50,16 @@ The locomotion shim supports the official method names:
 - `SwitchToInternalCtrl`
 - `WaveHand`
 - `ShakeHand`
+
+The AGV shim follows the current upstream C++ G1 header
+`include/unitree/robot/g1/agv/g1_agv_client.hpp`:
+
+- `Move(vx, vy, vyaw)` with `vx` clamped to `[-1.5, 1.5]` m/s and `vyaw`
+  clamped to `[-0.6, 0.6]` rad/s. `vy` is accepted but ignored because the
+  upstream AGV documentation says lateral velocity is not supported.
+- `HeightAdjust(vz)` with `vz` clamped to `[-1.0, 1.0]`. The local simulator
+  records this as intent because the current G1 harness does not model a
+  height-column actuator.
 
 In simulator mode, these methods post to Cybernetic's local GameControl API.
 `Move` is represented as simple kinematic base motion in MuJoCo. Stand and arm
@@ -95,6 +106,9 @@ It also exposes `g1_loco_command` for common `LocoClient`-style commands:
 `start`, `move`, `stop_move`, `damp`, `zero_torque`, `low_stand`,
 `high_stand`, `wave_hand`, and `shake_hand`.
 
+`g1_agv_command` mirrors the `AgvClient` surface for agents that are reading
+or writing newer G1 AGV-style examples.
+
 For lower-level inspection and control, agents can use:
 
 - `g1_lowstate`: read synthesized `rt/lowstate` telemetry.
@@ -112,6 +126,7 @@ Use these as the living examples for developer behavior:
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_raise_hand_sdk.py
 python3 examples/g1_loco_sdk.py
+python3 examples/g1_agv_sdk.py
 python3 examples/g1_wave_hand_sdk.py
 python3 examples/g1_walk_square_loco.py
 python3 examples/g1_lowcmd_sdk.py

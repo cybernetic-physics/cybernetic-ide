@@ -234,6 +234,33 @@ Both scripts call the Unitree-shaped `LocoClient`, write screenshots, and save
 a JSON manifest under `.runtime/` so an AI agent can inspect return codes,
 status, lowstate, and visual evidence after the behavior runs.
 
+## Unitree G1 AgvClient-Shaped Code
+
+The upstream C++ G1 SDK also exposes `unitree::robot::g1::AgvClient` for
+AGV-style forward/yaw movement and height-column velocity. Cybernetic exposes a
+matching Python import path for code that is following the current G1 SDK
+headers:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.agv.g1_agv_client import AgvClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+agv = AgvClient()
+agv.SetTimeout(10.0)
+agv.Init()
+agv.Move(0.3, 0.0, 0.2)
+agv.HeightAdjust(0.25)
+```
+
+`Move` clamps `vx` to `[-1.5, 1.5]` m/s and `vyaw` to `[-0.6, 0.6]` rad/s,
+matching Unitree's documented AGV limits. The `vy` argument is accepted because
+the official method includes it, but the AGV surface documents lateral motion
+as unsupported, so Cybernetic records and ignores it. `HeightAdjust` records a
+clamped `[-1.0, 1.0]` simulator intent; the local G1 MuJoCo harness does not
+yet have a physical height-column actuator.
+
 ## Unitree G1 AudioClient-Shaped Code
 
 Unitree's official G1 SDK also exposes
@@ -361,6 +388,7 @@ unitree_sdk_scaffold_python
 scene_add_object
 scene_list_objects
 scene_remove_object
+g1_agv_command
 g1_lowstate
 g1_joint_state
 g1_apply_joint_targets

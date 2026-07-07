@@ -231,6 +231,10 @@ Tasks:
   `SwitchMoveMode`, `SetSpeedMode`, `SwitchToUserCtrl`, and
   `SwitchToInternalCtrl`. These are simulator compatibility calls and state
   flags, not a real Unitree balance controller.
+- Done: add the current upstream G1 `AgvClient` import path and MCP
+  `g1_agv_command` so newer Unitree G1 SDK examples that use AGV-style
+  forward/yaw velocity and height-column intent can run against the local
+  simulator facade.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,

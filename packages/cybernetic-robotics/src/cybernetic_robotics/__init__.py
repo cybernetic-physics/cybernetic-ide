@@ -21,11 +21,12 @@ from .official import OfficialG1Sim
 from .scene import SceneWorkspace
 from .session import UnitreeSession, UnitreeTransportConfig
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
-from .unitree import AudioClient, LocoClient
+from .unitree import AgvClient, AudioClient, LocoClient
 from .websocket import TinyWebSocket
 
 __all__ = [
     "CameraState",
+    "AgvClient",
     "AudioClient",
     "CyberneticRoboticsError",
     "G1Robot",

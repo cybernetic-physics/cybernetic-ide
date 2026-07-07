@@ -374,7 +374,7 @@ ad hoc scripts first. The default tool surface includes:
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
   `scene_add_box`;
 - Unitree-shaped G1 controls: `g1_execute_action`, `g1_loco_command`,
-  `g1_motion_switcher`, `g1_lowstate`, `g1_joint_state`,
+  `g1_agv_command`, `g1_motion_switcher`, `g1_lowstate`, `g1_joint_state`,
   `g1_apply_joint_targets`, and `g1_lowcmd`;
 - Python control jobs: `python_control_run`, `python_control_start`,
   `python_control_logs`, `python_control_pause`, `python_control_resume`,
