@@ -231,6 +231,7 @@ class G1MujocoState:
         self.render_hz = env_float("UNITREE_G1_RENDER_HZ", 8.0)
         self.render_width = env_int("UNITREE_G1_RENDER_WIDTH", 640)
         self.render_height = env_int("UNITREE_G1_RENDER_HEIGHT", 480)
+        self.lowcmd_watchdog_seconds = env_float("UNITREE_G1_LOWCMD_WATCHDOG_SECONDS", 2.0)
         self.paused = os.environ.get("UNITREE_G1_AUTORUN", "0") != "1"
         self.frame_id = 0
         self.last_step_wall_time = time.monotonic()
@@ -249,6 +250,11 @@ class G1MujocoState:
         self.lowcmd_state = {
             "topic": None,
             "received_at": None,
+            "age_seconds": None,
+            "expires_at": None,
+            "watchdog_seconds": self.lowcmd_watchdog_seconds,
+            "active": False,
+            "stale": False,
             "motor_cmd_count": 0,
             "mode_pr": 0,
             "mode_machine": None,
@@ -355,6 +361,11 @@ class G1MujocoState:
             self.lowcmd_state = {
                 "topic": None,
                 "received_at": None,
+                "age_seconds": None,
+                "expires_at": None,
+                "watchdog_seconds": self.lowcmd_watchdog_seconds,
+                "active": False,
+                "stale": False,
                 "motor_cmd_count": 0,
                 "mode_pr": 0,
                 "mode_machine": None,
@@ -378,10 +389,39 @@ class G1MujocoState:
     def step(self, count=1):
         with self.lock:
             for _ in range(max(1, count)):
+                self.refresh_lowcmd_watchdog_locked()
                 self.apply_hold_control_locked()
                 self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
+
+    def refresh_lowcmd_watchdog_locked(self):
+        received_at = self.lowcmd_state.get("received_at")
+        if received_at is None:
+            self.lowcmd_state["age_seconds"] = None
+            self.lowcmd_state["expires_at"] = None
+            self.lowcmd_state["watchdog_seconds"] = self.lowcmd_watchdog_seconds
+            self.lowcmd_state["active"] = False
+            self.lowcmd_state["stale"] = False
+            return
+
+        now = time.time()
+        age = max(0.0, now - float(received_at))
+        self.lowcmd_state["age_seconds"] = age
+        self.lowcmd_state["watchdog_seconds"] = self.lowcmd_watchdog_seconds
+        if self.lowcmd_watchdog_seconds <= 0:
+            self.lowcmd_state["expires_at"] = None
+            self.lowcmd_state["active"] = True
+            self.lowcmd_state["stale"] = False
+            return
+
+        expires_at = float(received_at) + self.lowcmd_watchdog_seconds
+        stale = now > expires_at
+        if stale and not bool(self.lowcmd_state.get("stale")):
+            self.data.ctrl[:] = 0.0
+        self.lowcmd_state["expires_at"] = expires_at
+        self.lowcmd_state["active"] = not stale
+        self.lowcmd_state["stale"] = stale
 
     def joint_qpos_addr(self, joint_name):
         joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
@@ -573,6 +613,7 @@ class G1MujocoState:
 
     def low_state_payload(self):
         with self.lock:
+            self.refresh_lowcmd_watchdog_locked()
             self.apply_loco_velocity_locked(0.0)
             motor_state = []
             for index in range(35):
@@ -672,9 +713,20 @@ class G1MujocoState:
                 ignored.append({"index": index, "reason": "no actuator in this G1 model"})
             mujoco.mj_forward(self.model, self.data)
             self.drop_to_floor_locked()
+            received_at = time.time()
+            expires_at = (
+                received_at + self.lowcmd_watchdog_seconds
+                if self.lowcmd_watchdog_seconds > 0
+                else None
+            )
             self.lowcmd_state = {
                 "topic": payload.get("topic", "rt/lowcmd"),
-                "received_at": time.time(),
+                "received_at": received_at,
+                "age_seconds": 0.0,
+                "expires_at": expires_at,
+                "watchdog_seconds": self.lowcmd_watchdog_seconds,
+                "active": True,
+                "stale": False,
                 "motor_cmd_count": len(motor_cmd),
                 "mode_pr": int(payload.get("mode_pr", 0) or 0),
                 "mode_machine": int(payload.get("mode_machine", self.loco_state.get("fsm_id") or 0) or 0),
@@ -765,6 +817,7 @@ class G1MujocoState:
                 if fsm_id in (0, 1):
                     self.control_mode = None
                     self.lowcmd_state["received_at"] = None
+                    self.refresh_lowcmd_watchdog_locked()
                     self.loco_state["velocity"] = [0.0, 0.0, 0.0]
                     self.loco_state["velocity_until"] = None
                     self.paused = True
@@ -986,11 +1039,13 @@ class G1MujocoState:
             now = time.monotonic()
             if self.paused:
                 self.last_step_wall_time = now
+                self.refresh_lowcmd_watchdog_locked()
                 mujoco.mj_forward(self.model, self.data)
                 return
             elapsed = min(now - self.last_step_wall_time, 0.08)
             steps = max(1, int(elapsed / self.model.opt.timestep))
             for _ in range(steps):
+                self.refresh_lowcmd_watchdog_locked()
                 self.apply_hold_control_locked()
                 self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
@@ -999,6 +1054,7 @@ class G1MujocoState:
 
     def simulation_state_payload(self):
         with self.lock:
+            self.refresh_lowcmd_watchdog_locked()
             render_cache = self.render_cache_payload()
             fallen, pelvis_height = self.is_fallen_locked()
             return {

@@ -200,3 +200,7 @@ overwriting the pinned upstream Unitree assets.
 - `CYBER_G1_WS_HOST`: fallback WebSocket host, default `127.0.0.1`.
 - `CYBER_G1_WS_PORT`: fallback WebSocket port, default `8788`.
 - `CYBER_ROBOTICS_ROOT`: Cybernetic IDE repo root for harness and scene helpers.
+- `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS`: simulator lowcmd freshness timeout,
+  default `2.0`. `G1Robot.status()` exposes `lowcmd_active`,
+  `lowcmd_stale`, and `lowcmd_age_seconds`; SDK-style `LowState_` exposes the
+  same freshness metadata plus `lowcmd_watchdog_seconds`.

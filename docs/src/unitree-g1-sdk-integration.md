@@ -153,6 +153,9 @@ Runtime environment knobs:
   `cyber/unitree-g1-mujoco-protocol:0.1.0`.
 - `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
   `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
+- `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS`: simulator lowcmd freshness timeout,
+  default `2.0`; status and lowstate telemetry report whether the most recent
+  lowcmd is still active or has gone stale.
 - `CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP=1`: auto-open Robot Viewer in debug
   sessions.
 - `CYBER_G1_GAME_CONTROL_URL`: GameControl base URL for Python examples.

@@ -75,6 +75,27 @@ class SimulatorStatus:
     def pelvis_height(self) -> float | None:
         return _optional_float(self.simulation.get("pelvis_height"))
 
+    @property
+    def lowcmd(self) -> JsonObject:
+        value = self.simulation.get("lowcmd")
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def lowcmd_active(self) -> bool:
+        return bool(self.lowcmd.get("active"))
+
+    @property
+    def lowcmd_stale(self) -> bool:
+        return bool(self.lowcmd.get("stale"))
+
+    @property
+    def lowcmd_age_seconds(self) -> float | None:
+        return _optional_float(self.lowcmd.get("age_seconds"))
+
+    @property
+    def lowcmd_watchdog_seconds(self) -> float | None:
+        return _optional_float(self.lowcmd.get("watchdog_seconds"))
+
 
 class SimulatorClient:
     """HTTP client for Cybernetic's GameControl-style simulator API."""

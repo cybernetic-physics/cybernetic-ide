@@ -56,6 +56,10 @@ class LowState_:
     imu_state: IMUState_ = field(default_factory=IMUState_)
     motor_state: list[MotorState_] = field(default_factory=lambda: [MotorState_() for _ in range(35)])
     wireless_remote: list[int] = field(default_factory=lambda: [0 for _ in range(40)])
+    lowcmd_active: bool = False
+    lowcmd_stale: bool = False
+    lowcmd_age_seconds: float = 0.0
+    lowcmd_watchdog_seconds: float = 0.0
     reserve: list[int] = field(default_factory=lambda: [0, 0, 0, 0, 0])
     crc: int = 0
     __idl_typename__: str = "unitree_hg.msg.dds_.LowState_"

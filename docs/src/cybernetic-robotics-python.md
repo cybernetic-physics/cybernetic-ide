@@ -253,6 +253,12 @@ hard-coded motor indices in beginner and agent-authored scripts. Run:
 python3 examples/g1_joint_targets.py
 ```
 
+Low-level commands also carry freshness metadata. The simulator marks the last
+lowcmd stale after `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS` seconds, default `2.0`.
+Beginner code can read `robot.status().lowcmd_active`,
+`robot.status().lowcmd_stale`, and `robot.status().lowcmd_age_seconds`; SDK2
+style code can read the same values from `LowState_`.
+
 ## Agent MCP Tools
 
 The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to

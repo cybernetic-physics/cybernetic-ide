@@ -137,9 +137,12 @@ Tasks:
 - Done: record which motor indices were accepted, ignored, or clamped.
 - Done: add explicit errors for invalid command shapes instead of silently
   skipping malformed entries.
-- Remaining: add a command watchdog timeout, not only the current
-  `received_at` timestamp.
-- Add tests for clamping and malformed command lists.
+- Done: add a command watchdog timeout, not only the current `received_at`
+  timestamp.
+- Done: add tests for malformed command lists.
+- Remaining: add direct harness-level clamping tests once the local test
+  environment can import MuJoCo/numpy or the validation logic is extracted into
+  a dependency-light helper.
 
 Reasoning: clear low-level semantics make examples safer and make AI agents
 better debugging partners. Agents need structured feedback, not vibes.

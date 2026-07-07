@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import unittest
 
-from cybernetic_robotics import G1Robot, RobotEndpoints, SimulatorClient
+from cybernetic_robotics import G1Robot, ProtocolError, RobotEndpoints, SimulatorClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
@@ -43,6 +43,12 @@ class FakeG1Handler(BaseHTTPRequestHandler):
     }
     lowcmd_count = 0
     last_lowcmd = {}
+    lowcmd_meta = {
+        "active": False,
+        "stale": False,
+        "age_seconds": None,
+        "watchdog_seconds": 2.0,
+    }
     joint_targets = {}
 
     def do_GET(self):  # noqa: N802 - stdlib handler method.
@@ -61,6 +67,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "model_path": "/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml",
                         "loco": type(self).loco,
                         "render": {"camera": type(self).camera},
+                        "lowcmd": {
+                            "motor_cmd_count": type(self).lowcmd_count,
+                            **type(self).lowcmd_meta,
+                        },
                     },
                 }
             )
@@ -86,7 +96,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         for index in range(35)
                     ],
                     "wireless_remote": [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
-                    "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
+                    "lowcmd": {
+                        "motor_cmd_count": type(self).lowcmd_count,
+                        **type(self).lowcmd_meta,
+                    },
                 }
             )
         if self.path == "/joint_state":
@@ -152,8 +165,20 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     type(self).pose = "raise_right_hand"
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
             elif command == "lowcmd":
+                if not isinstance(payload.get("motor_cmd"), list):
+                    return self._json({"ok": False, "error": "motor_cmd must be a list"})
+                if len(payload.get("motor_cmd", [])) > 35:
+                    return self._json({"ok": False, "error": "motor_cmd supports at most 35 entries"})
+                if any(not isinstance(item, dict) for item in payload.get("motor_cmd", [])):
+                    return self._json({"ok": False, "error": "motor_cmd entries must be objects"})
                 type(self).lowcmd_count = len(payload.get("motor_cmd", []))
                 type(self).last_lowcmd = payload
+                type(self).lowcmd_meta = {
+                    "active": True,
+                    "stale": False,
+                    "age_seconds": 0.0,
+                    "watchdog_seconds": 2.0,
+                }
                 type(self).paused = False
                 return self._json(
                     {
@@ -164,6 +189,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                             "mode_pr": payload.get("mode_pr"),
                             "mode_machine": payload.get("mode_machine"),
                             "crc": payload.get("crc"),
+                            **type(self).lowcmd_meta,
                         },
                     }
                 )
@@ -234,6 +260,12 @@ class FakeServer:
         }
         FakeG1Handler.lowcmd_count = 0
         FakeG1Handler.last_lowcmd = {}
+        FakeG1Handler.lowcmd_meta = {
+            "active": False,
+            "stale": False,
+            "age_seconds": None,
+            "watchdog_seconds": 2.0,
+        }
         FakeG1Handler.joint_targets = {}
         FakeG1Handler.audio = {
             "volume": 50,
@@ -354,12 +386,32 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(lowstate.mode_pr, 1)
                 self.assertEqual(lowstate.mode_machine, 1)
                 self.assertEqual(lowstate.crc, 12345)
+                self.assertTrue(lowstate.lowcmd_active)
+                self.assertFalse(lowstate.lowcmd_stale)
+                self.assertAlmostEqual(lowstate.lowcmd_age_seconds, 0.0)
+                self.assertAlmostEqual(lowstate.lowcmd_watchdog_seconds, 2.0)
                 self.assertAlmostEqual(lowstate.motor_state[1].q, 0.1)
+
+                status = G1Robot.connect(endpoints=RobotEndpoints(game_control_url=fake.url)).status()
+                self.assertTrue(status.lowcmd_active)
+                self.assertFalse(status.lowcmd_stale)
+                self.assertAlmostEqual(status.lowcmd_age_seconds or 0.0, 0.0)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_lowcmd_rejects_malformed_command_lists(self):
+        with FakeServer() as fake:
+            client = SimulatorClient(RobotEndpoints(game_control_url=fake.url))
+
+            with self.assertRaises(ProtocolError):
+                client.command("lowcmd", motor_cmd="not-a-list")
+            with self.assertRaises(ProtocolError):
+                client.command("lowcmd", motor_cmd=[{} for _ in range(36)])
+            with self.assertRaises(ProtocolError):
+                client.command("lowcmd", motor_cmd=[{"mode": 0}, "bad-entry"])
 
     def test_unitree_go_telemetry_channels_use_same_simulator(self):
         with FakeServer() as fake:

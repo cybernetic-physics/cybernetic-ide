@@ -43,6 +43,18 @@ class G1Status:
     def pelvis_height(self) -> float | None:
         return self.raw.pelvis_height
 
+    @property
+    def lowcmd_active(self) -> bool:
+        return self.raw.lowcmd_active
+
+    @property
+    def lowcmd_stale(self) -> bool:
+        return self.raw.lowcmd_stale
+
+    @property
+    def lowcmd_age_seconds(self) -> float | None:
+        return self.raw.lowcmd_age_seconds
+
 
 class G1Robot:
     """Beginner-friendly handle for the local Unitree G1 MuJoCo simulator."""

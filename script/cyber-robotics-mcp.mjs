@@ -693,11 +693,17 @@ async function validateBehavior(args) {
     addCheck(
       checks,
       "lowcmd_fresh",
-      Number.isFinite(age) && age <= maxLowcmdAge,
+      lowcmd.stale !== true && Number.isFinite(age) && age <= maxLowcmdAge,
       Number.isFinite(age)
-        ? `last lowcmd age ${age.toFixed(3)}s, max ${maxLowcmdAge}s`
+        ? `last lowcmd age ${age.toFixed(3)}s, max ${maxLowcmdAge}s, stale=${lowcmd.stale === true}`
         : "no lowcmd timestamp available",
-      { age_seconds: Number.isFinite(age) ? age : null, max_age_seconds: maxLowcmdAge },
+      {
+        age_seconds: Number.isFinite(age) ? age : null,
+        max_age_seconds: maxLowcmdAge,
+        active: lowcmd.active === true,
+        stale: lowcmd.stale === true,
+        watchdog_seconds: lowcmd.watchdog_seconds ?? null,
+      },
     );
     addCheck(
       checks,
@@ -737,6 +743,9 @@ async function validateBehavior(args) {
       crc: lowstate.crc ?? null,
       model_path: simulation.model_path || null,
       render_seq: render.render_seq ?? null,
+      lowcmd_active: lowcmd?.active === true,
+      lowcmd_stale: lowcmd?.stale === true,
+      lowcmd_watchdog_seconds: lowcmd?.watchdog_seconds ?? null,
     },
     snapshot: snapshotValue,
     status,

@@ -121,6 +121,11 @@ def _lowstate_from_json(value: dict):
     state.mode_pr = int(value.get("mode_pr", 0))
     state.mode_machine = int(value.get("mode_machine", 0))
     state.crc = int(value.get("crc", 0))
+    lowcmd = value.get("lowcmd") if isinstance(value.get("lowcmd"), dict) else {}
+    state.lowcmd_active = bool(lowcmd.get("active"))
+    state.lowcmd_stale = bool(lowcmd.get("stale"))
+    state.lowcmd_age_seconds = float(lowcmd.get("age_seconds") or 0.0)
+    state.lowcmd_watchdog_seconds = float(lowcmd.get("watchdog_seconds") or 0.0)
     imu = value.get("imu_state") or {}
     state.imu_state.quaternion[:] = list(imu.get("quaternion", state.imu_state.quaternion))[:4]
     state.imu_state.gyroscope[:] = list(imu.get("gyroscope", state.imu_state.gyroscope))[:3]

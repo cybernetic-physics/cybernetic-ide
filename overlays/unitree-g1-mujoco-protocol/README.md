@@ -46,6 +46,9 @@ Simulator commands:
 - WebSocket `{ "type": "command", "command": "pose", "pose": "raise_right_hand" }`
   applies a deterministic G1 arm pose directly in MuJoCo. This is an interim
   simulator command, not the official SDK2/DDS arm-control path.
+- `lowcmd` commands record `received_at`, `age_seconds`, `expires_at`,
+  `active`, `stale`, and `watchdog_seconds` metadata. The watchdog timeout is
+  controlled by `UNITREE_G1_LOWCMD_WATCHDOG_SECONDS` and defaults to `2.0`.
 - `POST /command` accepts the same command JSON over HTTP for simple probes.
 
 Direct HTTP examples:
