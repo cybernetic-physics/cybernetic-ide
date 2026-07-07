@@ -169,15 +169,21 @@ The MCP lifecycle is `unitree_start_rpc_bridge`,
 `unitree_stop_rpc_bridge`. Python users can call
 `OfficialG1Sim.start_rpc_bridge()`, `rpc_bridge_status()`,
 `rpc_bridge_client()`, and `stop_rpc_bridge()`. This first managed bridge keeps
-`sport` and `agv` SDK2 servers alive and forwards safe setter calls to
-Cybernetic's simulator provider at `CYBER_SIMULATOR_GAME_CONTROL_URL`:
+`sport` and `agv` SDK2 servers alive and uses Cybernetic's simulator provider
+at `CYBER_SIMULATOR_GAME_CONTROL_URL` for safe read/write calls. Getter RPCs
+such as `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
+`sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the simulator
+when it is reachable and fall back to bridge state otherwise. Setter RPCs
+forward:
 `sport.SetFsmId`, `sport.SetBalanceMode`, `sport.SetSwingHeight`,
 `sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`, `agv.Move`, and
 `agv.HeightAdjust`. This also covers common `LocoClient` shortcuts including
 `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`. If the simulator HTTP bridge
 is unavailable, the RPC still returns `RPC_OK` for SDK compatibility, but the
-JSON response marks `simulator_forward.provider` as `bridge_state_only` so
-agents know the MuJoCo state was not updated. The managed client probe includes
+JSON response marks `simulator_forward.provider` or
+`simulator_readback.provider` as `bridge_state_only` so agents know the MuJoCo
+state was not updated or queried. The managed client probe includes raw getter
+debug calls plus
 `sport.RawSetFsmIdDebug`, `sport.RawSetBalanceModeDebug`,
 `sport.RawSetSwingHeightDebug`, `sport.RawSetVelocityDebug`, and
 `sport.RawSetArmTaskDebug` because Unitree's high-level `LocoClient` setter

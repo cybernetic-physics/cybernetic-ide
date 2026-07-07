@@ -325,12 +325,14 @@ Tasks:
   mirrors on `OfficialG1Sim`. This starts `unitree-g1-rpc-bridge` as a
   long-running `sport`/`agv` SDK2 service for external clients.
 - Done: map the first safe managed bridge handlers onto the simulator provider
-  boundary. `sport.SetFsmId`, `sport.SetBalanceMode`,
-  `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
-  `sport.SetTaskId`, `agv.Move`, and `agv.HeightAdjust` now forward to
+  boundary. Getter RPCs (`GetFsmId`, `GetFsmMode`, `GetBalanceMode`,
+  `GetSwingHeight`, `GetStandHeight`) now read back from
   `CYBER_SIMULATOR_GAME_CONTROL_URL` when the local MuJoCo/GameControl harness
-  is reachable. This covers common high-level shortcuts including `Damp`,
-  `StopMove`, `WaveHand`, and `ShakeHand`. The JSON RPC response includes
+  is reachable. Setter RPCs (`SetFsmId`, `SetBalanceMode`, `SetSwingHeight`,
+  `SetStandHeight`, `SetVelocity`, `SetTaskId`, `agv.Move`,
+  `agv.HeightAdjust`) forward to the same provider. This covers common
+  high-level shortcuts including `Damp`, `StopMove`, `WaveHand`, and
+  `ShakeHand`. Raw debug probe responses include `simulator_readback` and
   `simulator_forward`; if the simulator is unavailable, the official SDK call
   remains `RPC_OK` but is marked `bridge_state_only` so agents do not
   hallucinate visible motion.
@@ -340,10 +342,10 @@ Tasks:
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the
   bridge cleanly.
 - Remaining: expand the bridge beyond this first safe locomotion/arm-task
-  subset. Prioritize readback consistency for every setter, `SetArmTask` IDs
-  beyond wave/shake, lease-aware service behavior if official examples depend
-  on it, and finally route the same API surface to the official Unitree MuJoCo
-  DDS actuator path rather than only the local HTTP compatibility provider.
+  subset. Prioritize `SetArmTask` IDs beyond wave/shake, lease-aware service
+  behavior if official examples depend on it, continuous move semantics, and
+  finally route the same API surface to the official Unitree MuJoCo DDS actuator
+  path rather than only the local HTTP compatibility provider.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

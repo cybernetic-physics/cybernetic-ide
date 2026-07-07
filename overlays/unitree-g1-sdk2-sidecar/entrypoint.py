@@ -1753,19 +1753,40 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
     sport_state = bridge_state["sport"]
 
     def sport_get_fsm_id(_parameter: str):
-        return 0, json.dumps({"data": sport_state["fsm_id"]})
+        value, simulator_readback = _read_simulator_loco_value("get_fsm_id", "fsm_id", sport_state["fsm_id"])
+        sport_state["fsm_id"] = int(value)
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["fsm_id"], "simulator_readback": simulator_readback})
 
     def sport_get_fsm_mode(_parameter: str):
-        return 0, json.dumps({"data": sport_state["fsm_mode"]})
+        value, simulator_readback = _read_simulator_loco_value("get_fsm_mode", "fsm_mode", sport_state["fsm_mode"])
+        sport_state["fsm_mode"] = str(value)
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["fsm_mode"], "simulator_readback": simulator_readback})
 
     def sport_get_balance_mode(_parameter: str):
-        return 0, json.dumps({"data": sport_state["balance_mode"]})
+        value, simulator_readback = _read_simulator_loco_value(
+            "get_balance_mode", "balance_mode", sport_state["balance_mode"]
+        )
+        sport_state["balance_mode"] = int(value)
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["balance_mode"], "simulator_readback": simulator_readback})
 
     def sport_get_swing_height(_parameter: str):
-        return 0, json.dumps({"data": sport_state["swing_height"]})
+        value, simulator_readback = _read_simulator_loco_value(
+            "get_swing_height", "swing_height", sport_state["swing_height"]
+        )
+        sport_state["swing_height"] = float(value)
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["swing_height"], "simulator_readback": simulator_readback})
 
     def sport_get_stand_height(_parameter: str):
-        return 0, json.dumps({"data": sport_state["stand_height"]})
+        value, simulator_readback = _read_simulator_loco_value(
+            "get_stand_height", "stand_height", sport_state["stand_height"]
+        )
+        sport_state["stand_height"] = float(value)
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["stand_height"], "simulator_readback": simulator_readback})
 
     def sport_set_fsm_id(parameter: str):
         payload = _safe_json_loads(parameter)
@@ -1911,6 +1932,11 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
 def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
     from unitree_sdk2py.g1.loco.g1_loco_api import (
         LOCO_API_VERSION,
+        ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
+        ROBOT_API_ID_LOCO_GET_FSM_ID,
+        ROBOT_API_ID_LOCO_GET_FSM_MODE,
+        ROBOT_API_ID_LOCO_GET_STAND_HEIGHT,
+        ROBOT_API_ID_LOCO_GET_SWING_HEIGHT,
         ROBOT_API_ID_LOCO_SET_ARM_TASK,
         ROBOT_API_ID_LOCO_SET_BALANCE_MODE,
         ROBOT_API_ID_LOCO_SET_FSM_ID,
@@ -1935,6 +1961,11 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
     sport_client.SetTimeout(timeout)
     sport_client._SetApiVerson(LOCO_API_VERSION)
     for api_id in [
+        ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
+        ROBOT_API_ID_LOCO_GET_FSM_ID,
+        ROBOT_API_ID_LOCO_GET_FSM_MODE,
+        ROBOT_API_ID_LOCO_GET_STAND_HEIGHT,
+        ROBOT_API_ID_LOCO_GET_SWING_HEIGHT,
         ROBOT_API_ID_LOCO_SET_ARM_TASK,
         ROBOT_API_ID_LOCO_SET_BALANCE_MODE,
         ROBOT_API_ID_LOCO_SET_FSM_ID,
@@ -1942,6 +1973,31 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
         ROBOT_API_ID_LOCO_SET_VELOCITY,
     ]:
         sport_client._RegistApi(api_id, 0)
+    _record_rpc_call(
+        calls,
+        "sport.RawGetFsmIdDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_FSM_ID, "{}"),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawGetFsmModeDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_FSM_MODE, "{}"),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawGetBalanceModeDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_BALANCE_MODE, "{}"),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawGetSwingHeightDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_SWING_HEIGHT, "{}"),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawGetStandHeightDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_STAND_HEIGHT, "{}"),
+    )
     _record_rpc_call(
         calls,
         "sport.RawSetFsmIdDebug",
@@ -2052,6 +2108,19 @@ def _forward_simulator_command(payload: dict) -> dict:
             "error": str(exc),
             "note": "SDK RPC returned RPC_OK, but the local simulator HTTP bridge was not updated.",
         }
+
+
+def _read_simulator_loco_value(action: str, response_key: str, fallback) -> tuple[object, dict]:
+    simulator_readback = _forward_simulator_command({"command": "loco", "action": action})
+    if simulator_readback.get("ok"):
+        response = simulator_readback.get("response")
+        if isinstance(response, dict):
+            if response_key in response and response[response_key] is not None:
+                return response[response_key], simulator_readback
+            loco = response.get("loco")
+            if isinstance(loco, dict) and response_key in loco and loco[response_key] is not None:
+                return loco[response_key], simulator_readback
+    return fallback, simulator_readback
 
 
 def _record_rpc_call(calls: list[dict], name: str, fn) -> None:

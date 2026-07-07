@@ -649,20 +649,24 @@ The current repo has the first narrow version of that API boundary:
   `unitree_probe_rpc_bridge_client` / `unitree_stop_rpc_bridge` turn that smoke
   into a named managed bridge container (`unitree-g1-rpc-bridge`). The bridge is
   now the first live SDK-to-simulator adapter: it keeps `sport`/`agv` state and
-  forwards safe setter RPCs to Cybernetic's simulator HTTP provider when
-  `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. The currently forwarded
-  calls are `sport.SetFsmId`, `sport.SetBalanceMode`,
+  routes safe read/write RPCs to Cybernetic's simulator HTTP provider when
+  `CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
+  `sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
+  `sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the
+  simulator and expose `simulator_readback` in raw debug responses. Forwarded
+  setter calls are `sport.SetFsmId`, `sport.SetBalanceMode`,
   `sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
   `sport.SetTaskId`, `agv.Move`, and `agv.HeightAdjust`. That also covers
   common high-level `LocoClient` shortcuts such as `Damp`, `StopMove`,
   `WaveHand`, and `ShakeHand`. If the simulator is not reachable, the SDK call
   still returns `RPC_OK`, but the JSON response marks
-  `simulator_forward.provider` as `bridge_state_only`.
-  `unitree_probe_rpc_bridge_client` also includes a
-  raw sport debug calls for FSM, balance, swing height, velocity, and arm task
-  setters because upstream `LocoClient` setter methods return only the status
-  code and hide the response body; the raw SDK client calls expose
-  `simulator_forward` for agent diagnostics.
+  `simulator_forward.provider` or `simulator_readback.provider` as
+  `bridge_state_only`.
+  `unitree_probe_rpc_bridge_client` also includes raw sport debug calls for
+  getters and setters because upstream `LocoClient` methods often return only
+  the parsed value or status code and hide the response body; the raw SDK client
+  calls expose `simulator_forward` and `simulator_readback` for agent
+  diagnostics.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, and `agv.HeightAdjust`, then removed the

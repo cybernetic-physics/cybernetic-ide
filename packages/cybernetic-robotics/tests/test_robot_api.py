@@ -718,6 +718,39 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(result["provider"], "bridge_state_only")
         self.assertIn("SDK RPC returned RPC_OK", result["note"])
 
+    def test_sidecar_rpc_bridge_reads_back_from_simulator_http(self):
+        sidecar = load_sidecar_entrypoint_module()
+        with FakeServer() as fake, patch.dict(
+            os.environ,
+            {
+                "CYBER_SIMULATOR_GAME_CONTROL_URL": fake.url,
+                "CYBER_UNITREE_RPC_BRIDGE_SIM_TIMEOUT": "1.0",
+            },
+            clear=False,
+        ):
+            FakeG1Handler.loco["fsm_id"] = 4
+            value, readback = sidecar._read_simulator_loco_value("get_fsm_id", "fsm_id", 500)
+
+        self.assertEqual(value, 4)
+        self.assertTrue(readback["ok"])
+        self.assertEqual(readback["provider"], "cybernetic_game_control_http")
+
+    def test_sidecar_rpc_bridge_readback_falls_back_to_bridge_state(self):
+        sidecar = load_sidecar_entrypoint_module()
+        with patch.dict(
+            os.environ,
+            {
+                "CYBER_SIMULATOR_GAME_CONTROL_URL": "http://127.0.0.1:1",
+                "CYBER_UNITREE_RPC_BRIDGE_SIM_TIMEOUT": "0.05",
+            },
+            clear=False,
+        ):
+            value, readback = sidecar._read_simulator_loco_value("get_fsm_id", "fsm_id", 500)
+
+        self.assertEqual(value, 500)
+        self.assertFalse(readback["ok"])
+        self.assertEqual(readback["provider"], "bridge_state_only")
+
     def test_sidecar_rpc_bridge_maps_common_sport_shortcuts(self):
         sidecar = load_sidecar_entrypoint_module()
 

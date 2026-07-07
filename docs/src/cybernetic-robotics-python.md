@@ -167,14 +167,17 @@ needed for a future long-running service bridge.
 `unitree-g1-rpc-bridge` container, while `official.rpc_bridge_client()` calls
 the running bridge with official SDK clients and `official.stop_rpc_bridge()`
 removes it. The managed bridge keeps `sport`/`agv` state and now forwards safe
-setter RPCs to the local simulator provider when
-`CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. The currently forwarded calls
-are `sport.SetFsmId`, `sport.SetBalanceMode`, `sport.SetSwingHeight`,
-`sport.SetStandHeight`, `sport.SetVelocity`, `sport.SetTaskId`, `agv.Move`, and
-`agv.HeightAdjust`. That covers common `LocoClient` shortcuts such as `Damp`,
-`StopMove`, `WaveHand`, and `ShakeHand`; unreachable simulator calls are
-reported as `bridge_state_only` in the RPC JSON response instead of being
-hidden.
+read/write RPCs to the local simulator provider when
+`CYBER_SIMULATOR_GAME_CONTROL_URL` is reachable. Getter RPCs such as
+`sport.GetFsmId`, `sport.GetFsmMode`, `sport.GetBalanceMode`,
+`sport.GetSwingHeight`, and `sport.GetStandHeight` read back from the simulator
+and include `simulator_readback` evidence in raw debug responses. Setter RPCs
+currently forwarded include `sport.SetFsmId`, `sport.SetBalanceMode`,
+`sport.SetSwingHeight`, `sport.SetStandHeight`, `sport.SetVelocity`,
+`sport.SetTaskId`, `agv.Move`, and `agv.HeightAdjust`. That covers common
+`LocoClient` shortcuts such as `Damp`, `StopMove`, `WaveHand`, and `ShakeHand`;
+unreachable simulator calls are reported as `bridge_state_only` in the RPC JSON
+response instead of being hidden.
 `official.loco_rpc_session()` probes whether the managed official peer answers
 G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response`; use that evidence before promoting local locomotion
