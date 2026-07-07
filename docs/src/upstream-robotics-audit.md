@@ -125,8 +125,10 @@ checks orientation, joint velocity, angular velocity, motor temperatures,
 lowcmd staleness, and simulator fall state before an agent issues more motion.
 
 `unitree_read_official_mujoco_lowstate` reads one real SDK2/CycloneDDS
-`rt/lowstate` sample from the managed official `unitree-g1-sdk2-session`, which
-is the first sustained-peer telemetry surface beyond short-lived probes.
+`rt/lowstate` sample from the managed official `unitree-g1-sdk2-session`.
+`unitree_read_official_mujoco_telemetry` extends that read-only managed-session
+surface to `rt/sportmodestate`, `rt/lf/sportmodestate`, and
+`rt/wirelesscontroller` when the official peer publishes those topics.
 
 For lower-level inspection and control, agents can use:
 

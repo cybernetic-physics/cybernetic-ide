@@ -376,6 +376,10 @@ ad hoc scripts first. The default tool surface includes:
 - official SDK2 data probe: `unitree_probe_official_mujoco_dds`, which runs
   the upstream G1 peer and verifies that SDK2/CycloneDDS can read an
   `rt/lowstate` sample with Unitree HG IDL types;
+- managed official SDK2 telemetry read:
+  `unitree_read_official_mujoco_telemetry`, which reads one read-only
+  `rt/sportmodestate`, `rt/lf/sportmodestate`, or `rt/wirelesscontroller`
+  sample from the managed official peer when that topic is published;
 - official SDK2 control probe: `unitree_probe_official_mujoco_lowcmd`, which
   reads official `rt/lowstate`, builds a CRC-valid hold-position `LowCmd_`,
   and verifies `rt/lowcmd` writes against the upstream peer;
@@ -548,6 +552,7 @@ python3 -m py_compile \
   packages/cybernetic-robotics/src/unitree_sdk2py/core/channel.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/default.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/idl/unitree_hg/msg/dds_.py \
+  packages/cybernetic-robotics/src/unitree_sdk2py/idl/unitree_go/msg/dds_.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/g1/arm/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/g1/loco/*.py \
   packages/cybernetic-robotics/src/unitree_sdk2py/comm/motion_switcher/*.py \

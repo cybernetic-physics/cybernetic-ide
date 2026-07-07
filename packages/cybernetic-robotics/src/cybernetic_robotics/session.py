@@ -753,6 +753,38 @@ class UnitreeSession:
             "official_dds_supported": False,
         }
 
+    def read_sportmodestate(self, topic: str = "rt/sportmodestate") -> dict[str, Any]:
+        """Read Unitree SportModeState telemetry through the active provider."""
+
+        if topic not in {"rt/sportmodestate", "rt/lf/sportmodestate"}:
+            raise NotImplementedError(f"Cybernetic Unitree session SportModeState subscriber does not support {topic}")
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "topic": topic,
+                "error": "real Unitree sport mode telemetry is locked until the real-hardware provider and safety gates are implemented",
+            }
+        if self.config.transport == DDS and self.config.mode == SIM:
+            response = self._official().telemetry_session(topic=topic)
+            return {
+                **response,
+                "transport": DDS,
+                "provider": "official_mujoco_dds_simulator",
+                "official_dds_supported": True,
+                "compatibility_fallback": False,
+            }
+        return {
+            "ok": True,
+            "transport": LOCAL_HTTP,
+            "provider": "local_http_simulator",
+            "topic": topic,
+            "sportmodestate": self.simulator.status().raw,
+            "compatibility_fallback": False,
+            "official_dds_supported": False,
+        }
+
     def read_lowstate(self) -> dict[str, Any]:
         """Read lowstate telemetry through the active provider when possible."""
 

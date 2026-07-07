@@ -159,6 +159,7 @@ The matching CLI flow is:
 ```sh
 cyber-g1 official start-session
 cyber-g1 official lowstate-session
+cyber-g1 official telemetry-session --topic rt/sportmodestate
 cyber-g1 official raise-hand --session
 cyber-g1 official stop-session
 ```
@@ -168,8 +169,13 @@ the evidence bundle, and leaves the session running only when `--keep-running`
 is passed. If a script needs
 manual control instead of the context manager, use `official.start_session()`,
 `official.session_status()`, `official.lowstate_session()`, and
-`official.rpc_discovery_session()`, `official.loco_rpc_session()`, and
-`official.stop_session()`.
+`official.telemetry_session()`, `official.rpc_discovery_session()`,
+`official.loco_rpc_session()`, and `official.stop_session()`.
+`official.telemetry_session(topic="rt/sportmodestate")` is read-only and
+matches the official G1 arm-action guidance to inspect the FSM ID through sport
+mode state. It can also probe `rt/lf/sportmodestate` and
+`rt/wirelesscontroller`; a false `ok` means the managed official peer did not
+publish that topic before the timeout, not that the simulator was commanded.
 `official.rpc_discovery_session()` is a read-only DDS preflight that reports
 whether official Unitree RPC request topics such as `rt/api/sport/request` and
 `rt/api/agv/request` have matched service-side readers before any RPC command
@@ -625,6 +631,7 @@ unitree_session_status
 unitree_sdk_compatibility_audit
 unitree_sdk_behavior_smoke
 unitree_read_official_mujoco_lowstate
+unitree_read_official_mujoco_telemetry
 unitree_probe_official_mujoco_rpc_discovery
 unitree_probe_rpc_bridge_smoke
 unitree_start_rpc_bridge

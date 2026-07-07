@@ -299,6 +299,29 @@ const tools = [
     openWorldHint: true,
   }),
   tool(
+    "unitree_read_official_mujoco_telemetry",
+    "Read one official read-only SDK2 telemetry sample such as rt/sportmodestate from the managed Unitree MuJoCo G1 DDS peer session.",
+    {
+      topic: {
+        type: "string",
+        enum: ["rt/sportmodestate", "rt/lf/sportmodestate", "rt/wirelesscontroller"],
+        default: "rt/sportmodestate",
+      },
+      timeout_seconds: {
+        type: "number",
+        minimum: 0.5,
+        maximum: 20.0,
+        default: 6.0,
+      },
+    },
+    [],
+    {
+      readOnlyHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  ),
+  tool(
     "unitree_probe_official_mujoco_loco_rpc",
     "Probe whether the managed official Unitree MuJoCo G1 DDS peer serves the G1 LocoClient sport RPC topics.",
     {
@@ -1638,6 +1661,8 @@ async function callTool(name, args) {
       return textResult(sdk2OfficialMujocoSessionStatus());
     case "unitree_read_official_mujoco_lowstate":
       return textResult(sdk2ReadOfficialMujocoLowstate());
+    case "unitree_read_official_mujoco_telemetry":
+      return textResult(sdk2ReadOfficialMujocoTelemetry(args));
     case "unitree_probe_official_mujoco_loco_rpc":
       return textResult(sdk2ProbeOfficialMujocoLocoRpc(args));
     case "unitree_probe_official_mujoco_rpc_discovery":
@@ -3656,6 +3681,12 @@ function roboticsToolReference() {
         "Managed official MuJoCo DDS session running and ready.",
       ),
       toolReference(
+        "unitree_read_official_mujoco_telemetry",
+        "read",
+        "Reads one official rt/sportmodestate, rt/lf/sportmodestate, or rt/wirelesscontroller sample from the managed Unitree MuJoCo session.",
+        "Managed official MuJoCo DDS session running and ready; topic must be published by the peer.",
+      ),
+      toolReference(
         "unitree_command_official_mujoco_arm_pose",
         "robot-motion",
         "Publishes bounded official rt/lowcmd arm-pose frames to the managed Unitree MuJoCo session.",
@@ -4107,6 +4138,43 @@ function sdk2ReadOfficialMujocoLowstate() {
     stdout: result.stdout,
     stderr: result.stderr,
     report,
+  };
+}
+
+function sdk2ReadOfficialMujocoTelemetry(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    return {
+      ok: false,
+      error: "managed official MuJoCo session is not running and ready",
+      next_step: "Run unitree_start_official_mujoco_session, then inspect ready_report, exit_report, and logs_tail if readiness does not hold.",
+      session,
+    };
+  }
+  const topic = ["rt/sportmodestate", "rt/lf/sportmodestate", "rt/wirelesscontroller"].includes(options.topic)
+    ? options.topic
+    : "rt/sportmodestate";
+  const timeoutSeconds = clampNumber(options.timeout_seconds, 0.5, 20.0, 6.0);
+  const env = [
+    "CYBER_UNITREE_ACTION=read_official_mujoco_telemetry",
+    `CYBER_UNITREE_TELEMETRY_TOPIC=${topic}`,
+    `CYBER_UNITREE_TELEMETRY_READ_TIMEOUT=${timeoutSeconds}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm", ...env.flatMap((item) => ["-e", item]), "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  const report = parseJsonObjectFromOutput(result.stdout);
+  return {
+    command: `docker ${args.join(" ")}`,
+    topic,
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+    telemetry_read: report?.telemetry_read || null,
   };
 }
 
@@ -5452,6 +5520,19 @@ function run(command, args, options = {}) {
     stderr: result.stderr || "",
     error: result.error ? result.error.message : null,
   };
+}
+
+function parseJsonObjectFromOutput(output) {
+  const jsonStart = String(output || "").indexOf("{");
+  const jsonEnd = String(output || "").lastIndexOf("}");
+  if (jsonStart === -1 || jsonEnd <= jsonStart) {
+    return null;
+  }
+  try {
+    return JSON.parse(String(output).slice(jsonStart, jsonEnd + 1));
+  } catch {
+    return null;
+  }
 }
 
 function pythonEnv() {

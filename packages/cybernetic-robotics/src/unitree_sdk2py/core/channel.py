@@ -135,6 +135,7 @@ class ChannelSubscriber:
         if handler is not None and self.name in {
             "rt/lowstate",
             "rt/sportmodestate",
+            "rt/lf/sportmodestate",
             "rt/wirelesscontroller",
             "rt/dex3/left/state",
             "rt/dex3/right/state",
@@ -162,8 +163,14 @@ class ChannelSubscriber:
             if isinstance(response.get("lowstate_summary"), dict):
                 return _lowstate_from_summary(response["lowstate_summary"], metadata=response)
             raise RuntimeError(response.get("error") or "lowstate unavailable through active Unitree provider")
-        if self.name == "rt/sportmodestate":
-            return _sportmode_from_status(client.status().raw)
+        if self.name in {"rt/sportmodestate", "rt/lf/sportmodestate"}:
+            response = _session_from_env(float(timeout or 5.0)).read_sportmodestate(self.name)
+            self.last_response = response
+            if isinstance(response.get("telemetry_summary"), dict):
+                return _sportmode_from_summary(response["telemetry_summary"], metadata=response)
+            if isinstance(response.get("sportmodestate"), dict):
+                return _sportmode_from_status(response["sportmodestate"], metadata=response)
+            raise RuntimeError(response.get("error") or "sportmodestate unavailable through active Unitree provider")
         if self.name == "rt/wirelesscontroller":
             return _wireless_from_lowstate(client.lowstate())
         if self.name in {
@@ -288,7 +295,7 @@ def _handstate_from_json(value: dict, *, metadata: dict | None = None):
     return state
 
 
-def _sportmode_from_status(value: dict):
+def _sportmode_from_status(value: dict, *, metadata: dict | None = None):
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
     simulation = value.get("simulation") if isinstance(value.get("simulation"), dict) else {}
@@ -306,6 +313,29 @@ def _sportmode_from_status(value: dict):
         camera = render["camera"]
         lookat = camera.get("lookat") if isinstance(camera.get("lookat"), list) else []
         state.position[:] = [float(item) for item in (lookat + [0.0, 0.0, 0.0])[:3]]
+    state.metadata = metadata or {}
+    return state
+
+
+def _sportmode_from_summary(value: dict, *, metadata: dict | None = None):
+    from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
+
+    state = SportModeState_()
+    state.mode = int(value.get("mode") or 0) & 0xFF
+    state.progress = float(value.get("progress") or 0.0)
+    state.gait_type = int(value.get("gait_type") or 0) & 0xFF
+    state.foot_raise_height = float(value.get("foot_raise_height") or 0.0)
+    position = value.get("position") if isinstance(value.get("position"), list) else []
+    velocity = value.get("velocity") if isinstance(value.get("velocity"), list) else []
+    range_obstacle = value.get("range_obstacle") if isinstance(value.get("range_obstacle"), list) else []
+    foot_force = value.get("foot_force") if isinstance(value.get("foot_force"), list) else []
+    state.position[:] = [float(item) for item in (position + [0.0, 0.0, 0.0])[:3]]
+    state.body_height = float(value.get("body_height") or 0.0)
+    state.velocity[:] = [float(item) for item in (velocity + [0.0, 0.0, 0.0])[:3]]
+    state.yaw_speed = float(value.get("yaw_speed") or 0.0)
+    state.range_obstacle[:] = [float(item) for item in (range_obstacle + [0.0, 0.0, 0.0, 0.0])[:4]]
+    state.foot_force[:] = [int(item) for item in (foot_force + [0, 0, 0, 0])[:4]]
+    state.metadata = metadata or {}
     return state
 
 

@@ -223,6 +223,12 @@ Tasks:
   `OfficialG1Sim.lowstate_session()`, and MCP
   `unitree_read_official_mujoco_lowstate` so agents can read official
   `rt/lowstate` telemetry from the sustained managed DDS peer.
+- Done: add read-only managed official telemetry through
+  `CYBER_UNITREE_ACTION=read_official_mujoco_telemetry`,
+  `OfficialG1Sim.telemetry_session()`, `cyber-g1 official telemetry-session`,
+  MCP `unitree_read_official_mujoco_telemetry`, and DDS-mode
+  `ChannelSubscriber("rt/sportmodestate")` routing for the G1 FSM/sport-mode
+  topic.
 - Done: add Python-native managed official session lifecycle through
   `OfficialG1Sim.start_session()`, `session_status()`, `stop_session()`, CLI
   `cyber-g1 official start-session/session-status/lowstate-session/stop-session`,

@@ -431,6 +431,90 @@ def read_official_mujoco_lowstate(domain: int, interface: str | None) -> dict:
     return report
 
 
+def summarize_sportmode_state(sample) -> dict:
+    return {
+        "sample_type": type(sample).__name__,
+        "idl_typename": getattr(type(sample), "__idl_typename__", None),
+        "mode": int(getattr(sample, "mode", 0)),
+        "progress": float(getattr(sample, "progress", 0.0)),
+        "gait_type": int(getattr(sample, "gait_type", 0)),
+        "foot_raise_height": float(getattr(sample, "foot_raise_height", 0.0)),
+        "position": [float(value) for value in list(getattr(sample, "position", []) or [])],
+        "body_height": float(getattr(sample, "body_height", 0.0)),
+        "velocity": [float(value) for value in list(getattr(sample, "velocity", []) or [])],
+        "yaw_speed": float(getattr(sample, "yaw_speed", 0.0)),
+        "range_obstacle": [float(value) for value in list(getattr(sample, "range_obstacle", []) or [])],
+        "foot_force": [int(value) for value in list(getattr(sample, "foot_force", []) or [])],
+    }
+
+
+def summarize_wireless_controller(sample) -> dict:
+    return {
+        "sample_type": type(sample).__name__,
+        "idl_typename": getattr(type(sample), "__idl_typename__", None),
+        "lx": float(getattr(sample, "lx", 0.0)),
+        "ly": float(getattr(sample, "ly", 0.0)),
+        "rx": float(getattr(sample, "rx", 0.0)),
+        "ry": float(getattr(sample, "ry", 0.0)),
+        "keys": int(getattr(sample, "keys", 0)),
+    }
+
+
+def read_official_mujoco_telemetry(domain: int, interface: str | None) -> dict:
+    topic = os.environ.get("CYBER_UNITREE_TELEMETRY_TOPIC", "rt/sportmodestate")
+    supported_topics = {
+        "rt/sportmodestate": "sportmodestate",
+        "rt/lf/sportmodestate": "sportmodestate",
+        "rt/wirelesscontroller": "wirelesscontroller",
+    }
+    report = {
+        "action": "read_official_mujoco_telemetry",
+        "topic": topic,
+        "domain": domain,
+        "interface": interface or None,
+        "sample_received": False,
+        "read_attempts": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_TELEMETRY_READ_TIMEOUT", "6")),
+        "supported_topics": sorted(supported_topics),
+    }
+    kind = supported_topics.get(topic)
+    if kind is None:
+        report["ok"] = False
+        report["error"] = f"unsupported telemetry topic: {topic}"
+        report["next_step"] = "Use rt/sportmodestate, rt/lf/sportmodestate, or rt/wirelesscontroller."
+        return report
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelSubscriber
+        from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_, WirelessController_
+
+        message_type = SportModeState_ if kind == "sportmodestate" else WirelessController_
+        subscriber = ChannelSubscriber(topic, message_type)
+        subscriber.Init(None, 0)
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            report["read_attempts"] += 1
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["sample_received"] = True
+                if kind == "sportmodestate":
+                    report["sportmodestate_summary"] = summarize_sportmode_state(sample)
+                else:
+                    report["wirelesscontroller_summary"] = summarize_wireless_controller(sample)
+                break
+        subscriber.Close()
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    report["ok"] = report["sample_received"]
+    if report["ok"]:
+        report["next_step"] = "Use this managed-session telemetry read as a read-only SDK2 parity check."
+    else:
+        report["next_step"] = "Start unitree-g1-sdk2-session and confirm this topic is published by the official peer before relying on it."
+    return report
+
+
 def make_hold_lowcmd(low_state, lowcmd_factory, crc_factory, kp: float = 0.0, kd: float = 0.0):
     low_cmd = lowcmd_factory()
     low_cmd.mode_pr = getattr(low_state, "mode_pr", 0)
@@ -3114,6 +3198,7 @@ def main() -> int:
             "rt/lowcmd",
             "rt/lowstate",
             "rt/sportmodestate",
+            "rt/wirelesscontroller",
             "rt/arm_sdk",
             "rt/hand_sdk",
             "rt/api/sport/request",
@@ -3171,6 +3256,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "read_official_mujoco_lowstate":
         report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "read_official_mujoco_telemetry":
+        report["telemetry_read"] = read_official_mujoco_telemetry(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "serve_official_mujoco":
         return serve_official_mujoco_peer(mujoco_root, domain, interface or None)

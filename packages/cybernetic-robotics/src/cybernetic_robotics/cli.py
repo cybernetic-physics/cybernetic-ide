@@ -76,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
     official_subcommands.add_parser("session-status")
     official_subcommands.add_parser("stop-session")
     official_subcommands.add_parser("lowstate-session")
+    official_telemetry = official_subcommands.add_parser("telemetry-session")
+    official_telemetry.add_argument("--topic", choices=["rt/sportmodestate", "rt/lf/sportmodestate", "rt/wirelesscontroller"], default="rt/sportmodestate")
+    official_telemetry.add_argument("--timeout-seconds", type=float, default=6.0)
     official_raise = official_subcommands.add_parser("raise-hand")
     official_raise.add_argument("--session", action="store_true")
     _add_official_pose_options(official_raise)
@@ -179,6 +182,8 @@ def _official_command(args: argparse.Namespace) -> int:
         return _print(official.stop_session())
     if args.official_command == "lowstate-session":
         return _print(official.lowstate_session())
+    if args.official_command == "telemetry-session":
+        return _print(official.telemetry_session(topic=args.topic, timeout_seconds=args.timeout_seconds))
     options = {
         "frames": args.frames,
         "kp": args.kp,

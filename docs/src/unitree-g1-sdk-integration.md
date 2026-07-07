@@ -556,6 +556,12 @@ The current repo has the first narrow version of that API boundary:
   the peer is running. Lease-limited sustained lowcmd streams now flow through
   the same managed official session via `ChannelPublisher.WriteStream(...)`;
   unbounded watchdog-renewed control still needs a long-lived DDS provider.
+- `OfficialG1Sim.telemetry_session()`, `cyber-g1 official telemetry-session`,
+  and MCP `unitree_read_official_mujoco_telemetry` add a read-only
+  managed-session path for `rt/sportmodestate`, `rt/lf/sportmodestate`, and
+  `rt/wirelesscontroller`. DDS-mode `ChannelSubscriber("rt/sportmodestate")`
+  uses that route, which matches the official G1 arm-action guidance to inspect
+  FSM mode without sending a command.
 - The simulator now maps Unitree's preset G1 arm actions to deterministic
   static poses for local development, including `high five`, `hands up`,
   `clap`, `hug`, `heart`, `face wave`, `high wave`, `shake hand`, kiss poses,
@@ -621,9 +627,11 @@ The current repo has the first narrow version of that API boundary:
   `rt/lf/dex3/{left,right}/state`. This gives user code and agents the
   official Dex3 surface while documenting that real finger physics remains
   future work.
-- The channel shim also supports read-only `rt/sportmodestate` and
-  `rt/wirelesscontroller` subscribers with lightweight `unitree_go` dataclasses,
-  synthesized from local simulator status and lowstate.
+- The channel shim supports read-only `rt/sportmodestate`,
+  `rt/lf/sportmodestate`, and `rt/wirelesscontroller` subscribers with
+  lightweight `unitree_go` dataclasses. Local simulator mode synthesizes those
+  from status and lowstate; simulator DDS mode routes sport mode state through
+  the managed official session when selected.
 - `examples/g1_joint_targets.py` demonstrates the named-joint layer that reads
   `/joint_state` and compiles joint-name targets back into simulator-backed
   lowcmd slots.

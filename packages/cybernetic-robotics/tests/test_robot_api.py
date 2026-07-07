@@ -1498,6 +1498,45 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(lowstate.motor_state[0].temperature, [31, 32])
         self.assertEqual(lowstate.imu_state.quaternion, [1.0, 0.0, 0.0, 0.0])
 
+    def test_unitree_sportmode_channel_can_read_official_dds_summary(self):
+        class FakeOfficial:
+            def __init__(self):
+                self.calls = []
+
+            def telemetry_session(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "ok": True,
+                    "source": "official_unitree_mujoco_managed_session",
+                    "topic": kwargs["topic"],
+                    "telemetry_summary": {
+                        "mode": 5,
+                        "progress": 0.25,
+                        "gait_type": 2,
+                        "body_height": 0.83,
+                        "velocity": [0.1, 0.0, 0.2],
+                        "yaw_speed": 0.2,
+                        "position": [1.0, 2.0, 0.83],
+                        "foot_force": [1, 2, 3, 4],
+                    },
+                }
+
+        official = FakeOfficial()
+        session = UnitreeSession(UnitreeTransportConfig(transport="dds", mode="sim"), official=official)
+
+        with patch("unitree_sdk2py.core.channel.UnitreeSession.from_env", return_value=session):
+            subscriber = ChannelSubscriber("rt/sportmodestate", SportModeState_)
+            subscriber.Init()
+            state = subscriber.Read()
+
+        self.assertEqual(state.mode, 5)
+        self.assertAlmostEqual(state.progress, 0.25)
+        self.assertEqual(state.gait_type, 2)
+        self.assertAlmostEqual(state.velocity[0], 0.1)
+        self.assertEqual(state.foot_force, [1, 2, 3, 4])
+        self.assertEqual(official.calls[0]["topic"], "rt/sportmodestate")
+        self.assertEqual(subscriber.last_response["provider"], "official_mujoco_dds_simulator")
+
     def test_unitree_default_sport_mode_state_alias_matches_official_example_import(self):
         state = unitree_go_msg_dds__SportModeState_()
 
@@ -1850,6 +1889,9 @@ class RobotApiTests(unittest.TestCase):
                 sport_sub = ChannelSubscriber("rt/sportmodestate", SportModeState_)
                 sport_sub.Init()
                 sport = sport_sub.Read()
+                sport_lf_sub = ChannelSubscriber("rt/lf/sportmodestate", SportModeState_)
+                sport_lf_sub.Init()
+                sport_lf = sport_lf_sub.Read()
 
                 wireless_sub = ChannelSubscriber("rt/wirelesscontroller", WirelessController_)
                 wireless_sub.Init()
@@ -1859,6 +1901,8 @@ class RobotApiTests(unittest.TestCase):
                 self.assertAlmostEqual(sport.body_height, 0.81)
                 self.assertEqual(sport.velocity, [0.2, -0.1, 0.3])
                 self.assertAlmostEqual(sport.yaw_speed, 0.3)
+                self.assertEqual(sport_lf.mode, 500 & 0xFF)
+                self.assertEqual(sport_lf.velocity, [0.2, -0.1, 0.3])
                 self.assertAlmostEqual(wireless.lx, 1.0)
                 self.assertAlmostEqual(wireless.rx, -1 / 127)
                 self.assertEqual(wireless.keys, 0x1234)
@@ -2404,6 +2448,54 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(captured["timeout"], 42)
         command = " ".join(captured["args"])
         self.assertIn("CYBER_UNITREE_ACTION=read_official_mujoco_lowstate", command)
+
+    def test_official_g1_sim_can_read_managed_session_telemetry(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "telemetry_read": {
+                            "ok": True,
+                            "topic": "rt/sportmodestate",
+                            "sample_received": True,
+                            "sportmodestate_summary": {
+                                "mode": 5,
+                                "body_height": 0.82,
+                                "velocity": [0.1, 0.0, 0.0],
+                            },
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.telemetry_session(topic="rt/sportmodestate", timeout_seconds=3.5)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["topic"], "rt/sportmodestate")
+        self.assertEqual(result["telemetry_summary"]["mode"], 5)
+        self.assertEqual(result["telemetry_summary"]["velocity"], [0.1, 0.0, 0.0])
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=read_official_mujoco_telemetry", command)
+        self.assertIn("CYBER_UNITREE_TELEMETRY_TOPIC=rt/sportmodestate", command)
+        self.assertIn("CYBER_UNITREE_TELEMETRY_READ_TIMEOUT=3.5", command)
 
     def test_official_g1_sim_can_command_managed_session_lowcmd(self):
         captured = {}

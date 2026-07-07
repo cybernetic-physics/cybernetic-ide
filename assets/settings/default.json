@@ -1177,6 +1177,7 @@
               "unitree_start_official_mujoco_session": true,
               "unitree_official_mujoco_session_status": true,
               "unitree_read_official_mujoco_lowstate": true,
+              "unitree_read_official_mujoco_telemetry": true,
               "unitree_probe_official_mujoco_rpc_discovery": true,
               "unitree_probe_rpc_bridge_smoke": true,
               "unitree_start_rpc_bridge": true,

@@ -119,6 +119,32 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def telemetry_session(self, topic: str = "rt/sportmodestate", timeout_seconds: float = 6.0) -> dict[str, Any]:
+        """Read one official read-only telemetry sample from a managed MuJoCo DDS session."""
+
+        if topic not in {"rt/sportmodestate", "rt/lf/sportmodestate", "rt/wirelesscontroller"}:
+            raise ValueError(f"unsupported official Unitree telemetry topic: {topic}")
+        env = {
+            "CYBER_UNITREE_ACTION": "read_official_mujoco_telemetry",
+            "CYBER_UNITREE_TELEMETRY_TOPIC": topic,
+            "CYBER_UNITREE_TELEMETRY_READ_TIMEOUT": str(float(timeout_seconds)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        telemetry_read = report.get("telemetry_read") if isinstance(report, dict) else None
+        summary_key = "sportmodestate_summary" if topic in {"rt/sportmodestate", "rt/lf/sportmodestate"} else "wirelesscontroller_summary"
+        return {
+            "ok": bool(isinstance(telemetry_read, dict) and telemetry_read.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "topic": topic,
+            "telemetry": telemetry_read,
+            "telemetry_summary": telemetry_read.get(summary_key) if isinstance(telemetry_read, dict) else None,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def lowcmd_session(
         self,
         *,
@@ -834,6 +860,9 @@ class OfficialG1ManagedSession:
 
     def lowstate(self) -> dict[str, Any]:
         return self.sim.lowstate_session()
+
+    def telemetry(self, topic: str = "rt/sportmodestate", timeout_seconds: float = 6.0) -> dict[str, Any]:
+        return self.sim.telemetry_session(topic=topic, timeout_seconds=timeout_seconds)
 
     def lowcmd(self, **kwargs: Any) -> dict[str, Any]:
         return self.sim.lowcmd_session(**kwargs)
