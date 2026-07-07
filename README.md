@@ -386,10 +386,10 @@ ad hoc scripts first. The default tool surface includes:
   alive as a named container for external SDK clients, read simulator-backed
   sport state, forward supported setter/shortcut calls like `SetVelocity`,
   `Damp`, `StopMove`, `WaveHand`, `ShakeHand`, arm actions such as
-  `right hand up`, and AGV move commands to the simulator HTTP provider when it
-  is reachable, record AGV height intent as bridge-state-only until a height
-  actuator exists, summarize that evidence for agents, and let agents send one
-  explicit SDK-shaped command such as
+  `right hand up`, continuous move/speed/control flags, and AGV move commands
+  to the simulator HTTP provider when it is reachable, record AGV height intent
+  as bridge-state-only until a height actuator exists, summarize that evidence
+  for agents, and let agents send one explicit SDK-shaped command such as
   `service=sport method=move params={"vx":0.05,"duration":0.5}`;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,

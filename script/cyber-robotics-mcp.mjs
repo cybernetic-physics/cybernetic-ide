@@ -325,7 +325,7 @@ const tools = [
         type: "string",
         default: "get_fsm_id",
         description:
-          "Method alias such as get_fsm_id, move, stop_move, damp, wave_hand, shake_hand, set_stand_height, height_adjust, execute_action, or get_action_list.",
+          "Method alias such as get_fsm_id, get_phase, move, stop_move, damp, wave_hand, shake_hand, switch_move_mode, set_speed_mode, switch_to_user_ctrl, switch_to_internal_ctrl, height_adjust, execute_action, or get_action_list.",
       },
       params: {
         type: "object",

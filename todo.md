@@ -370,6 +370,11 @@ Tasks:
   `G1ArmActionClient.ExecuteAction()` / `GetActionList()` IDs. Known upstream
   arm action IDs map to simulator poses through the same bridge evidence path;
   unknown IDs remain explicit bridge-state-only intent.
+- Done: promote continuous locomotion/control flags through the managed RPC
+  bridge. `SwitchMoveMode`, `SetSpeedMode`, `SwitchToUserCtrl`,
+  `SwitchToInternalCtrl`, and `GetPhase` now route through the bridge in
+  simulator mode, and `Move(..., continous_move=None)` can inherit the bridge
+  continuous-mode state before choosing the long-duration velocity command.
 - Done: expand the bridge/facade mapping for upstream-style locomotion smoke:
   `HighStand` and `LowStand` now map through the bridge as official
   `SetStandHeight(UINT32_MAX/0)` semantics, and wave/shake hand task IDs match
@@ -385,9 +390,9 @@ Tasks:
   bridge cleanly.
 - Remaining: expand the bridge beyond this first safe locomotion/arm-task
   subset. Prioritize `SetArmTask` IDs beyond wave/shake, lease-aware service
-  behavior if official examples depend on it, continuous move semantics, and
-  finally route the same API surface to the official Unitree MuJoCo DDS actuator
-  path rather than only the local HTTP compatibility provider.
+  behavior if official examples depend on it, and finally route the same API
+  surface to the official Unitree MuJoCo DDS actuator path rather than only the
+  local HTTP compatibility provider.
 - Remaining: connect generic lowcmd streaming to a long-lived real
   SDK2/CycloneDDS sidecar session instead of only local HTTP compatibility. The
   arm-action path crosses the official managed session boundary, and high-level

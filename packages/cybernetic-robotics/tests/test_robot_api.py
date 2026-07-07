@@ -664,19 +664,34 @@ class RobotApiTests(unittest.TestCase):
         os.environ["CYBER_UNITREE_MODE"] = "sim"
 
         class FakeOfficial:
+            calls: list[dict[str, object]] = []
+
             @classmethod
             def discover(cls, *, timeout: int = 300):
                 return cls()
 
             def rpc_bridge_command(self, *, service, method, params=None, timeout=1.0, start_if_needed=False, stop_after=False):
-                self.last_call = {
+                type(self).calls.append({
                     "service": service,
                     "method": method,
                     "params": params or {},
                     "start_if_needed": start_if_needed,
-                }
+                })
                 if method == "get_fsm_id":
                     body = {"data": 500}
+                elif method == "get_phase":
+                    body = {"data": [0.0, 0.0]}
+                elif method == "switch_move_mode":
+                    body = {"data": bool((params or {}).get("continuous_move")), "loco": {"continuous_move": bool((params or {}).get("continuous_move"))}}
+                elif method == "set_speed_mode":
+                    body = {"data": (params or {}).get("speed_mode", 0)}
+                elif method == "switch_to_user_ctrl":
+                    body = {"data": "user", "loco": {"control_owner": "user"}}
+                elif method == "switch_to_internal_ctrl":
+                    body = {
+                        "data": (params or {}).get("internal_mode", 0),
+                        "loco": {"control_owner": "internal", "internal_mode": (params or {}).get("internal_mode", 0)},
+                    }
                 else:
                     body = {"velocity": (params or {}).get("velocity", [0.0, 0.0, 0.0])}
                 return {
@@ -692,11 +707,31 @@ class RobotApiTests(unittest.TestCase):
                 loco.Init()
 
                 move_code = loco.Move(0.2, 0.0, 0.1)
+                switch_code = loco.SwitchMoveMode(True)
+                continuous_move_code = loco.Move(0.2, 0.0, 0.1)
+                speed_code = loco.SetSpeedMode(2)
+                user_code = loco.SwitchToUserCtrl()
+                internal_code = loco.SwitchToInternalCtrl(2)
                 get_code, fsm_id = loco.GetFsmId()
+                phase_code, phase = loco.GetPhase()
 
             self.assertEqual(move_code, 0)
+            self.assertEqual(switch_code, 0)
+            self.assertEqual(continuous_move_code, 0)
+            self.assertEqual(speed_code, 0)
+            self.assertEqual(user_code, 0)
+            self.assertEqual(internal_code, 0)
             self.assertEqual(get_code, 0)
+            self.assertEqual(phase_code, 0)
             self.assertEqual(fsm_id, 500)
+            self.assertEqual(phase, [0.0, 0.0])
+            methods = [call["method"] for call in FakeOfficial.calls]
+            self.assertIn("switch_move_mode", methods)
+            self.assertIn("set_speed_mode", methods)
+            self.assertIn("switch_to_user_ctrl", methods)
+            self.assertIn("switch_to_internal_ctrl", methods)
+            move_calls = [call for call in FakeOfficial.calls if call["method"] == "move"]
+            self.assertEqual(move_calls[-1]["params"]["duration"], 864000.0)
             self.assertEqual(loco.last_response["transport"], "rpc_bridge")
             self.assertEqual(loco.last_response["provider"], "unitree_rpc_bridge_simulator")
             self.assertFalse(loco.last_response["compatibility_fallback"])

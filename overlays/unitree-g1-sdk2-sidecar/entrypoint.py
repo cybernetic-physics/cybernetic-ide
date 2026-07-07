@@ -53,6 +53,12 @@ G1_ARM_POSES_BY_ACTION_ID = {
     27: "shake_hand",
 }
 
+ROBOT_API_ID_LOCO_GET_PHASE = 7006
+ROBOT_API_ID_LOCO_SET_SPEED_MODE = 7107
+ROBOT_API_ID_LOCO_SWITCH_MOVE_MODE = 7108
+ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL = 7110
+ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL = 7111
+
 
 def exists(path: str) -> bool:
     return Path(path).exists()
@@ -1849,6 +1855,11 @@ def _initial_rpc_bridge_state() -> dict:
             "stand_height": 0.72,
             "velocity": [0.0, 0.0, 0.0],
             "arm_task_id": None,
+            "phase": [0.0, 0.0],
+            "continuous_move": False,
+            "speed_mode": 0,
+            "control_owner": "internal",
+            "internal_mode": 0,
         },
         "agv": {
             "velocity": [0.0, 0.0, 0.0],
@@ -1929,6 +1940,12 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
         sport_state["last_simulator_readback"] = simulator_readback
         return 0, json.dumps({"data": sport_state["stand_height"], "simulator_readback": simulator_readback})
 
+    def sport_get_phase(_parameter: str):
+        value, simulator_readback = _read_simulator_loco_value("get_phase", "phase", sport_state["phase"])
+        sport_state["phase"] = list(value) if isinstance(value, list) else sport_state["phase"]
+        sport_state["last_simulator_readback"] = simulator_readback
+        return 0, json.dumps({"data": sport_state["phase"], "simulator_readback": simulator_readback})
+
     def sport_set_fsm_id(parameter: str):
         payload = _safe_json_loads(parameter)
         sport_state["fsm_id"] = int(payload.get("data", sport_state["fsm_id"]))
@@ -2006,18 +2023,57 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
         sport_state["last_simulator_forward"] = simulator_forward
         return 0, json.dumps({"data": task_id, "action": action, "simulator_forward": simulator_forward})
 
+    def sport_set_speed_mode(parameter: str):
+        payload = _safe_json_loads(parameter)
+        sport_state["speed_mode"] = int(payload.get("data", sport_state["speed_mode"]))
+        simulator_forward = _forward_simulator_command(
+            {"command": "loco", "action": "set_speed_mode", "speed_mode": sport_state["speed_mode"]}
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["speed_mode"], "loco": sport_state, "simulator_forward": simulator_forward})
+
+    def sport_switch_move_mode(parameter: str):
+        payload = _safe_json_loads(parameter)
+        sport_state["continuous_move"] = bool(payload.get("continuous_move", payload.get("data", False)))
+        simulator_forward = _forward_simulator_command(
+            {"command": "loco", "action": "switch_move_mode", "continuous_move": sport_state["continuous_move"]}
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["continuous_move"], "loco": sport_state, "simulator_forward": simulator_forward})
+
+    def sport_switch_to_user_ctrl(_parameter: str):
+        sport_state["control_owner"] = "user"
+        simulator_forward = _forward_simulator_command({"command": "loco", "action": "switch_to_user_ctrl"})
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["control_owner"], "loco": sport_state, "simulator_forward": simulator_forward})
+
+    def sport_switch_to_internal_ctrl(parameter: str):
+        payload = _safe_json_loads(parameter)
+        sport_state["control_owner"] = "internal"
+        sport_state["internal_mode"] = int(payload.get("internal_mode", payload.get("data", 0)))
+        simulator_forward = _forward_simulator_command(
+            {"command": "loco", "action": "switch_to_internal_ctrl", "internal_mode": sport_state["internal_mode"]}
+        )
+        sport_state["last_simulator_forward"] = simulator_forward
+        return 0, json.dumps({"data": sport_state["internal_mode"], "loco": sport_state, "simulator_forward": simulator_forward})
+
     for api_id, handler in [
         (ROBOT_API_ID_LOCO_GET_FSM_ID, sport_get_fsm_id),
         (ROBOT_API_ID_LOCO_GET_FSM_MODE, sport_get_fsm_mode),
         (ROBOT_API_ID_LOCO_GET_BALANCE_MODE, sport_get_balance_mode),
         (ROBOT_API_ID_LOCO_GET_SWING_HEIGHT, sport_get_swing_height),
         (ROBOT_API_ID_LOCO_GET_STAND_HEIGHT, sport_get_stand_height),
+        (ROBOT_API_ID_LOCO_GET_PHASE, sport_get_phase),
         (ROBOT_API_ID_LOCO_SET_FSM_ID, sport_set_fsm_id),
         (ROBOT_API_ID_LOCO_SET_BALANCE_MODE, sport_set_balance_mode),
         (ROBOT_API_ID_LOCO_SET_SWING_HEIGHT, sport_set_swing_height),
         (ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, sport_set_stand_height),
         (ROBOT_API_ID_LOCO_SET_VELOCITY, sport_set_velocity),
         (ROBOT_API_ID_LOCO_SET_ARM_TASK, sport_set_arm_task),
+        (ROBOT_API_ID_LOCO_SET_SPEED_MODE, sport_set_speed_mode),
+        (ROBOT_API_ID_LOCO_SWITCH_MOVE_MODE, sport_switch_move_mode),
+        (ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL, sport_switch_to_user_ctrl),
+        (ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL, sport_switch_to_internal_ctrl),
     ]:
         sport._RegistHandler(api_id, handler, False)
     sport.Start(False)
@@ -2144,13 +2200,18 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
         ROBOT_API_ID_LOCO_GET_BALANCE_MODE,
         ROBOT_API_ID_LOCO_GET_FSM_ID,
         ROBOT_API_ID_LOCO_GET_FSM_MODE,
+        ROBOT_API_ID_LOCO_GET_PHASE,
         ROBOT_API_ID_LOCO_GET_STAND_HEIGHT,
         ROBOT_API_ID_LOCO_GET_SWING_HEIGHT,
         ROBOT_API_ID_LOCO_SET_ARM_TASK,
         ROBOT_API_ID_LOCO_SET_BALANCE_MODE,
         ROBOT_API_ID_LOCO_SET_FSM_ID,
+        ROBOT_API_ID_LOCO_SET_SPEED_MODE,
         ROBOT_API_ID_LOCO_SET_SWING_HEIGHT,
         ROBOT_API_ID_LOCO_SET_VELOCITY,
+        ROBOT_API_ID_LOCO_SWITCH_MOVE_MODE,
+        ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL,
+        ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL,
     ]:
         sport_client._RegistApi(api_id, 0)
     _record_rpc_call(
@@ -2180,6 +2241,11 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
     )
     _record_rpc_call(
         calls,
+        "sport.RawGetPhaseDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_GET_PHASE, "{}"),
+    )
+    _record_rpc_call(
+        calls,
         "sport.RawSetFsmIdDebug",
         lambda: sport_client._Call(ROBOT_API_ID_LOCO_SET_FSM_ID, json.dumps({"data": 1})),
     )
@@ -2205,6 +2271,26 @@ def _call_unitree_rpc_bridge_clients(calls: list[dict], timeout: float) -> None:
         calls,
         "sport.RawSetArmTaskDebug",
         lambda: sport_client._Call(ROBOT_API_ID_LOCO_SET_ARM_TASK, json.dumps({"data": 0})),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawSwitchMoveModeDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_SWITCH_MOVE_MODE, json.dumps({"continuous_move": True})),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawSetSpeedModeDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_SET_SPEED_MODE, json.dumps({"data": 2})),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawSwitchToUserCtrlDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL, "{}"),
+    )
+    _record_rpc_call(
+        calls,
+        "sport.RawSwitchToInternalCtrlDebug",
+        lambda: sport_client._Call(ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL, json.dumps({"internal_mode": 2})),
     )
 
     agv_client = Client("agv", False)
@@ -2370,6 +2456,7 @@ def _call_unitree_rpc_bridge_command(
         "get_balance_mode": ("sport.GetBalanceMode", ROBOT_API_ID_LOCO_GET_BALANCE_MODE, lambda: {}),
         "get_swing_height": ("sport.GetSwingHeight", ROBOT_API_ID_LOCO_GET_SWING_HEIGHT, lambda: {}),
         "get_stand_height": ("sport.GetStandHeight", ROBOT_API_ID_LOCO_GET_STAND_HEIGHT, lambda: {}),
+        "get_phase": ("sport.GetPhase", ROBOT_API_ID_LOCO_GET_PHASE, lambda: {}),
         "set_fsm_id": (
             "sport.SetFsmId",
             ROBOT_API_ID_LOCO_SET_FSM_ID,
@@ -2414,6 +2501,22 @@ def _call_unitree_rpc_bridge_command(
             "sport.SetArmTask",
             ROBOT_API_ID_LOCO_SET_ARM_TASK,
             lambda: {"data": int(_first_param(params, "task_id", "data", default=0))},
+        ),
+        "set_speed_mode": (
+            "sport.SetSpeedMode",
+            ROBOT_API_ID_LOCO_SET_SPEED_MODE,
+            lambda: {"data": int(_first_param(params, "speed_mode", "data", default=0))},
+        ),
+        "switch_move_mode": (
+            "sport.SwitchMoveMode",
+            ROBOT_API_ID_LOCO_SWITCH_MOVE_MODE,
+            lambda: {"continuous_move": bool(_first_param(params, "continuous_move", "flag", "data", default=False))},
+        ),
+        "switch_to_user_ctrl": ("sport.SwitchToUserCtrl", ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL, lambda: {}),
+        "switch_to_internal_ctrl": (
+            "sport.SwitchToInternalCtrl",
+            ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL,
+            lambda: {"internal_mode": int(_first_param(params, "internal_mode", "mode", "data", default=0))},
         ),
         "high_stand": ("sport.HighStand", ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, lambda: {"data": 4294967295}),
         "low_stand": ("sport.LowStand", ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, lambda: {"data": 0}),

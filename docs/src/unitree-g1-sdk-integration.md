@@ -668,7 +668,9 @@ The current repo has the first narrow version of that API boundary:
   is accepted for SDK compatibility but reported as `bridge_state_only` until
   the local simulator has a modeled height-column actuator. That also covers
   common high-level `LocoClient` shortcuts such as `Damp`, `StopMove`,
-  `WaveHand`, and `ShakeHand`, plus normal
+  `WaveHand`, and `ShakeHand`, continuous move mode (`SwitchMoveMode`),
+  speed/control ownership flags (`SetSpeedMode`, `SwitchToUserCtrl`,
+  `SwitchToInternalCtrl`), plus normal
   `G1ArmActionClient.ExecuteAction(...)`. If the simulator is not reachable or
   does not support the operation, the SDK call still returns `RPC_OK`, but the
   JSON response marks `simulator_forward.provider` or
@@ -685,11 +687,11 @@ The current repo has the first narrow version of that API boundary:
   `bridge_state_only` fallbacks.
   `unitree_command_rpc_bridge` is the per-action path: it starts the bridge
   when requested, sends one raw official SDK2 RPC such as `sport.move`,
-  `sport.get_fsm_id`, `sport.wave_hand`, `arm.execute_action`, or
-  `agv.height_adjust`, then returns the raw call body plus the same evidence
-  summary. This is the preferred agent tool when the user asks for one small
-  locomotion or high-level intent command rather than a whole diagnostic
-  sequence.
+  `sport.get_fsm_id`, `sport.switch_move_mode`, `sport.set_speed_mode`,
+  `sport.wave_hand`, `arm.execute_action`, or `agv.height_adjust`, then returns
+  the raw call body plus the same evidence summary. This is the preferred agent
+  tool when the user asks for one small locomotion or high-level intent command
+  rather than a whole diagnostic sequence.
   Live validation started the bridge, called it from a separate sidecar client,
   observed `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
   `sport.SetVelocity`, `agv.Move`, `agv.HeightAdjust`, and `arm.ExecuteAction`,

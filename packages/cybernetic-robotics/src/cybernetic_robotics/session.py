@@ -580,12 +580,17 @@ _LOCO_RPC_BRIDGE_METHODS = {
     "get_balance_mode",
     "get_swing_height",
     "get_stand_height",
+    "get_phase",
     "set_fsm_id",
     "set_balance_mode",
     "set_swing_height",
     "set_stand_height",
     "set_velocity",
     "set_arm_task",
+    "set_speed_mode",
+    "switch_move_mode",
+    "switch_to_user_ctrl",
+    "switch_to_internal_ctrl",
     "high_stand",
     "low_stand",
     "wave_hand",
@@ -602,6 +607,7 @@ def _loco_rpc_bridge_request(action: str, fields: dict[str, Any]) -> dict[str, A
         "get_balance_mode",
         "get_swing_height",
         "get_stand_height",
+        "get_phase",
         "high_stand",
         "low_stand",
         "wave_hand",
@@ -611,7 +617,17 @@ def _loco_rpc_bridge_request(action: str, fields: dict[str, Any]) -> dict[str, A
     if action == "set_velocity":
         velocity = fields.get("velocity") or [fields.get("vx", 0.0), fields.get("vy", 0.0), fields.get("omega", 0.0)]
         return {"method": "move", "params": {"velocity": velocity, "duration": fields.get("duration", 0.0)}}
-    if action in {"set_fsm_id", "set_balance_mode", "set_swing_height", "set_stand_height", "set_arm_task"}:
+    if action in {
+        "set_fsm_id",
+        "set_balance_mode",
+        "set_swing_height",
+        "set_stand_height",
+        "set_arm_task",
+        "set_speed_mode",
+        "switch_move_mode",
+        "switch_to_user_ctrl",
+        "switch_to_internal_ctrl",
+    }:
         return {"method": action, "params": dict(fields)}
     return None
 
@@ -657,6 +673,11 @@ def _normalize_rpc_bridge_command_response(
                 "get_balance_mode": "balance_mode",
                 "get_swing_height": "swing_height",
                 "get_stand_height": "stand_height",
+                "get_phase": "phase",
+                "set_speed_mode": "speed_mode",
+                "switch_move_mode": "continuous_move",
+                "switch_to_user_ctrl": "control_owner",
+                "switch_to_internal_ctrl": "internal_mode",
                 "height_adjust": "height_velocity",
             }.get(action)
             if key:

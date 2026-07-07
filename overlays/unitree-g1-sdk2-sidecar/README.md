@@ -203,7 +203,9 @@ forward:
 accepted for SDK compatibility but is reported as `bridge_state_only` until the
 local simulator has a modeled height-column actuator. This also covers common
 `LocoClient` shortcuts including `Damp`, `StopMove`, `WaveHand`, and
-`ShakeHand`. If the simulator
+`ShakeHand`, plus Cybernetic's simulator bridge extensions for `GetPhase`,
+`SwitchMoveMode`, `SetSpeedMode`, `SwitchToUserCtrl`, and
+`SwitchToInternalCtrl`. If the simulator
 HTTP bridge is unavailable or the operation is unsupported, the RPC still
 returns `RPC_OK` for SDK compatibility, but the JSON response marks
 `simulator_forward.provider` or
