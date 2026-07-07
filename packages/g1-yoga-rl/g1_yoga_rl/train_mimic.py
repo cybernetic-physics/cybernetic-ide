@@ -105,6 +105,9 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--horizon", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--resume-agent", type=Path, default=None,
+                        help="PPOJax_saved.pkl to continue training from, so an "
+                             "interrupted multi-hour run does not start over")
     args = parser.parse_args()
     args.total_timesteps = int(args.total_timesteps) // args.chunks
 
@@ -130,6 +133,9 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     rng = jax.random.PRNGKey(args.seed)
     agent_state = None
+    if args.resume_agent is not None:
+        _, agent_state = PPOJax.load_agent(args.resume_agent)
+        print(f"[train] resumed agent state from {args.resume_agent}", flush=True)
     best_return = -np.inf
     start = time.perf_counter()
     for chunk in range(args.chunks):
