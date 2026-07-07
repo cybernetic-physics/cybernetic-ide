@@ -111,6 +111,11 @@ class G1Robot:
     def neutral(self) -> dict[str, Any]:
         return self.release_arm()
 
+    def safety_stop(self) -> dict[str, Any]:
+        """Release motion mode, damp locomotion, neutralize pose, and pause."""
+
+        return self.sim.safety_stop()
+
     def pose(self, name: str, **kwargs: Any) -> dict[str, Any]:
         return self.sim.pose(name, **kwargs)
 

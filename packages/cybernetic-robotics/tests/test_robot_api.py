@@ -339,6 +339,27 @@ class RobotApiTests(unittest.TestCase):
             self.assertEqual(status.pose, "raise_right_hand")
             self.assertTrue(robot.sim.snapshot_bytes().startswith(b"fake-jpeg"))
 
+    def test_beginner_robot_api_safety_stop_reports_steps(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            robot = G1Robot.connect(endpoints=endpoints)
+
+            robot.raise_right_hand()
+            result = robot.safety_stop()
+            status = robot.status()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual([step["step"] for step in result["steps"]], [
+                "release_motion_mode",
+                "damp_locomotion",
+                "neutral_pose",
+                "pause",
+            ])
+            self.assertEqual(status.pose, "neutral")
+            self.assertTrue(status.paused)
+            self.assertEqual(FakeG1Handler.loco["fsm_mode"], "damp")
+            self.assertEqual(FakeG1Handler.motion_switcher["name"], "")
+
     def test_power_user_client_can_drive_camera_and_commands(self):
         with FakeServer() as fake:
             client = SimulatorClient(RobotEndpoints(game_control_url=fake.url))

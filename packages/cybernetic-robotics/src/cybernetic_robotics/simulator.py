@@ -180,6 +180,26 @@ class SimulatorClient:
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")
 
+    def safety_stop(self) -> JsonObject:
+        """Best-effort simulator stop: release motion, damp, neutral, pause."""
+
+        steps: list[JsonObject] = []
+        ok = True
+        for label, call in (
+            ("release_motion_mode", lambda: self.command("motion_switcher", action="release_mode")),
+            ("damp_locomotion", lambda: self.command("loco", action="set_fsm_id", fsm_id=1, mode="damp")),
+            ("neutral_pose", lambda: self.pose("neutral")),
+            ("pause", self.pause),
+        ):
+            try:
+                result = call()
+                steps.append({"step": label, "ok": bool(result.get("ok", True)), "result": result})
+                ok = ok and bool(result.get("ok", True))
+            except Exception as error:  # noqa: BLE001 - stop paths should report every attempted step.
+                steps.append({"step": label, "ok": False, "error": str(error)})
+                ok = False
+        return {"ok": ok, "mode": "simulator", "steps": steps}
+
     def joint_state(self) -> JsonObject:
         return self.get_json("/joint_state")
 

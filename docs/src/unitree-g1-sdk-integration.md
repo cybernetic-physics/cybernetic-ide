@@ -98,6 +98,7 @@ from cybernetic_robotics import G1Robot
 with G1Robot.connect() as robot:
     robot.raise_right_hand()
     robot.snapshot(".runtime/g1-control-demo/right-hand-up.jpg")
+    robot.safety_stop()
 ```
 
 Or use the CLI:
@@ -105,6 +106,7 @@ Or use the CLI:
 ```sh
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 safety-stop
 ```
 
 Run the first Unitree-shaped SDK demo:
@@ -502,6 +504,9 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
   including official-style FSM, balance, swing-height, and stand-height
   getters/setters.
+- `examples/g1_safety_stop.py` demonstrates the shared simulator stop path:
+  release motion-switcher mode, damp locomotion, neutralize the arm pose, pause
+  the simulator, and save an after-stop snapshot.
 - The shim exposes `unitree_sdk2py.g1.audio.g1_audio_client.AudioClient` for
   TTS, volume, LED, and stream method-shape compatibility. In MuJoCo this
   records intent only; real audio hardware still belongs to the future official

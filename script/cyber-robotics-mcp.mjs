@@ -709,7 +709,7 @@ const tools = [
     ["motor_cmd"],
     { readOnlyHint: false },
   ),
-  tool("safety_stop", "Pause the simulator and release the G1 arm to the neutral pose.", {}, [], {
+  tool("safety_stop", "Release motion mode, damp locomotion, neutralize the G1 pose, and pause the simulator.", {}, [], {
     readOnlyHint: false,
     destructiveHint: true,
   }),
@@ -1007,10 +1007,7 @@ async function callTool(name, args) {
     case "g1_lowcmd":
       return textResult(await executeG1Lowcmd(args));
     case "safety_stop":
-      return textResult({
-        pause: await command({ command: "pause" }),
-        neutral: await command({ command: "pose", pose: "neutral" }),
-      });
+      return textResult(await safetyStop());
     case "docker_logs":
       return textResult(runChecked("docker", ["logs", "--tail", String(toInt(args.tail, 120)), DEFAULT_CONTAINER], { timeoutMs: 30000 }));
     case "protocol_probe_http":
@@ -1608,6 +1605,28 @@ async function executeG1MotionSwitcher(args) {
     return command({ command: "motion_switcher", action: "get_silent" });
   }
   throw new Error(`Unsupported G1 motion switcher command: ${commandName}`);
+}
+
+async function safetyStop() {
+  const steps = [];
+  let ok = true;
+  for (const [step, body] of [
+    ["release_motion_mode", { command: "motion_switcher", action: "release_mode" }],
+    ["damp_locomotion", { command: "loco", action: "set_fsm_id", fsm_id: 1, mode: "damp" }],
+    ["neutral_pose", { command: "pose", pose: "neutral" }],
+    ["pause", { command: "pause" }],
+  ]) {
+    try {
+      const result = await command(body);
+      const stepOk = result?.ok !== false;
+      steps.push({ step, ok: stepOk, result });
+      ok = ok && stepOk;
+    } catch (error) {
+      steps.push({ step, ok: false, error: error.message });
+      ok = false;
+    }
+  }
+  return { ok, mode: "simulator", steps };
 }
 
 async function executeG1Lowcmd(args) {

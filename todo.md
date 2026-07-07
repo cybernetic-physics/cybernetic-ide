@@ -255,7 +255,11 @@ Tasks:
   used.
 - Gate low-level commands behind an expert setting.
 - Refuse motion if `rt/lowstate` is stale.
-- Add visible emergency stop and API-level `safety_stop`.
+- Add visible emergency-stop control in the Robot Viewer / robotics panel.
+- Done: add simulator API-level `G1Robot.safety_stop()`,
+  `SimulatorClient.safety_stop()`, `cyber-g1 safety-stop`, and MCP
+  `safety_stop` step reports. The simulator stop path releases motion mode,
+  damps locomotion, neutralizes the pose, and pauses.
 - Document what each stop path sends: `StopMove`, damping, zero torque, or
   pause-only simulator behavior.
 - Add structured warnings to examples that could be unsafe on hardware.
@@ -364,7 +368,7 @@ Tasks:
 - `examples/g1_scene_obstacle.py`: add an object, move camera, snapshot.
 - `examples/g1_agent_debug_loop.py`: run behavior, capture state, print a
   debugging bundle an AI agent can use.
-- `examples/g1_safety_stop.py`: show stop/pause/damp behavior clearly.
+- Done: `examples/g1_safety_stop.py`: show stop/pause/damp behavior clearly.
 
 Reasoning: examples should cover the behaviors a developer naturally wants:
 move, wave, inspect telemetry, change the world, stop safely, and debug.

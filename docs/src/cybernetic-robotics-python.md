@@ -46,6 +46,7 @@ with G1Robot.connect() as robot:
     robot.reset()
     robot.raise_right_hand()
     robot.snapshot(".runtime/g1-control-demo/right-hand-up.jpg")
+    robot.safety_stop()
     print(robot.status().pose)
 ```
 
@@ -68,6 +69,7 @@ python3 examples/g1_official_raise_hand.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_lowcmd_sdk.py
 python3 examples/g1_joint_targets.py
+python3 examples/g1_safety_stop.py
 ```
 
 ## CLI
@@ -77,6 +79,7 @@ The package installs `cyber-g1`:
 ```sh
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 safety-stop
 cyber-g1 official status
 cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10
