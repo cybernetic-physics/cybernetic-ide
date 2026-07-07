@@ -21,6 +21,7 @@ use workspace::Workspace;
 use workspace::item::Item;
 
 const HARNESS_MARKER_PATH: &str = "overlays/unitree-g1-mujoco-protocol/Dockerfile";
+const AUTO_OPEN_ENV: &str = "CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP";
 const DEFAULT_IMAGE: &str = "cyber/unitree-g1-mujoco-protocol:0.1.0";
 const DEFAULT_MODEL_PATH: &str = "/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml";
 const PHYSICS_URL: &str = "ws://127.0.0.1:8788";
@@ -45,8 +46,12 @@ actions!(
 );
 
 pub fn init(cx: &mut App) {
-    cx.observe_new(|workspace: &mut Workspace, _window, _cx| {
+    let auto_open = std::env::var_os(AUTO_OPEN_ENV).is_some();
+    cx.observe_new(move |workspace: &mut Workspace, window, cx| {
         register_robot_viewer_action(workspace);
+        if let (true, Some(window)) = (auto_open, window) {
+            open_robot_viewer(workspace, CyberRobotViewer::new, window, cx);
+        }
     })
     .detach();
 }

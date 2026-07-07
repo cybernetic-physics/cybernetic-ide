@@ -41,3 +41,10 @@ Camera controls:
 The Unitree assets are not vendored in this repo. The prepare script fetches
 the official `unitreerobotics/unitree_mujoco` repository at a pinned commit
 into `.runtime/unitree-g1-mujoco/unitree_mujoco` and mounts it read-only.
+
+Probe the live Booster-style envelope from this repo with:
+
+```sh
+node script/probe-unitree-g1-mujoco-protocol.mjs --topic simulation_state
+node script/probe-unitree-g1-mujoco-protocol.mjs --topic visual_frame
+```

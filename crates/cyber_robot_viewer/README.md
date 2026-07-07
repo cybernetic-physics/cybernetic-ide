@@ -19,3 +19,7 @@ fresh MuJoCo render.
 The checked-in harness lives under `overlays/unitree-g1-mujoco-*`. It fetches
 the public Unitree G1 MuJoCo scene into `.runtime/unitree-g1-mujoco` and keeps
 those assets out of git.
+
+For debug screenshot runs, set `CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP=1` before
+launching a debug Zed binary. The first workspace window will open the robot
+viewer automatically inside the active editor pane.
