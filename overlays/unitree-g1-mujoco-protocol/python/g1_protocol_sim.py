@@ -28,6 +28,19 @@ MESSAGE_TYPES = {
     "visual_scene_error": 12,
 }
 
+NAMED_POSES = {
+    "raise_right_hand": {
+        "right_shoulder_pitch_joint": -2.2,
+        "right_shoulder_roll_joint": -0.2,
+        "right_shoulder_yaw_joint": 0.0,
+        "right_elbow_joint": 1.0,
+        "right_wrist_roll_joint": 0.0,
+        "right_wrist_pitch_joint": 0.0,
+        "right_wrist_yaw_joint": 0.0,
+    },
+    "neutral": {},
+}
+
 
 def env_float(name, default):
     raw = os.environ.get(name)
@@ -93,6 +106,7 @@ class G1MujocoState:
         self.frame_id = 0
         self.last_step_wall_time = time.monotonic()
         self.last_render_error = None
+        self.active_pose = None
         self.latest_jpeg = None
         self.latest_jpeg_frame_id = None
         self.latest_jpeg_rendered_at = None
@@ -132,11 +146,14 @@ class G1MujocoState:
             mujoco.mj_resetData(self.model, self.data)
             mujoco.mj_forward(self.model, self.data)
             self.frame_id = 0
+            self.active_pose = None
             self.last_step_wall_time = time.monotonic()
 
     def set_paused(self, value):
         with self.lock:
             self.paused = value
+            if not value:
+                self.active_pose = None
             self.last_step_wall_time = time.monotonic()
 
     def step(self, count=1):
@@ -144,6 +161,43 @@ class G1MujocoState:
             for _ in range(max(1, count)):
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
+
+    def joint_qpos_addr(self, joint_name):
+        joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        if joint_id < 0:
+            raise KeyError(f"unknown joint: {joint_name}")
+        return joint_id, int(self.model.jnt_qposadr[joint_id])
+
+    def apply_named_pose(self, pose_name):
+        targets = NAMED_POSES.get(pose_name)
+        if targets is None:
+            return {
+                "ok": False,
+                "error": f"unsupported pose: {pose_name}",
+                "available_poses": sorted(NAMED_POSES),
+            }
+
+        with self.lock:
+            mujoco.mj_resetData(self.model, self.data)
+            for joint_name, value in targets.items():
+                joint_id, qpos_addr = self.joint_qpos_addr(joint_name)
+                minimum, maximum = self.model.jnt_range[joint_id]
+                self.data.qpos[qpos_addr] = clamp(float(value), float(minimum), float(maximum))
+            self.data.qvel[:] = 0.0
+            self.data.ctrl[:] = 0.0
+            self.paused = True
+            self.active_pose = pose_name
+            self.frame_id += 1
+            self.last_step_wall_time = time.monotonic()
+            mujoco.mj_forward(self.model, self.data)
+            self.refresh_jpeg_cache()
+            return {
+                "ok": True,
+                "pose": pose_name,
+                "paused": self.paused,
+                "frame_id": self.frame_id,
+                "joints": targets,
+            }
 
     def reset_camera(self):
         with self.camera_lock:
@@ -245,7 +299,12 @@ class G1MujocoState:
                 "paused": self.paused,
                 "robot_statuses": {self.robot_name: True},
                 "is_multi_robot": False,
-                "robot_modes": {self.robot_name: "stand" if self.paused else "free_sim"},
+                "robot_modes": {
+                    self.robot_name: self.active_pose
+                    if self.active_pose is not None
+                    else ("stand" if self.paused else "free_sim")
+                },
+                "pose": self.active_pose,
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
                 "all_robot_names": [self.robot_name],
@@ -479,7 +538,8 @@ class G1MujocoState:
             {"topic": topic, "error": f"unsupported topic: {topic}"},
         )
 
-    def handle_command(self, command):
+    def handle_command(self, command, payload=None):
+        payload = payload or {}
         if command == "pause":
             self.set_paused(True)
             return {"ok": True, "paused": True}
@@ -492,6 +552,10 @@ class G1MujocoState:
         if command == "step":
             self.step(1)
             return {"ok": True, "paused": self.paused, "frame_id": self.frame_id}
+        if command == "pose":
+            return self.apply_named_pose(payload.get("pose", "raise_right_hand"))
+        if command in NAMED_POSES:
+            return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}
 
     def handle_camera_command(self, command):
@@ -608,6 +672,7 @@ def start_http_server(state):
         def do_POST(self):
             parsed = urlparse(self.path)
             if parsed.path not in (
+                "/command",
                 "/camera",
                 "/camera_frame_0.png",
                 "/frame.png",
@@ -619,6 +684,12 @@ def start_http_server(state):
 
             try:
                 command = self.read_json_body()
+                if parsed.path == "/command":
+                    self.write_json(
+                        200,
+                        state.handle_command(command.get("command"), command),
+                    )
+                    return
                 result = state.handle_camera_command(command)
             except Exception as error:
                 self.write_json(400, {"ok": False, "error": str(error)})
@@ -702,7 +773,7 @@ async def websocket_handler(state, websocket):
                 continue
 
             if command.get("type") == "command":
-                result = state.handle_command(command.get("command"))
+                result = state.handle_command(command.get("command"), command)
                 await websocket.send(json.dumps(result))
                 continue
 

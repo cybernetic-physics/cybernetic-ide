@@ -13,4 +13,25 @@
     "allow_concurrent_runs": true,
     "use_new_terminal": false,
   },
+  {
+    "label": "run Unitree G1 sim control demo",
+    "command": "python3",
+    "args": ["examples/control_g1_sim.py", "--steps", "20", "--run-seconds", "1.2"],
+    "allow_concurrent_runs": true,
+    "use_new_terminal": false,
+  },
+  {
+    "label": "raise Unitree G1 hand",
+    "command": "python3",
+    "args": ["examples/control_g1_sim.py", "--pose", "raise_right_hand"],
+    "allow_concurrent_runs": true,
+    "use_new_terminal": false,
+  },
+  {
+    "label": "raise Unitree G1 hand via Unitree SDK facade",
+    "command": "python3",
+    "args": ["examples/g1_raise_hand_sdk.py"],
+    "allow_concurrent_runs": true,
+    "use_new_terminal": false,
+  },
 ]

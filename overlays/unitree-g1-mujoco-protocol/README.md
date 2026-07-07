@@ -10,8 +10,9 @@ API:
   reversed Booster simulator.
 - Binary frames use the same 8-byte big-endian `{message_type, payload_len}`
   envelope followed by MessagePack.
-- `38383` exposes `/health`, `/status`, `/visual_frame`, `/camera`,
-  `/camera_control`, `/camera_frame_0.png`, and `/camera_frame_0.jpg`.
+- `38383` exposes `/health`, `/status`, `/visual_frame`, `/command`,
+  `/camera`, `/camera_control`, `/camera_frame_0.png`, and
+  `/camera_frame_0.jpg`.
 
 Supported topics:
 
@@ -37,6 +38,15 @@ Camera controls:
 - WebSocket JSON commands with `{ "type": "camera", ... }` use the same action
   payload for clients that want to keep all control traffic on the reversed
   physics socket.
+
+Simulator commands:
+
+- WebSocket `{ "type": "command", "command": "pause" | "resume" | "reset" | "step" }`
+  controls the MuJoCo lifecycle.
+- WebSocket `{ "type": "command", "command": "pose", "pose": "raise_right_hand" }`
+  applies a deterministic G1 arm pose directly in MuJoCo. This is an interim
+  simulator command, not the official SDK2/DDS arm-control path.
+- `POST /command` accepts the same command JSON over HTTP for simple probes.
 
 The Unitree assets are not vendored in this repo. The prepare script fetches
 the official `unitreerobotics/unitree_mujoco` repository at a pinned commit

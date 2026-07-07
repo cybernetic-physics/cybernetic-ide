@@ -17,8 +17,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use ui::prelude::*;
 use util::ResultExt as _;
-use workspace::Workspace;
-use workspace::item::Item;
+use workspace::item::{Item, ItemHandle};
+use workspace::{SplitDirection, Workspace, move_item};
 
 const HARNESS_MARKER_PATH: &str = "overlays/unitree-g1-mujoco-protocol/Dockerfile";
 const AUTO_OPEN_ENV: &str = "CYBER_ROBOT_VIEWER_OPEN_ON_STARTUP";
@@ -41,7 +41,9 @@ actions!(
     cyber,
     [
         /// Opens the embedded robot viewer.
-        OpenRobotViewer
+        OpenRobotViewer,
+        /// Opens the embedded robot viewer beside the current pane.
+        OpenRobotViewerBeside
     ]
 );
 
@@ -60,6 +62,9 @@ fn register_robot_viewer_action(workspace: &mut Workspace) {
     workspace.register_action(|workspace, _: &OpenRobotViewer, window, cx| {
         open_robot_viewer(workspace, CyberRobotViewer::new, window, cx);
     });
+    workspace.register_action(|workspace, _: &OpenRobotViewerBeside, window, cx| {
+        open_robot_viewer_beside(workspace, CyberRobotViewer::new, window, cx);
+    });
 }
 
 fn open_robot_viewer(
@@ -68,24 +73,87 @@ fn open_robot_viewer(
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) {
-    let existing_view_idx = {
-        let active_pane = workspace.active_pane().read(cx);
-        active_pane
-            .items_of_type::<CyberRobotViewer>()
-            .next()
-            .and_then(|view| active_pane.index_for_item(&view))
-    };
-
-    if let Some(existing_view_idx) = existing_view_idx {
-        workspace.active_pane().update(cx, |pane, cx| {
-            pane.activate_item(existing_view_idx, true, true, window, cx);
-        });
+    if activate_existing_robot_viewer(workspace, window, cx) {
         return;
     }
 
     let viewer = create_viewer(window, cx);
     workspace.add_item_to_active_pane(Box::new(viewer), None, true, window, cx);
     cx.notify();
+}
+
+fn open_robot_viewer_beside(
+    workspace: &mut Workspace,
+    create_viewer: impl FnOnce(&mut Window, &mut Context<Workspace>) -> Entity<CyberRobotViewer>,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    if ensure_existing_robot_viewer_beside(workspace, window, cx) {
+        return;
+    }
+
+    let viewer = create_viewer(window, cx);
+    match workspace.find_pane_in_direction(SplitDirection::Right, cx) {
+        Some(right_pane) => {
+            workspace.add_item(right_pane, Box::new(viewer), None, true, true, window, cx);
+        }
+        None => {
+            workspace.split_item(SplitDirection::Right, Box::new(viewer), window, cx);
+        }
+    }
+    cx.notify();
+}
+
+fn ensure_existing_robot_viewer_beside(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> bool {
+    let Some(viewer) = workspace.item_of_type::<CyberRobotViewer>(cx) else {
+        return false;
+    };
+
+    let Some(source_pane) = workspace.pane_for_item_id(viewer.item_id()) else {
+        return workspace.activate_item(&viewer, true, true, window, cx);
+    };
+    let active_pane = workspace.active_pane().clone();
+
+    if source_pane == active_pane && active_pane.read(cx).items_len() <= 1 {
+        return workspace.activate_item(&viewer, true, true, window, cx);
+    }
+
+    let destination_pane = workspace
+        .find_pane_in_direction(SplitDirection::Right, cx)
+        .unwrap_or_else(|| workspace.split_pane(active_pane, SplitDirection::Right, window, cx));
+
+    if source_pane == destination_pane {
+        return workspace.activate_item(&viewer, true, true, window, cx);
+    }
+
+    let destination_index = destination_pane.read(cx).items_len();
+    move_item(
+        &source_pane,
+        &destination_pane,
+        viewer.item_id(),
+        destination_index,
+        true,
+        window,
+        cx,
+    );
+    cx.notify();
+    true
+}
+
+fn activate_existing_robot_viewer(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) -> bool {
+    let Some(viewer) = workspace.item_of_type::<CyberRobotViewer>(cx) else {
+        return false;
+    };
+
+    workspace.activate_item(&viewer, true, true, window, cx)
 }
 
 pub struct CyberRobotViewer {
@@ -1604,6 +1672,40 @@ mod tests {
     use fs::FakeFs;
     use project::Project;
 
+    struct TestWorkspaceItem {
+        focus_handle: FocusHandle,
+    }
+
+    impl TestWorkspaceItem {
+        fn new(cx: &mut Context<Self>) -> Self {
+            Self {
+                focus_handle: cx.focus_handle(),
+            }
+        }
+    }
+
+    impl Render for TestWorkspaceItem {
+        fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            div().size_full()
+        }
+    }
+
+    impl Focusable for TestWorkspaceItem {
+        fn focus_handle(&self, _cx: &App) -> FocusHandle {
+            self.focus_handle.clone()
+        }
+    }
+
+    impl EventEmitter<()> for TestWorkspaceItem {}
+
+    impl Item for TestWorkspaceItem {
+        type Event = ();
+
+        fn tab_content_text(&self, _detail: usize, _cx: &App) -> SharedString {
+            "g1 control code".into()
+        }
+    }
+
     #[gpui::test]
     async fn embeds_robot_viewer_in_active_workspace_pane(cx: &mut gpui::TestAppContext) {
         cx.update(|cx| {
@@ -1673,6 +1775,154 @@ mod tests {
             }),
             1,
             "reopening should activate the existing embedded viewer"
+        );
+    }
+
+    #[gpui::test]
+    async fn opens_robot_viewer_beside_current_workspace_pane(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            workspace::AppState::test(cx);
+        });
+
+        let fs = FakeFs::new(cx.executor());
+        let project = Project::test(fs, [], cx).await;
+        let (workspace, cx) =
+            cx.add_window_view(|window, cx| Workspace::test_new(project, window, cx));
+
+        assert_eq!(
+            workspace.read_with(cx, |workspace, _| workspace.panes().len()),
+            1
+        );
+
+        workspace.update_in(cx, |workspace, window, cx| {
+            open_robot_viewer_beside(
+                workspace,
+                |_, cx| cx.new(CyberRobotViewer::test_connected),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+
+        assert_eq!(
+            workspace.read_with(cx, |workspace, _| workspace.panes().len()),
+            2,
+            "opening beside should create a right-hand pane for the viewer"
+        );
+        assert_eq!(
+            workspace.read_with(cx, |workspace, cx| {
+                workspace.items_of_type::<CyberRobotViewer>(cx).count()
+            }),
+            1,
+            "the viewer should only be created once"
+        );
+        assert_eq!(
+            workspace.read_with(cx, |workspace, cx| {
+                workspace
+                    .active_pane()
+                    .read(cx)
+                    .items_of_type::<CyberRobotViewer>()
+                    .count()
+            }),
+            1,
+            "the new adjacent pane should become active with the viewer selected"
+        );
+
+        workspace.update_in(cx, |workspace, window, cx| {
+            open_robot_viewer_beside(
+                workspace,
+                |_, cx| cx.new(CyberRobotViewer::test_connected),
+                window,
+                cx,
+            );
+        });
+
+        assert_eq!(
+            workspace.read_with(cx, |workspace, _| workspace.panes().len()),
+            2,
+            "reopening should activate the existing viewer instead of splitting again"
+        );
+        assert_eq!(
+            workspace.read_with(cx, |workspace, cx| {
+                workspace.items_of_type::<CyberRobotViewer>(cx).count()
+            }),
+            1,
+            "reopening should not duplicate the viewer"
+        );
+    }
+
+    #[gpui::test]
+    async fn moves_existing_robot_viewer_next_to_code_pane(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            workspace::AppState::test(cx);
+        });
+
+        let fs = FakeFs::new(cx.executor());
+        let project = Project::test(fs, [], cx).await;
+        let (workspace, cx) =
+            cx.add_window_view(|window, cx| Workspace::test_new(project, window, cx));
+
+        workspace.update_in(cx, |workspace, window, cx| {
+            let viewer = cx.new(CyberRobotViewer::test_connected);
+            workspace.add_item_to_active_pane(Box::new(viewer), None, true, window, cx);
+            let code_pane = workspace.split_pane(
+                workspace.active_pane().clone(),
+                SplitDirection::Right,
+                window,
+                cx,
+            );
+            let code_item = cx.new(TestWorkspaceItem::new);
+            workspace.add_item(
+                code_pane.clone(),
+                Box::new(code_item),
+                None,
+                true,
+                true,
+                window,
+                cx,
+            );
+            window.focus(&code_pane.focus_handle(cx), cx);
+        });
+        cx.run_until_parked();
+
+        workspace.update_in(cx, |workspace, window, cx| {
+            open_robot_viewer_beside(
+                workspace,
+                |_, cx| cx.new(CyberRobotViewer::test_connected),
+                window,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+
+        let (pane_count, code_pane_count, viewer_pane_count) =
+            workspace.read_with(cx, |workspace, cx| {
+                let mut code_pane_count = 0;
+                let mut viewer_pane_count = 0;
+                for pane in workspace.panes() {
+                    let pane = pane.read(cx);
+                    if pane.items_of_type::<TestWorkspaceItem>().count() == 1 {
+                        code_pane_count += 1;
+                    }
+                    if pane.items_of_type::<CyberRobotViewer>().count() == 1 {
+                        viewer_pane_count += 1;
+                    }
+                }
+                (workspace.panes().len(), code_pane_count, viewer_pane_count)
+            });
+
+        assert_eq!(pane_count, 2);
+        assert_eq!(code_pane_count, 1, "code should remain in the source pane");
+        assert_eq!(
+            viewer_pane_count, 1,
+            "the existing viewer should move into its own pane"
+        );
+        assert_eq!(
+            workspace.read_with(cx, |workspace, cx| {
+                workspace.items_of_type::<CyberRobotViewer>(cx).count()
+            }),
+            1,
+            "moving the viewer should not create a duplicate"
         );
     }
 

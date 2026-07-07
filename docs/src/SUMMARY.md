@@ -41,6 +41,10 @@
 - [Environment Variables](./environment.md)
 - [Dev Containers](./dev-containers.md)
 
+# Cybernetic Robotics
+
+- [Unitree G1 SDK Integration](./unitree-g1-sdk-integration.md)
+
 # AI
 
 - [Overview](./ai/overview.md)
