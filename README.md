@@ -323,6 +323,9 @@ ad hoc scripts first. The default tool surface includes:
 - official SDK2 control probe: `unitree_probe_official_mujoco_lowcmd`, which
   reads official `rt/lowstate`, builds a CRC-valid hold-position `LowCmd_`,
   and verifies `rt/lowcmd` writes against the upstream peer;
+- official SDK2 motion probe: `unitree_probe_official_mujoco_arm_motion`, which
+  sends a bounded single-joint arm target over official `rt/lowcmd` and proves
+  motion by reading the changed joint position from `rt/lowstate`;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and

@@ -33,12 +33,16 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=probe_official_mujoco_lowcmd`, launches the same
   peer, reads official `rt/lowstate`, builds a CRC-valid hold-position
   `LowCmd_`, and reports how many `rt/lowcmd` writes matched the peer.
+- when `CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion`, launches the
+  same peer, sends a bounded single-arm-joint `rt/lowcmd` target, and verifies
+  motion by reading the changed joint position from `rt/lowstate`.
 
 It still does **not** replace the local HTTP viewer/control bridge as the
 default transport. The sidecar has now proven official `rt/lowstate` sample
-exchange and safe official `rt/lowcmd` hold-frame publishing. The next provider
-milestone is keeping that DDS connection alive as a session transport and then
-routing the Cybernetic Python facade through it.
+exchange, safe official `rt/lowcmd` hold-frame publishing, and bounded
+single-joint arm motion. The next provider milestone is keeping that DDS
+connection alive as a session transport and then routing the Cybernetic Python
+facade through it.
 
 Prepare sources:
 
@@ -104,3 +108,17 @@ docker compose \
 The current verified local result reads the same `LowState_`, creates a
 35-motor `unitree_hg.msg.dds_.LowCmd_` with `mode_machine=5`, computes CRC, and
 successfully writes 8 of 8 hold frames to `rt/lowcmd`.
+
+Probe whether a bounded official lowcmd changes a G1 arm joint:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm -e CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion \
+  unitree-g1-sdk2-sidecar
+```
+
+The current verified local result targets `right_shoulder_roll`, writes 220 of
+220 frames, and reads the joint moving from `0.0` to about `-0.289 rad` through
+official `rt/lowstate`.

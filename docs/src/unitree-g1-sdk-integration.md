@@ -208,6 +208,14 @@ with a 35-motor `LowCmd_`. The next control milestone is promoting that writer
 into a long-lived `cybernetic_robotics` DDS transport and then adding deliberate
 arm-motion demos against the official peer.
 
+`unitree_probe_official_mujoco_arm_motion` proves a first bounded motion
+through the same official path. It reads initial `rt/lowstate`, builds a
+CRC-valid `LowCmd_` that holds the sampled posture while applying a small target
+to one arm joint, publishes the command sequence, then reads `rt/lowstate`
+again and checks displacement. The current verified run moved
+`right_shoulder_roll` from `0.0` to about `-0.289 rad` with a `-0.25 rad`
+target, while keeping the probe short-lived and explicitly simulator-only.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
@@ -475,9 +483,9 @@ policies.
    builds the CycloneDDS Python binding, initializes a DDS domain, imports
    Unitree HG IDL, creates `rt/lowcmd`/`rt/lowstate` probe channels, launches
    official `unitree_mujoco`, proves real `rt/lowstate` sample reads, and
-   proves safe CRC-valid `rt/lowcmd` hold-frame writes against that peer.
-   Remaining work is turning the short-lived probes into the default long-lived
-   DDS-backed session provider.
+   proves safe CRC-valid `rt/lowcmd` hold-frame writes plus a bounded single
+   arm-joint motion against that peer. Remaining work is turning the short-lived
+   probes into the default long-lived DDS-backed session provider.
 2. Add session config for `mode=sim|real`, DDS domain, network interface, G1
    model variant, and safety profile.
 3. Replace the current local HTTP approximation for `rt/lowcmd` and

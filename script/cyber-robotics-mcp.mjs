@@ -139,6 +139,11 @@ const tools = [
     idempotentHint: true,
     openWorldHint: true,
   }),
+  tool("unitree_probe_official_mujoco_arm_motion", "Run the official Unitree MuJoCo G1 peer and verify a bounded SDK2/CycloneDDS single-arm-joint motion through rt/lowcmd.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
   tool("sim_pause", "Pause MuJoCo simulation time.", {}, [], { readOnlyHint: false, idempotentHint: true }),
   tool("sim_resume", "Resume MuJoCo simulation time.", {}, [], { readOnlyHint: false }),
   tool("sim_reset", "Reset the MuJoCo simulation state.", {}, [], {
@@ -633,6 +638,8 @@ async function callTool(name, args) {
       return textResult(sdk2ProbeOfficialMujocoDds());
     case "unitree_probe_official_mujoco_lowcmd":
       return textResult(sdk2ProbeOfficialMujocoLowcmd());
+    case "unitree_probe_official_mujoco_arm_motion":
+      return textResult(sdk2ProbeOfficialMujocoArmMotion());
     case "sim_pause":
       return textResult(await command({ command: "pause" }));
     case "sim_resume":
@@ -1608,6 +1615,32 @@ function sdk2ProbeOfficialMujocoLowcmd() {
     throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
   }
   const actionEnv = "CYBER_UNITREE_ACTION=probe_official_mujoco_lowcmd";
+  const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
+  const result = runChecked("docker", args, { timeoutMs: 300_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ProbeOfficialMujocoArmMotion() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const actionEnv = "CYBER_UNITREE_ACTION=probe_official_mujoco_arm_motion";
   const args = [...sdk2ComposeArgs(), "run", "--rm", "-e", actionEnv, "unitree-g1-sdk2-sidecar"];
   const result = runChecked("docker", args, { timeoutMs: 300_000 });
   let report = null;
