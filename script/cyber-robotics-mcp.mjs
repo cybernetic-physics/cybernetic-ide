@@ -11,6 +11,7 @@ const SERVER_VERSION = "0.1.0";
 const DEFAULT_GAME_CONTROL_URL = "http://127.0.0.1:38383";
 const DEFAULT_WS_URL = "ws://127.0.0.1:8788";
 const DEFAULT_CONTAINER = "unitree-g1-mujoco";
+const OFFICIAL_MUJOCO_SESSION_CONTAINER = "unitree-g1-sdk2-session";
 const DEFAULT_POSE = "raise_right_hand";
 const MAX_LOG_BYTES = 256_000;
 const G1_ACTION_POSES = {
@@ -142,6 +143,21 @@ const tools = [
     openWorldHint: true,
   }),
   tool("unitree_probe_official_mujoco_launch", "Launch the official Unitree MuJoCo G1 peer briefly under Xvfb to verify runtime library/display readiness.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool("unitree_start_official_mujoco_session", "Start a managed long-running official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
+    readOnlyHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool("unitree_official_mujoco_session_status", "Inspect the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
     openWorldHint: true,
@@ -771,6 +787,12 @@ async function callTool(name, args) {
       return textResult(sdk2BuildOfficialMujocoPeer());
     case "unitree_probe_official_mujoco_launch":
       return textResult(sdk2ProbeOfficialMujocoLaunch());
+    case "unitree_start_official_mujoco_session":
+      return textResult(sdk2StartOfficialMujocoSession());
+    case "unitree_official_mujoco_session_status":
+      return textResult(sdk2OfficialMujocoSessionStatus());
+    case "unitree_stop_official_mujoco_session":
+      return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
       return textResult(sdk2ProbeOfficialMujocoDds());
     case "unitree_probe_official_mujoco_lowcmd":
@@ -1781,6 +1803,124 @@ function sdk2ProbeOfficialMujocoLaunch() {
     stderr: result.stderr,
     report,
   };
+}
+
+function sdk2StartOfficialMujocoSession() {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const removed = run("docker", ["rm", "-f", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 60_000 });
+  const args = [
+    ...sdk2ComposeArgs(),
+    "run",
+    "-d",
+    "--name",
+    OFFICIAL_MUJOCO_SESSION_CONTAINER,
+    "-e",
+    "CYBER_UNITREE_ACTION=serve_official_mujoco",
+    "unitree-g1-sdk2-sidecar",
+  ];
+  const started = runChecked("docker", args, { timeoutMs: 180_000 });
+  const status = waitForOfficialMujocoSessionReady();
+  return {
+    command: `docker ${args.join(" ")}`,
+    removed_existing: {
+      attempted: true,
+      status: removed.status,
+      stdout: removed.stdout,
+      stderr: removed.stderr,
+    },
+    started,
+    status,
+  };
+}
+
+function waitForOfficialMujocoSessionReady(timeoutMs = 12_000) {
+  const deadline = Date.now() + timeoutMs;
+  let status = sdk2OfficialMujocoSessionStatus();
+  while (status.running && !status.ready && Date.now() < deadline) {
+    run("sleep", ["0.5"], { timeoutMs: 2_000 });
+    status = sdk2OfficialMujocoSessionStatus();
+  }
+  return status;
+}
+
+function sdk2OfficialMujocoSessionStatus() {
+  const inspect = run("docker", ["inspect", OFFICIAL_MUJOCO_SESSION_CONTAINER, "--format", "{{json .State}}"], { timeoutMs: 30_000 });
+  const logs = run("docker", ["logs", "--tail", "120", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 30_000 });
+  let state = null;
+  if (inspect.status === 0 && inspect.stdout.trim()) {
+    try {
+      state = JSON.parse(inspect.stdout.trim());
+    } catch {
+      state = null;
+    }
+  }
+  const readyReport = parseFirstJsonObject(logs.stdout);
+  return {
+    container: OFFICIAL_MUJOCO_SESSION_CONTAINER,
+    exists: inspect.status === 0,
+    running: state?.Running === true,
+    status: state?.Status ?? null,
+    exit_code: state?.ExitCode ?? null,
+    started_at: state?.StartedAt ?? null,
+    finished_at: state?.FinishedAt ?? null,
+    inspect_error: inspect.status === 0 ? null : inspect.stderr.trim(),
+    ready_report: readyReport,
+    ready: readyReport?.ok === true,
+    logs_tail: logs.status === 0 ? logs.stdout : null,
+    logs_error: logs.status === 0 ? null : logs.stderr.trim(),
+  };
+}
+
+function sdk2StopOfficialMujocoSession() {
+  const result = run("docker", ["rm", "-f", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 60_000 });
+  return {
+    container: OFFICIAL_MUJOCO_SESSION_CONTAINER,
+    removed: result.status === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    status: sdk2OfficialMujocoSessionStatus(),
+  };
+}
+
+function parseFirstJsonObject(text) {
+  const start = text.indexOf("{");
+  if (start === -1) {
+    return null;
+  }
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(text.slice(start, index + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function sdk2ProbeOfficialMujocoDds() {

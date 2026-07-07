@@ -231,6 +231,89 @@ def launch_probe_official_mujoco_peer(mujoco_root: str, domain: int, interface: 
     return report
 
 
+def serve_official_mujoco_peer(mujoco_root: str, domain: int, interface: str | None) -> int:
+    plan = official_mujoco_plan(mujoco_root, domain, interface)
+    simulate_root = Path(plan["simulate_root"])
+    executable = Path(plan["binary_path"])
+    report = {
+        "action": "serve_official_mujoco",
+        "plan": plan,
+        "binary_exists": executable.exists(),
+        "library_path": runtime_library_path(),
+        "used_xvfb": True,
+        "read_topics": ["rt/lowstate"],
+        "write_topics": ["rt/lowcmd"],
+        "ok": False,
+    }
+    if not executable.exists():
+        report["error"] = "missing official unitree_mujoco binary; run build_official_mujoco first"
+        print(json.dumps(report, indent=2), flush=True)
+        return 1
+
+    command = [
+        "xvfb-run",
+        "-a",
+        str(executable),
+        "-r",
+        plan["robot"],
+        "-s",
+        plan["scene"],
+        "-i",
+        str(domain),
+    ]
+    if interface:
+        command.extend(["-n", interface])
+    process = subprocess.Popen(
+        command,
+        cwd=str(simulate_root),
+        env=runtime_env(),
+        start_new_session=True,
+    )
+    report.update(
+        {
+            "ok": True,
+            "peer_started": True,
+            "peer_pid": process.pid,
+            "command": " ".join(command),
+            "next_step": "Keep this container running as the official Unitree MuJoCo DDS peer, then connect SDK2 lowstate/lowcmd clients to the same domain.",
+        }
+    )
+    print(json.dumps(report, indent=2), flush=True)
+
+    stopping = False
+
+    def stop_peer(_signum, _frame):
+        nonlocal stopping
+        stopping = True
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except Exception:
+                process.terminate()
+
+    signal.signal(signal.SIGTERM, stop_peer)
+    signal.signal(signal.SIGINT, stop_peer)
+
+    while process.poll() is None:
+        time.sleep(0.5)
+    returncode = process.returncode
+    print(
+        json.dumps(
+            {
+                "action": "serve_official_mujoco_exit",
+                "peer_pid": process.pid,
+                "returncode": returncode,
+                "stopping": stopping,
+            },
+            indent=2,
+        ),
+        flush=True,
+    )
+    return int(returncode or 0)
+
+
 def summarize_lowstate(sample) -> dict:
     motors = list(getattr(sample, "motor_state", []) or [])
     imu = getattr(sample, "imu_state", None)
@@ -1163,6 +1246,8 @@ def main() -> int:
     elif action == "probe_official_mujoco_arm_pose":
         report["arm_pose_probe"] = probe_official_mujoco_arm_pose(mujoco_root, domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "serve_official_mujoco":
+        return serve_official_mujoco_peer(mujoco_root, domain, interface or None)
     elif action != "status":
         report["status"] = "error"
         report["error"] = f"Unsupported CYBER_UNITREE_ACTION: {action}"

@@ -208,6 +208,12 @@ Tasks:
   `implemented=true`, official `rt/lowcmd`/`rt/lowstate` channel creation, and
   peer readiness when `CYBER_UNITREE_TRANSPORT=dds` is selected in simulator
   mode.
+- Done: add a managed official MuJoCo peer session lifecycle through
+  `CYBER_UNITREE_ACTION=serve_official_mujoco` plus MCP
+  `unitree_start_official_mujoco_session`,
+  `unitree_official_mujoco_session_status`, and
+  `unitree_stop_official_mujoco_session`; live validation started
+  `unitree-g1-sdk2-session`, parsed the ready report, and removed it cleanly.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
@@ -297,6 +303,8 @@ Tasks:
   profile so agents can inspect the native official simulator launch gate.
 - Done: expose `unitree_build_official_mujoco_peer` in the default Robotics
   Agent profile so agents can build the native official simulator peer.
+- Done: expose managed official MuJoCo session start/status/stop tools in the
+  default Robotics Agent profile.
 - Done: expose `unitree_probe_official_mujoco_dds` in the default Robotics
   Agent profile so agents can prove official SDK2 lowstate sample exchange
   before attempting lowcmd control.

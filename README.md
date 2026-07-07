@@ -325,6 +325,11 @@ ad hoc scripts first. The default tool surface includes:
 - official MuJoCo launch probe: `unitree_probe_official_mujoco_launch`, which
   runs the upstream peer briefly under Xvfb with the required Unitree/MuJoCo
   runtime library path and reports loader/display readiness;
+- official MuJoCo managed session:
+  `unitree_start_official_mujoco_session`,
+  `unitree_official_mujoco_session_status`, and
+  `unitree_stop_official_mujoco_session`, which keep the upstream G1 peer
+  running as a named Docker session for sustained SDK2/DDS experiments;
 - official SDK2 data probe: `unitree_probe_official_mujoco_dds`, which runs
   the upstream G1 peer and verifies that SDK2/CycloneDDS can read an
   `rt/lowstate` sample with Unitree HG IDL types;

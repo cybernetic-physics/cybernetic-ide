@@ -246,6 +246,16 @@ This wrapper still runs the short-lived sidecar probe. It does not replace the
 planned long-lived DDS session provider, but it is the first Python API surface
 that drives the official Unitree MuJoCo + SDK2/CycloneDDS path end to end.
 
+The MCP server now also exposes the first managed official peer lifecycle:
+`unitree_start_official_mujoco_session`,
+`unitree_official_mujoco_session_status`, and
+`unitree_stop_official_mujoco_session`. These tools run
+`CYBER_UNITREE_ACTION=serve_official_mujoco` in a named Docker container
+(`unitree-g1-sdk2-session`), parse its ready report from logs, and stop/remove
+it cleanly. That gives agents a durable official G1 DDS peer to target while
+the normal Python SDK facade is being moved from short-lived probes to a
+long-lived provider.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.
@@ -503,6 +513,9 @@ The current repo has the first narrow version of that API boundary:
   the MCP tool now call the official sidecar status probe and report SDK2
   import, CycloneDDS domain, channel creation, and official MuJoCo peer
   readiness.
+- MCP now has managed official peer lifecycle tools for starting, inspecting,
+  and stopping the `unitree-g1-sdk2-session` container that runs upstream
+  `unitree_mujoco` under Xvfb as a sustained DDS peer.
 - In the current simulator backend, that action posts `{"command": "pose",
   "pose": "raise_right_hand"}` to the Dockerized G1 MuJoCo protocol harness.
 

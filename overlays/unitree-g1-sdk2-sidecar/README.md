@@ -27,6 +27,9 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=launch_probe_official_mujoco`, launches the
   upstream peer briefly under Xvfb with the required `LD_LIBRARY_PATH` so the
   next gate can distinguish loader/display problems from DDS problems.
+- when `CYBER_UNITREE_ACTION=serve_official_mujoco`, launches the upstream G1
+  peer under Xvfb and keeps it running until the container receives SIGTERM.
+  The MCP tools use this action for a named managed session container.
 - when `CYBER_UNITREE_ACTION=probe_official_mujoco_dds`, launches the upstream
   G1 peer under Xvfb, subscribes to `rt/lowstate` with official Unitree HG IDL
   types, and reports whether a sample was received from the simulator bridge.
@@ -78,6 +81,24 @@ docker compose \
   run --rm -e CYBER_UNITREE_ACTION=launch_probe_official_mujoco \
   unitree-g1-sdk2-sidecar
 ```
+
+Start a managed long-running official peer session:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run -d --name unitree-g1-sdk2-session \
+  -e CYBER_UNITREE_ACTION=serve_official_mujoco \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrappers `unitree_start_official_mujoco_session`,
+`unitree_official_mujoco_session_status`, and
+`unitree_stop_official_mujoco_session` manage that container and parse the
+initial ready report from Docker logs. This is the first durable official G1
+DDS peer lifecycle; the Python SDK facade still needs a long-lived client
+provider that connects to it.
 
 Probe whether the official peer publishes SDK2 lowstate samples:
 
