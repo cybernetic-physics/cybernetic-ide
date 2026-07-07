@@ -655,6 +655,58 @@ class RobotApiTests(unittest.TestCase):
                     else:
                         os.environ[key] = value
 
+    def test_unitree_style_loco_client_can_use_rpc_bridge_transport(self):
+        previous = {
+            "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+            "CYBER_UNITREE_MODE": os.environ.get("CYBER_UNITREE_MODE"),
+        }
+        os.environ["CYBER_UNITREE_TRANSPORT"] = "rpc_bridge"
+        os.environ["CYBER_UNITREE_MODE"] = "sim"
+
+        class FakeOfficial:
+            @classmethod
+            def discover(cls, *, timeout: int = 300):
+                return cls()
+
+            def rpc_bridge_command(self, *, service, method, params=None, timeout=1.0, start_if_needed=False, stop_after=False):
+                self.last_call = {
+                    "service": service,
+                    "method": method,
+                    "params": params or {},
+                    "start_if_needed": start_if_needed,
+                }
+                if method == "get_fsm_id":
+                    body = {"data": 500}
+                else:
+                    body = {"velocity": (params or {}).get("velocity", [0.0, 0.0, 0.0])}
+                return {
+                    "ok": True,
+                    "summary": {"call_count": 1, "all_calls_ok": True, "simulator_forward_count": 1},
+                    "calls": [{"name": f"{service}.{method}", "ok": True, "return": [0, json.dumps(body)]}],
+                }
+
+        try:
+            with patch("cybernetic_robotics.official.OfficialG1Sim", FakeOfficial):
+                loco = LocoClient()
+                loco.SetTimeout(2.0)
+                loco.Init()
+
+                move_code = loco.Move(0.2, 0.0, 0.1)
+                get_code, fsm_id = loco.GetFsmId()
+
+            self.assertEqual(move_code, 0)
+            self.assertEqual(get_code, 0)
+            self.assertEqual(fsm_id, 500)
+            self.assertEqual(loco.last_response["transport"], "rpc_bridge")
+            self.assertEqual(loco.last_response["provider"], "unitree_rpc_bridge_simulator")
+            self.assertFalse(loco.last_response["compatibility_fallback"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     def test_unitree_style_g1_agv_client_uses_simulator_motion(self):
         with FakeServer() as fake:
             previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
@@ -677,6 +729,45 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_g1_agv_client_can_use_rpc_bridge_transport(self):
+        previous = {
+            "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+            "CYBER_UNITREE_MODE": os.environ.get("CYBER_UNITREE_MODE"),
+        }
+        os.environ["CYBER_UNITREE_TRANSPORT"] = "rpc_bridge"
+        os.environ["CYBER_UNITREE_MODE"] = "sim"
+
+        class FakeOfficial:
+            @classmethod
+            def discover(cls, *, timeout: int = 300):
+                return cls()
+
+            def rpc_bridge_command(self, *, service, method, params=None, timeout=1.0, start_if_needed=False, stop_after=False):
+                body = {"velocity": [params.get("vx", 0.0), params.get("vy", 0.0), params.get("vyaw", 0.0)]}
+                return {
+                    "ok": True,
+                    "summary": {"call_count": 1, "all_calls_ok": True, "simulator_forward_count": 1},
+                    "calls": [{"name": f"{service}.{method}", "ok": True, "return": [0, json.dumps(body)]}],
+                }
+
+        try:
+            with patch("cybernetic_robotics.official.OfficialG1Sim", FakeOfficial):
+                agv = AgvClient()
+                agv.SetTimeout(2.0)
+                agv.Init()
+                code = agv.Move(0.4, 0.1, 0.2)
+
+            self.assertEqual(code, 0)
+            self.assertEqual(agv.last_response["transport"], "rpc_bridge")
+            self.assertEqual(agv.last_response["provider"], "unitree_rpc_bridge_simulator")
+            self.assertEqual(agv.last_response["velocity"], [0.4, 0.1, 0.2])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def test_sidecar_rpc_bridge_forwards_to_simulator_http(self):
         sidecar = load_sidecar_entrypoint_module()

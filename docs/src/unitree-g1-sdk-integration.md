@@ -702,12 +702,15 @@ The current repo has the first narrow version of that API boundary:
   different `output_path`.
 - `UnitreeSession.from_env().diagnostics()`, `cyber-g1 diagnostics`, and the
   `unitree_session_status` MCP tool expose the deeper transport boundary:
-  `local_http` versus opt-in `dds`, sim/real mode, DDS domain/interface,
-  simulator reachability, and topic freshness. With
-  `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both Python diagnostics and
-  the MCP tool now call the official sidecar status probe and report SDK2
-  import, CycloneDDS domain, channel creation, and official MuJoCo peer
-  readiness.
+  `local_http`, opt-in `rpc_bridge`, opt-in `dds`, sim/real mode, DDS
+  domain/interface, simulator reachability, and topic freshness. With
+  `CYBER_UNITREE_TRANSPORT=rpc_bridge` in simulator mode, high-level
+  `LocoClient` and `AgvClient` calls route through the managed SDK2-shaped
+  `sport`/`agv` RPC bridge and return simulator forward/readback evidence in
+  `last_response`. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, both
+  Python diagnostics and the MCP tool call the official sidecar status probe
+  and report SDK2 import, CycloneDDS domain, channel creation, and official
+  MuJoCo peer readiness.
 - `robotics_tool_reference` gives Agent-panel users a machine-readable safety
   map for the robotics tools: safety level, side effects, and expected
   simulator state.
@@ -727,6 +730,12 @@ The current repo has the first narrow version of that API boundary:
 - MCP now has `unitree_command_official_mujoco_arm_pose` for commanding that
   managed session, and the Python `G1ArmActionClient` routes `right hand up`
   through it when `CYBER_UNITREE_TRANSPORT=dds` is set in simulator mode.
+- The Python `LocoClient` and `AgvClient` now route supported high-level
+  commands through `OfficialG1Sim.rpc_bridge_command()` when
+  `CYBER_UNITREE_TRANSPORT=rpc_bridge` is set in simulator mode. This gives
+  normal user scripts the same SDK-shaped bridge path as
+  `unitree_command_rpc_bridge` without asking beginners to manually manage the
+  bridge container.
 - MCP now has `unitree_official_mujoco_evidence_bundle` for the agent-native
   version of that workflow: ensure the managed official peer is available, read
   official `rt/lowstate` before the pose, command a bounded arm pose over

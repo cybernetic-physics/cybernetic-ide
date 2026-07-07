@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from typing import Any
 
@@ -10,6 +11,7 @@ from .simulator import SimulatorClient
 
 LOCAL_HTTP = "local_http"
 DDS = "dds"
+RPC_BRIDGE = "rpc_bridge"
 SIM = "sim"
 REAL = "real"
 
@@ -18,10 +20,10 @@ REAL = "real"
 class UnitreeTransportConfig:
     """Session-level transport choice for Unitree-shaped user code.
 
-    Today `local_http` is the implemented simulator bridge. The explicit `dds`
-    mode is still useful: it lets tools, docs, and examples describe the future
-    official SDK2 path without pretending that the compatibility shim already
-    owns CycloneDDS.
+    `local_http` is the lightweight simulator bridge. `dds` targets the
+    managed official Unitree MuJoCo sidecar for supported lowcmd/lowstate
+    probes. `rpc_bridge` is the simulator-only Unitree RPC service adapter for
+    high-level sport/agv calls.
     """
 
     transport: str = LOCAL_HTTP
@@ -35,7 +37,7 @@ class UnitreeTransportConfig:
     @classmethod
     def from_env(cls, endpoints: RobotEndpoints | None = None) -> "UnitreeTransportConfig":
         mode = _choice(os.environ.get("CYBER_UNITREE_MODE"), {SIM, REAL}, SIM)
-        transport = _choice(os.environ.get("CYBER_UNITREE_TRANSPORT"), {LOCAL_HTTP, DDS}, LOCAL_HTTP)
+        transport = _choice(os.environ.get("CYBER_UNITREE_TRANSPORT"), {LOCAL_HTTP, DDS, RPC_BRIDGE}, LOCAL_HTTP)
         default_domain = 1 if mode == SIM else 0
         dds_domain_id = _int_env("CYBER_UNITREE_DDS_DOMAIN", default_domain)
         network_interface = os.environ.get("CYBER_UNITREE_NETWORK_INTERFACE")
@@ -98,7 +100,7 @@ class UnitreeSession:
         warnings = diagnostics["warnings"]
 
         official_status: dict[str, Any] | None = None
-        if self.config.transport == DDS and self.config.mode == SIM:
+        if self.config.transport in {DDS, RPC_BRIDGE} and self.config.mode == SIM:
             try:
                 official_status = self._official_status()
                 diagnostics["official_sidecar"] = _summarize_official_status(official_status)
@@ -109,9 +111,9 @@ class UnitreeSession:
             except Exception as error:  # noqa: BLE001 - diagnostics should expose setup problems.
                 warnings.append(f"official SDK2 sidecar unavailable: {error}")
                 diagnostics["official_sidecar"] = {"ok": False, "error": str(error)}
-        elif self.config.transport == DDS:
+        elif self.config.transport in {DDS, RPC_BRIDGE}:
             warnings.append(
-                "dds transport is selected outside simulator mode; real hardware control still requires a long-lived official provider"
+                f"{self.config.transport} transport is selected outside simulator mode; real hardware control still requires a long-lived official provider"
             )
         if self.config.mode == REAL:
             if not self.config.network_interface:
@@ -208,7 +210,22 @@ class UnitreeSession:
                 "No CycloneDDS transport is used.",
                 "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
             ]
-            next_step = "Use CYBER_UNITREE_TRANSPORT=dds in simulator mode when testing the official SDK2 sidecar path."
+            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv tests, or dds for official lowcmd/lowstate sidecar probes."
+        elif transport == RPC_BRIDGE and mode == SIM:
+            provider = "unitree_rpc_bridge_simulator" if official_ok else "unitree_rpc_bridge_simulator_unready"
+            implemented = official_ok
+            command_path = "Official SDK2-shaped sport/agv RPC bridge backed by the local simulator provider."
+            telemetry_path = "Bridge command evidence plus simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames."
+            motion = {
+                "arm_actions": "sport_set_arm_task_bridge_for_wave_shake_plus_local_arm_facade",
+                "locomotion": "managed_unitree_rpc_bridge_sport_agv",
+                "lowcmd": "local_http_simulator_until_generic_dds_streaming_lands",
+            }
+            limitations = [
+                "This is a simulator-side service bridge, not physical robot DDS control.",
+                "Only the mapped sport/agv RPC subset is available; generic lowcmd streaming remains separate.",
+            ]
+            next_step = "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, then promote lowcmd streaming separately."
         elif transport == DDS and mode == SIM:
             provider = "official_mujoco_dds_simulator" if official_ok else "official_mujoco_dds_simulator_unready"
             implemented = official_ok
@@ -312,9 +329,10 @@ class UnitreeSession:
         """Execute a Unitree-shaped locomotion command through the active provider.
 
         The official G1 `LocoClient` is RPC-over-DDS. Cybernetic has not yet
-        promoted that RPC path into the managed SDK2 sidecar, so simulator DDS
-        mode keeps the local HTTP compatibility behavior but marks it loudly as
-        a fallback rather than an official DDS locomotion command.
+        promoted every call into the official MuJoCo DDS peer. The explicit
+        `rpc_bridge` transport routes supported high-level sport/agv methods
+        through the managed Unitree RPC bridge, while `dds` remains the
+        lowcmd/lowstate official-session path.
         """
 
         if self.config.mode == REAL:
@@ -326,6 +344,29 @@ class UnitreeSession:
                 "error": "real Unitree locomotion is locked until the real-hardware provider and safety gates are implemented",
                 "next_step": "Implement and review the real SDK2 LocoClient provider before enabling physical locomotion.",
             }
+
+        if self.config.transport == RPC_BRIDGE and self.config.mode == SIM:
+            request = _loco_rpc_bridge_request(action, fields)
+            if request is None:
+                return {
+                    "ok": False,
+                    "transport": RPC_BRIDGE,
+                    "provider": "unitree_rpc_bridge_simulator",
+                    "action": action,
+                    "fields": fields,
+                    "error": f"Unitree RPC bridge does not yet support loco action: {action}",
+                    "supported_actions": sorted(_LOCO_RPC_BRIDGE_METHODS),
+                    "next_step": "Use local_http for this compatibility-only call or add a bridge handler for the matching Unitree sport API id.",
+                }
+            official = self._official(timeout=fields.get("timeout"))
+            result = official.rpc_bridge_command(
+                service="sport",
+                method=request["method"],
+                params=request["params"],
+                timeout=float(fields.get("timeout", 1.0) or 1.0),
+                start_if_needed=True,
+            )
+            return _normalize_rpc_bridge_command_response(RPC_BRIDGE, "unitree_rpc_bridge_simulator", action, result)
 
         response = self.simulator.loco(action=action, **fields)
         if self.config.transport == DDS:
@@ -343,6 +384,77 @@ class UnitreeSession:
             "provider": "local_http_simulator",
             "compatibility_fallback": False,
         }
+
+    def execute_agv_command(self, action: str, **fields: Any) -> dict[str, Any]:
+        """Execute a Unitree-shaped AGV command through the active provider."""
+
+        if self.config.mode == REAL:
+            return {
+                "ok": False,
+                "transport": self.config.transport,
+                "provider": "real_unitree_dds",
+                "action": action,
+                "error": "real Unitree AGV control is locked until the real-hardware provider and safety gates are implemented",
+                "next_step": "Implement and review the real SDK2 AGV provider before enabling physical movement.",
+            }
+
+        if self.config.transport == RPC_BRIDGE and self.config.mode == SIM:
+            request = _agv_rpc_bridge_request(action, fields)
+            if request is None:
+                return {
+                    "ok": False,
+                    "transport": RPC_BRIDGE,
+                    "provider": "unitree_rpc_bridge_simulator",
+                    "action": action,
+                    "fields": fields,
+                    "error": f"Unitree RPC bridge does not yet support AGV action: {action}",
+                    "supported_actions": sorted(_AGV_RPC_BRIDGE_METHODS),
+                }
+            official = self._official(timeout=fields.get("timeout"))
+            result = official.rpc_bridge_command(
+                service="agv",
+                method=request["method"],
+                params=request["params"],
+                timeout=float(fields.get("timeout", 1.0) or 1.0),
+                start_if_needed=True,
+            )
+            return _normalize_rpc_bridge_command_response(RPC_BRIDGE, "unitree_rpc_bridge_simulator", action, result)
+
+        if action == "move":
+            response = self.simulator.loco(
+                action="set_velocity",
+                velocity=fields["velocity"],
+                duration=fields.get("duration", 1.0),
+            )
+        else:
+            response = self.simulator.command(
+                "agv",
+                action=action,
+                service="agv",
+                simulated=True,
+                **fields,
+            )
+        if response.get("ok"):
+            return {
+                **response,
+                "transport": LOCAL_HTTP if self.config.transport != DDS else DDS,
+                "provider": "local_http_simulator" if self.config.transport != DDS else "local_http_simulator_compatibility",
+                "compatibility_fallback": self.config.transport == DDS,
+                "agv": {"action": action, "service": "agv", "simulated": True, **fields},
+            }
+        if action == "height_adjust":
+            return {
+                "ok": True,
+                "transport": LOCAL_HTTP if self.config.transport != DDS else DDS,
+                "provider": "local_http_simulator" if self.config.transport != DDS else "local_http_simulator_compatibility",
+                "compatibility_fallback": self.config.transport == DDS,
+                "action": action,
+                "service": "agv",
+                "simulated": True,
+                **fields,
+                "agv": {"action": action, "service": "agv", "simulated": True, **fields},
+            }
+        return response
 
     def publish_lowcmd(
         self,
@@ -440,6 +552,114 @@ def _choice(value: str | None, allowed: set[str], default: str) -> str:
         return default
     normalized = value.strip().lower().replace("-", "_")
     return normalized if normalized in allowed else default
+
+
+_LOCO_RPC_BRIDGE_METHODS = {
+    "get_fsm_id",
+    "get_fsm_mode",
+    "get_balance_mode",
+    "get_swing_height",
+    "get_stand_height",
+    "set_fsm_id",
+    "set_balance_mode",
+    "set_swing_height",
+    "set_stand_height",
+    "set_velocity",
+    "set_arm_task",
+    "wave_hand",
+    "shake_hand",
+}
+
+_AGV_RPC_BRIDGE_METHODS = {"move", "height_adjust"}
+
+
+def _loco_rpc_bridge_request(action: str, fields: dict[str, Any]) -> dict[str, Any] | None:
+    if action in {
+        "get_fsm_id",
+        "get_fsm_mode",
+        "get_balance_mode",
+        "get_swing_height",
+        "get_stand_height",
+        "wave_hand",
+        "shake_hand",
+    }:
+        return {"method": action, "params": dict(fields)}
+    if action == "set_velocity":
+        velocity = fields.get("velocity") or [fields.get("vx", 0.0), fields.get("vy", 0.0), fields.get("omega", 0.0)]
+        return {"method": "move", "params": {"velocity": velocity, "duration": fields.get("duration", 0.0)}}
+    if action in {"set_fsm_id", "set_balance_mode", "set_swing_height", "set_stand_height", "set_arm_task"}:
+        return {"method": action, "params": dict(fields)}
+    return None
+
+
+def _agv_rpc_bridge_request(action: str, fields: dict[str, Any]) -> dict[str, Any] | None:
+    if action == "move":
+        velocity = fields.get("requested_velocity") or fields.get("velocity") or [0.0, 0.0, 0.0]
+        return {
+            "method": "move",
+            "params": {
+                "vx": float(velocity[0]) if len(velocity) > 0 else 0.0,
+                "vy": float(velocity[1]) if len(velocity) > 1 else 0.0,
+                "vyaw": float(velocity[2]) if len(velocity) > 2 else 0.0,
+            },
+        }
+    if action == "height_adjust":
+        return {"method": "height_adjust", "params": {"vz": fields.get("height_velocity", fields.get("vz", 0.0))}}
+    return None
+
+
+def _normalize_rpc_bridge_command_response(
+    transport: str,
+    provider: str,
+    action: str,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    body = _rpc_bridge_body(result)
+    normalized = {
+        "ok": bool(result.get("ok")),
+        "transport": transport,
+        "provider": provider,
+        "action": action,
+        "bridge_result": result,
+        "summary": result.get("summary", {}),
+        "compatibility_fallback": False,
+    }
+    if isinstance(body, dict):
+        normalized.update(body)
+        if "data" in body:
+            key = {
+                "get_fsm_id": "fsm_id",
+                "get_fsm_mode": "fsm_mode",
+                "get_balance_mode": "balance_mode",
+                "get_swing_height": "swing_height",
+                "get_stand_height": "stand_height",
+                "height_adjust": "height_velocity",
+            }.get(action)
+            if key:
+                normalized[key] = body["data"]
+        if "velocity" in body:
+            normalized["velocity"] = body["velocity"]
+        if action == "height_adjust" and "data" in body:
+            normalized["height_velocity"] = body["data"]
+    if not normalized["ok"] and result.get("error"):
+        normalized["error"] = result["error"]
+    return normalized
+
+
+def _rpc_bridge_body(result: dict[str, Any]) -> dict[str, Any]:
+    calls = result.get("calls")
+    if not isinstance(calls, list) or not calls:
+        calls = ((result.get("command_report") or {}).get("calls") if isinstance(result.get("command_report"), dict) else [])
+    if not isinstance(calls, list) or not calls:
+        return {}
+    value = calls[0].get("return") if isinstance(calls[0], dict) else None
+    if isinstance(value, (list, tuple)) and len(value) >= 2 and isinstance(value[1], str):
+        try:
+            parsed = json.loads(value[1])
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _int_env(name: str, default: int) -> int:

@@ -218,6 +218,13 @@ CycloneDDS reports loopback UDP write failures, so locomotion remains on the
 explicit local compatibility route until the sport RPC peer is proven. With
 `CYBER_UNITREE_TRANSPORT=dds`, `G1ArmActionClient.ExecuteAction()` routes
 `right hand up` through that managed official session.
+With `CYBER_UNITREE_TRANSPORT=rpc_bridge`, high-level `LocoClient` and
+`AgvClient` methods use the managed `unitree-g1-rpc-bridge` service instead of
+direct local HTTP. That means normal Unitree-shaped calls such as
+`loco.Move(...)`, `loco.GetFsmId()`, `loco.WaveHand()`, `agv.Move(...)`, and
+`agv.HeightAdjust(...)` cross the same SDK2-shaped `sport`/`agv` RPC boundary
+as the MCP `unitree_command_rpc_bridge` tool, while still exposing simulator
+forward/readback evidence in `last_response`.
 
 ## Unitree SDK2-Shaped Code
 
@@ -241,6 +248,19 @@ viewer harness. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode, it uses
 the managed official MuJoCo + SDK2/CycloneDDS session, so the user script keeps
 the Unitree SDK shape while the backend talks to `rt/lowcmd` and verifies
 motion from `rt/lowstate`.
+
+For high-level locomotion and AGV work, opt into the managed RPC bridge:
+
+```sh
+CYBER_UNITREE_TRANSPORT=rpc_bridge python3 examples/g1_loco_sdk.py
+```
+
+In that mode the shim keeps the same `LocoClient`/`AgvClient` method names, but
+the call path is `unitree_sdk2py` facade -> `UnitreeSession` ->
+`OfficialG1Sim.rpc_bridge_command()` -> managed SDK2 `sport`/`agv` bridge ->
+local MuJoCo simulator provider. It is still simulator-only and still a mapped
+subset, but it is much closer to the official Unitree request/response shape
+than direct local HTTP.
 
 Use `UnitreeSession.from_env().provider_status()` or `cyber-g1 provider` when
 you need the short provider answer: active backend, command path, telemetry
@@ -423,12 +443,15 @@ Transport selection lives in `UnitreeSession`. The high-level
 `UnitreeSession.execute_arm_action()`: by default that uses the local HTTP
 simulator, while `CYBER_UNITREE_TRANSPORT=dds` in simulator mode routes the
 currently supported bounded hand-raise poses to the managed official Unitree
-MuJoCo + SDK2/CycloneDDS session. `LocoClient`, `ChannelPublisher("rt/lowcmd")`,
-and `ChannelSubscriber("rt/lowstate")` also cross the same session boundary.
-Until the managed sidecar grows official sport RPC and generic lowcmd streaming,
-DDS-mode locomotion and lowcmd calls are clearly marked as local simulator
-compatibility fallbacks instead of being presented as official CycloneDDS
-control.
+MuJoCo + SDK2/CycloneDDS session. `LocoClient` and `AgvClient` delegate to
+`UnitreeSession.execute_loco_command()` / `execute_agv_command()`: by default
+they use local HTTP, while `CYBER_UNITREE_TRANSPORT=rpc_bridge` routes the
+supported high-level sport/agv subset through the managed Unitree RPC bridge.
+`ChannelPublisher("rt/lowcmd")` and `ChannelSubscriber("rt/lowstate")` also
+cross the same session boundary. Until generic lowcmd streaming is promoted
+into the managed official provider, DDS-mode locomotion and lowcmd calls are
+clearly marked as local simulator compatibility fallbacks instead of being
+presented as official CycloneDDS control.
 
 Run the full example:
 

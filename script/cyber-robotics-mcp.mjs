@@ -1493,7 +1493,7 @@ function unitreeSdkBehaviorSmoke(args = {}) {
 
 async function unitreeSessionStatus() {
   const mode = normalizeChoice(process.env.CYBER_UNITREE_MODE, ["sim", "real"], "sim");
-  const transport = normalizeChoice(process.env.CYBER_UNITREE_TRANSPORT, ["local_http", "dds"], "local_http");
+  const transport = normalizeChoice(process.env.CYBER_UNITREE_TRANSPORT, ["local_http", "dds", "rpc_bridge"], "local_http");
   const ddsDomainId = toInt(process.env.CYBER_UNITREE_DDS_DOMAIN, mode === "sim" ? 1 : 0);
   const networkInterface = process.env.CYBER_UNITREE_NETWORK_INTERFACE || (mode === "sim" ? "lo" : null);
   const warnings = [];
@@ -1519,7 +1519,7 @@ async function unitreeSessionStatus() {
   };
 
   let officialStatus = null;
-  if (transport === "dds" && mode === "sim") {
+  if ((transport === "dds" || transport === "rpc_bridge") && mode === "sim") {
     try {
       officialStatus = sdk2SidecarStatus();
       result.official_sidecar = summarizeOfficialSidecarStatus(officialStatus.report);
@@ -1532,8 +1532,8 @@ async function unitreeSessionStatus() {
       warnings.push(`official SDK2 sidecar unavailable: ${error.message}`);
       result.official_sidecar = { ok: false, error: error.message };
     }
-  } else if (transport === "dds") {
-    warnings.push("dds transport is selected outside simulator mode; real hardware control still requires a long-lived official provider");
+  } else if (transport === "dds" || transport === "rpc_bridge") {
+    warnings.push(`${transport} transport is selected outside simulator mode; real hardware control still requires a long-lived official provider`);
   }
   if (mode === "real") {
     if (!networkInterface) warnings.push("real mode requires CYBER_UNITREE_NETWORK_INTERFACE");
@@ -1637,7 +1637,7 @@ function providerStatusFromDiagnostics(diagnostics) {
         "No CycloneDDS transport is used.",
         "Locomotion is a local approximation, not Unitree's whole-body balance controller.",
       ],
-      next_step: "Use CYBER_UNITREE_TRANSPORT=dds in simulator mode when testing the official SDK2 sidecar path.",
+      next_step: "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level sport/agv tests, or dds for official lowcmd/lowstate sidecar probes.",
       config,
       warnings: diagnostics.warnings || [],
       diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
@@ -1661,6 +1661,29 @@ function providerStatusFromDiagnostics(diagnostics) {
         "LocoClient locomotion and generic lowcmd streaming still need the long-lived DDS provider.",
       ],
       next_step: "Start or inspect the managed official MuJoCo session, then promote loco/lowcmd paths to that provider.",
+      config,
+      warnings: diagnostics.warnings || [],
+      diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),
+    };
+  }
+
+  if (transport === "rpc_bridge" && mode === "sim") {
+    return {
+      ok: diagnostics.ok === true && officialOk,
+      provider: officialOk ? "unitree_rpc_bridge_simulator" : "unitree_rpc_bridge_simulator_unready",
+      implemented: officialOk,
+      command_path: "Official SDK2-shaped sport/agv RPC bridge backed by the local simulator provider.",
+      telemetry_path: "Bridge command evidence plus simulator HTTP /status, /lowstate, /joint_state, and rendered camera frames.",
+      motion: {
+        arm_actions: "sport_set_arm_task_bridge_for_wave_shake_plus_local_arm_facade",
+        locomotion: "managed_unitree_rpc_bridge_sport_agv",
+        lowcmd: "local_http_simulator_until_generic_dds_streaming_lands",
+      },
+      limitations: [
+        "This is a simulator-side service bridge, not physical robot DDS control.",
+        "Only the mapped sport/agv RPC subset is available; generic lowcmd streaming remains separate.",
+      ],
+      next_step: "Use CYBER_UNITREE_TRANSPORT=rpc_bridge for high-level LocoClient/AgvClient tests, then promote lowcmd streaming separately.",
       config,
       warnings: diagnostics.warnings || [],
       diagnostics_summary: providerDiagnosticsSummary(diagnostics, simulatorReachable, officialOk),

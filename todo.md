@@ -356,6 +356,14 @@ Tasks:
   assistant can use to act on the G1 through a Unitree-shaped service boundary
   while still exposing whether MuJoCo actually changed or the bridge only
   recorded intent.
+- Done: add `CYBER_UNITREE_TRANSPORT=rpc_bridge` as the first normal
+  Unitree-shaped Python facade route through that managed service bridge.
+  `LocoClient` and `AgvClient` now keep their official-style method names, but
+  supported simulator-mode calls go through `UnitreeSession` ->
+  `OfficialG1Sim.rpc_bridge_command()` -> `unitree-g1-rpc-bridge` instead of
+  direct local HTTP. This is still simulator-only and still a mapped subset, but
+  it makes the bridge invisible for beginner scripts while preserving
+  `last_response` evidence for power users and agents.
 - Current managed-bridge evidence: live validation started
   `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,
@@ -366,11 +374,11 @@ Tasks:
   behavior if official examples depend on it, continuous move semantics, and
   finally route the same API surface to the official Unitree MuJoCo DDS actuator
   path rather than only the local HTTP compatibility provider.
-- Remaining: connect `unitree_session_status` and the normal Python SDK facade
-  to a long-lived real SDK2/CycloneDDS sidecar session instead of only
-  short-lived official probes. The arm-action path now crosses that boundary;
-  next candidates are official sport RPC for `LocoClient` and true sustained
-  SDK2/CycloneDDS generic lowcmd streaming.
+- Remaining: connect generic lowcmd streaming to a long-lived real
+  SDK2/CycloneDDS sidecar session instead of only local HTTP compatibility. The
+  arm-action path crosses the official managed session boundary, and high-level
+  loco/agv can now cross the managed RPC bridge boundary; the next candidate is
+  sustained generic lowcmd streaming with explicit safety gates.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must

@@ -416,8 +416,9 @@ Useful environment variables:
 - `CYBER_ROBOT_MODEL_PATH`: mounted MJCF path, default
   `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`.
 - `CYBER_UNITREE_TRANSPORT`: `local_http` for the lightweight viewer harness,
-  or `dds` in simulator mode to have Python and MCP diagnostics run the
-  official SDK2/CycloneDDS sidecar status probe.
+  `rpc_bridge` in simulator mode to route high-level `LocoClient`/`AgvClient`
+  sport/agv calls through the managed Unitree RPC bridge, or `dds` in simulator
+  mode for official SDK2/CycloneDDS lowcmd/lowstate sidecar probes.
 - `CYBER_UNITREE_MODE`: `sim` or `real`; defaults to `sim`.
 - `CYBER_UNITREE_DDS_DOMAIN`: defaults to `1` in sim mode and `0` in real mode.
 - `CYBER_UNITREE_NETWORK_INTERFACE`: defaults to `lo` in sim mode and must be

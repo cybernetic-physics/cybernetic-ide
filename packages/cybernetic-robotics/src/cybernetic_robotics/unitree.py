@@ -334,6 +334,10 @@ class AgvClient:
         self.last_response: dict[str, Any] | None = None
         self.height_velocity = 0.0
         self._simulator = SimulatorClient.from_env(timeout=self.timeout)
+        self._session = UnitreeSession(
+            UnitreeTransportConfig.from_env(RobotEndpoints.from_env()),
+            simulator=self._simulator,
+        )
 
     def SetTimeout(self, timeout: float):  # noqa: N802 - match Unitree SDK2 API.
         self.timeout = float(timeout)
@@ -368,16 +372,10 @@ class AgvClient:
             **fields,
         }
         try:
-            if action == "move":
-                response = self._simulator.loco(
-                    action="set_velocity",
-                    velocity=payload["velocity"],
-                    duration=payload["duration"],
-                )
-            else:
-                response = self._simulator.command("agv", **payload)
+            session_fields = {key: value for key, value in payload.items() if key != "action"}
+            response = self._session.execute_agv_command(action, **session_fields)
             if response.get("ok"):
-                self.last_response = {**response, **payload, "agv": payload}
+                self.last_response = {**payload, **response, "agv": payload}
                 return self.last_response
         except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
             payload["transport_error"] = str(error)

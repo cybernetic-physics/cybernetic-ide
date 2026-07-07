@@ -167,6 +167,12 @@ Use `rpc_bridge_command()` for a single SDK-shaped action through the same
 managed bridge. It supports `sport` and `agv` methods such as `get_fsm_id`,
 `move`, `stop_move`, `damp`, `wave_hand`, `shake_hand`, `set_stand_height`, and
 `height_adjust`, and returns the raw RPC body plus the same evidence summary.
+Set `CYBER_UNITREE_TRANSPORT=rpc_bridge` when you want normal
+`LocoClient`/`AgvClient` user code to take that bridge path automatically:
+
+```sh
+CYBER_UNITREE_TRANSPORT=rpc_bridge python3 examples/g1_loco_sdk.py
+```
 
 `cyber-g1 sdk-audit` statically compares the cloned official Unitree G1 SDK2
 Python examples with the local `unitree_sdk2py` shim. It reports import, class,
