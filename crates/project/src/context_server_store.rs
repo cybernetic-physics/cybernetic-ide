@@ -961,7 +961,7 @@ impl ContextServerStore {
         Ok(helper_path)
     }
 
-    fn resolve_builtin_context_server_command(
+    pub fn resolve_builtin_context_server_command(
         mut command: ContextServerCommand,
         root_path: Option<&Path>,
     ) -> Result<ContextServerCommand> {

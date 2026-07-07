@@ -3928,8 +3928,16 @@ mod tests {
 }
 
 fn mcp_servers_for_project(project: &Entity<Project>, cx: &App) -> Vec<acp::McpServer> {
-    let context_server_store = project.read(cx).context_server_store().read(cx);
-    let is_local = project.read(cx).is_local();
+    let (context_server_store, is_local, root_path) = {
+        let project = project.read(cx);
+        (
+            project.context_server_store(),
+            project.is_local(),
+            project.active_project_directory(cx),
+        )
+    };
+
+    let context_server_store = context_server_store.read(cx);
     context_server_store
         .configured_server_ids()
         .iter()
@@ -3945,17 +3953,29 @@ fn mcp_servers_for_project(project: &Entity<Project>, cx: &App) -> Vec<acp::McpS
                     command,
                     remote,
                     ..
-                } if is_local || *remote => Some(acp::McpServer::Stdio(
-                    acp::McpServerStdio::new(id.0.to_string(), &command.path)
-                        .args(command.args.clone())
-                        .env(if let Some(env) = command.env.as_ref() {
-                            env.iter()
-                                .map(|(name, value)| acp::EnvVariable::new(name, value))
-                                .collect()
-                        } else {
-                            vec![]
-                        }),
-                )),
+                } if is_local || *remote => {
+                    let command = project::context_server_store::ContextServerStore::resolve_builtin_context_server_command(
+                        command.clone(),
+                        root_path.as_deref(),
+                    )
+                    .log_err()?;
+
+                    Some(acp::McpServer::Stdio(
+                        acp::McpServerStdio::new(id.0.to_string(), &command.path)
+                            .args(command.args.clone())
+                            .env(
+                                command
+                                    .env
+                                    .as_ref()
+                                    .map(|env| {
+                                        env.iter()
+                                            .map(|(name, value)| acp::EnvVariable::new(name, value))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                            ),
+                    ))
+                }
                 project::context_server_store::ContextServerConfiguration::Http {
                     url,
                     headers,
