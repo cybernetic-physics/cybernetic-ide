@@ -280,14 +280,15 @@ class UnitreeSession:
         the managed official Unitree MuJoCo + SDK2/CycloneDDS session.
         """
 
-        if self.config.transport == LOCAL_HTTP and self.config.mode == SIM:
+        if self.config.transport in {LOCAL_HTTP, RPC_BRIDGE} and self.config.mode == SIM:
             response = self.simulator.pose(pose)
             return {
                 **response,
-                "transport": LOCAL_HTTP,
-                "provider": "local_http_simulator",
+                "transport": self.config.transport,
+                "provider": "local_http_simulator" if self.config.transport == LOCAL_HTTP else "local_http_arm_facade_with_rpc_bridge_loco",
                 "unitree_action_id": int(action_id),
                 "pose": pose,
+                "compatibility_fallback": self.config.transport == RPC_BRIDGE,
             }
 
         if self.config.transport == DDS and self.config.mode == SIM:
@@ -566,6 +567,8 @@ _LOCO_RPC_BRIDGE_METHODS = {
     "set_stand_height",
     "set_velocity",
     "set_arm_task",
+    "high_stand",
+    "low_stand",
     "wave_hand",
     "shake_hand",
 }
@@ -580,6 +583,8 @@ def _loco_rpc_bridge_request(action: str, fields: dict[str, Any]) -> dict[str, A
         "get_balance_mode",
         "get_swing_height",
         "get_stand_height",
+        "high_stand",
+        "low_stand",
         "wave_hand",
         "shake_hand",
     }:

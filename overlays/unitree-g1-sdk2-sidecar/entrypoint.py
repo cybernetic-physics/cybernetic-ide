@@ -1867,9 +1867,13 @@ def _start_unitree_rpc_bridge_services(domain: int, interface: str | None, bridg
     def sport_set_stand_height(parameter: str):
         payload = _safe_json_loads(parameter)
         sport_state["stand_height"] = float(payload.get("data", sport_state["stand_height"]))
-        simulator_forward = _forward_simulator_command(
-            {"command": "loco", "action": "set_stand_height", "stand_height": sport_state["stand_height"]}
-        )
+        if sport_state["stand_height"] >= 4294967295:
+            simulator_payload = {"command": "loco", "action": "high_stand", "stand_height": sport_state["stand_height"]}
+        elif sport_state["stand_height"] <= 0:
+            simulator_payload = {"command": "loco", "action": "low_stand", "stand_height": sport_state["stand_height"]}
+        else:
+            simulator_payload = {"command": "loco", "action": "set_stand_height", "stand_height": sport_state["stand_height"]}
+        simulator_forward = _forward_simulator_command(simulator_payload)
         sport_state["last_simulator_forward"] = simulator_forward
         return 0, json.dumps({"data": sport_state["stand_height"], "simulator_forward": simulator_forward})
 
@@ -2268,8 +2272,18 @@ def _call_unitree_rpc_bridge_command(
             ROBOT_API_ID_LOCO_SET_ARM_TASK,
             lambda: {"data": int(_first_param(params, "task_id", "data", default=0))},
         ),
-        "wave_hand": ("sport.WaveHand", ROBOT_API_ID_LOCO_SET_ARM_TASK, lambda: {"data": 0}),
-        "shake_hand": ("sport.ShakeHand", ROBOT_API_ID_LOCO_SET_ARM_TASK, lambda: {"data": 1}),
+        "high_stand": ("sport.HighStand", ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, lambda: {"data": 4294967295}),
+        "low_stand": ("sport.LowStand", ROBOT_API_ID_LOCO_SET_STAND_HEIGHT, lambda: {"data": 0}),
+        "wave_hand": (
+            "sport.WaveHand",
+            ROBOT_API_ID_LOCO_SET_ARM_TASK,
+            lambda: {"data": 1 if bool(_first_param(params, "turn", "turn_flag", default=False)) else 0},
+        ),
+        "shake_hand": (
+            "sport.ShakeHand",
+            ROBOT_API_ID_LOCO_SET_ARM_TASK,
+            lambda: {"data": 2 if int(_first_param(params, "stage", default=1)) == 0 else 3},
+        ),
     }
     agv_methods = {
         "move": (

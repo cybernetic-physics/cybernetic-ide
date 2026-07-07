@@ -364,6 +364,14 @@ Tasks:
   direct local HTTP. This is still simulator-only and still a mapped subset, but
   it makes the bridge invisible for beginner scripts while preserving
   `last_response` evidence for power users and agents.
+- Done: expand the bridge/facade mapping for upstream-style locomotion smoke:
+  `HighStand` and `LowStand` now map through the bridge as official
+  `SetStandHeight(UINT32_MAX/0)` semantics, and wave/shake hand task IDs match
+  the cloned official `unitree_sdk2_python` client (`WaveHand` 0/1,
+  `ShakeHand` 2/3). `cyber-g1 sdk-smoke` and MCP
+  `unitree_sdk_behavior_smoke` now accept `transport=rpc_bridge`, so agents can
+  prove ordinary SDK-shaped loco code crosses the bridge without hand-calling
+  `unitree_command_rpc_bridge`.
 - Current managed-bridge evidence: live validation started
   `unitree-g1-rpc-bridge`, called it from a separate SDK2 sidecar client,
   received `RPC_OK` for `sport.GetFsmId`, `sport.SetStandHeight`,

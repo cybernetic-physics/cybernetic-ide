@@ -520,6 +520,7 @@ cyber-g1 sdk-smoke --kind arm
 cyber-g1 sdk-smoke --kind loco
 cyber-g1 sdk-smoke --kind lowcmd
 cyber-g1 sdk-smoke --kind all --output .runtime/sdk-smoke/latest.json
+cyber-g1 sdk-smoke --kind loco --transport rpc_bridge
 ```
 
 The smoke runner executes safe official-style `G1ArmActionClient`,
@@ -527,6 +528,9 @@ The smoke runner executes safe official-style `G1ArmActionClient`,
 status plus safety-check evidence. It intentionally avoids free-running
 official loops. Pass `--output` when you want a durable JSON artifact that an
 agent, bug report, or follow-up prompt can inspect without rerunning motion.
+Pass `--transport rpc_bridge` when the proof you want is specifically that
+normal Unitree-shaped `LocoClient` / `AgvClient` code crosses the managed
+`sport`/`agv` RPC bridge.
 
 ## Agent MCP Tools
 
@@ -602,7 +606,9 @@ scripts keep Unitree-style imports where possible, then use the local simulator
 bridge for evidence, snapshots, and safety stops.
 `unitree_sdk_behavior_smoke` runs the same SDK-shaped smoke path from the Agent
 panel and writes `.runtime/sdk-smoke/latest.json` by default, or a caller-chosen
-workspace-relative JSON path via `output_path`.
+workspace-relative JSON path via `output_path`. It also accepts
+`transport=rpc_bridge` so an Agent-panel assistant can prove that ordinary
+Unitree facade calls are using the managed bridge.
 
 ## Power User API
 

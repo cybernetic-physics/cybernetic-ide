@@ -303,7 +303,7 @@ class LocoClient:
 
     def _call_loco(self, action: str, **fields: Any) -> dict[str, Any]:
         try:
-            self.last_response = self._session.execute_loco_command(action, **fields)
+            self.last_response = self._session.execute_loco_command(action, timeout=self.timeout, **fields)
         except Exception as error:  # noqa: BLE001 - mirror SDK integer error style.
             self.last_response = {"ok": False, "error": str(error), "action": action, "transport": self._session.config.transport}
         return self.last_response
@@ -373,6 +373,7 @@ class AgvClient:
         }
         try:
             session_fields = {key: value for key, value in payload.items() if key != "action"}
+            session_fields["timeout"] = self.timeout
             response = self._session.execute_agv_command(action, **session_fields)
             if response.get("ok"):
                 self.last_response = {**payload, **response, "agv": payload}

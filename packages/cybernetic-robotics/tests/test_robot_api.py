@@ -1071,6 +1071,67 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(set(report["results"]), {"arm"})
         self.assertEqual(report["status"]["pose"], "raise_right_hand")
 
+    def test_official_g1_sdk_behavior_smoke_can_use_rpc_bridge_transport(self):
+        class FakeOfficial:
+            commands: list[dict[str, object]] = []
+            stopped = False
+
+            @classmethod
+            def discover(cls, *, timeout: int = 300):
+                return cls()
+
+            def rpc_bridge_status(self):
+                return {"running": False, "ready": False}
+
+            def stop_rpc_bridge(self):
+                type(self).stopped = True
+                return {"ok": True, "removed": True}
+
+            def rpc_bridge_command(self, *, service, method, params=None, timeout=1.0, start_if_needed=False, stop_after=False):
+                type(self).commands.append({"service": service, "method": method, "params": params or {}})
+                if method in {"get_fsm_id", "get_fsm_mode", "get_balance_mode", "get_swing_height", "get_stand_height"}:
+                    body = {"data": 1}
+                elif method in {"move", "set_velocity"}:
+                    body = {"velocity": (params or {}).get("velocity", [0.0, 0.0, 0.0])}
+                elif method in {"high_stand", "low_stand"}:
+                    body = {"data": 4294967295 if method == "high_stand" else 0}
+                else:
+                    body = {"data": (params or {}).get("data", 0)}
+                return {
+                    "ok": True,
+                    "summary": {"call_count": 1, "all_calls_ok": True, "simulator_forward_count": 1},
+                    "calls": [{"name": f"{service}.{method}", "ok": True, "return": [0, json.dumps(body)]}],
+                }
+
+        with FakeServer() as fake:
+            previous = {
+                "CYBER_G1_GAME_CONTROL_URL": os.environ.get("CYBER_G1_GAME_CONTROL_URL"),
+                "CYBER_UNITREE_TRANSPORT": os.environ.get("CYBER_UNITREE_TRANSPORT"),
+            }
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                with patch("cybernetic_robotics.official.OfficialG1Sim", FakeOfficial):
+                    report = run_official_g1_sdk_smoke(
+                        "loco",
+                        RobotEndpoints(game_control_url=fake.url),
+                        transport="rpc_bridge",
+                    )
+            finally:
+                for key, value in previous.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["transport"], "rpc_bridge")
+        self.assertEqual(set(report["results"]), {"loco"})
+        self.assertTrue(FakeOfficial.stopped)
+        methods = [call["method"] for call in FakeOfficial.commands]
+        self.assertIn("high_stand", methods)
+        self.assertIn("low_stand", methods)
+        self.assertIn("shake_hand", methods)
+
     def test_unitree_session_diagnostics_reports_transport_and_topics(self):
         with FakeServer() as fake:
             endpoints = RobotEndpoints(game_control_url=fake.url)

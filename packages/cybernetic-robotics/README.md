@@ -110,6 +110,7 @@ python3 examples/g1_official_raise_hand.py
 python3 examples/g1_official_managed_session.py
 cyber-g1 sdk-audit --upstream-root /Users/cuboniks/wagmi/unitree_sdk2_python
 cyber-g1 sdk-smoke --kind all --output .runtime/sdk-smoke/latest.json
+cyber-g1 sdk-smoke --kind loco --transport rpc_bridge
 ```
 
 `official status` is read-only: it checks the sidecar setup, SDK2 imports,
@@ -181,9 +182,11 @@ Static coverage is not behavior parity: locomotion and low-level balance are
 still simulator approximations unless an official DDS proof says otherwise.
 `cyber-g1 sdk-smoke` follows the audit with safe behavior-level checks through
 official-style arm, locomotion, and lowcmd/lowstate calls against the local
-simulator facade. Pass `--output` to persist a JSON evidence report; the
-Cybernetic IDE MCP `unitree_sdk_behavior_smoke` tool uses
-`.runtime/sdk-smoke/latest.json` by default.
+simulator facade. Pass `--transport rpc_bridge` to prove normal
+`LocoClient`/`AgvClient` calls cross the managed Unitree `sport`/`agv` RPC
+bridge. Pass `--output` to persist a JSON evidence report; the Cybernetic IDE
+MCP `unitree_sdk_behavior_smoke` tool uses `.runtime/sdk-smoke/latest.json` by
+default.
 
 ## Unitree SDK2-Shaped API
 

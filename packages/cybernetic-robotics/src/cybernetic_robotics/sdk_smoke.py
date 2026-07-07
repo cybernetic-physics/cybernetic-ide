@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,41 +14,51 @@ def run_official_g1_sdk_smoke(
     kind: str = "all",
     endpoints: RobotEndpoints | None = None,
     output_path: str | Path | None = None,
+    transport: str | None = None,
 ) -> dict[str, Any]:
     """Run safe behavior-level smoke checks through Unitree SDK-shaped imports."""
 
     requested = _normalize_kind(kind)
-    results = {}
-    if requested in {"all", "arm"}:
-        results["arm"] = _smoke_arm()
-    if requested in {"all", "loco"}:
-        results["loco"] = _smoke_loco()
-    if requested in {"all", "lowcmd"}:
-        results["lowcmd"] = _smoke_lowcmd()
+    normalized_transport = _normalize_transport(transport)
+    cleanup = None
+    with _temporary_transport(normalized_transport):
+        bridge_was_running = _rpc_bridge_running(normalized_transport)
+        results = {}
+        if requested in {"all", "arm"}:
+            results["arm"] = _smoke_arm()
+        if requested in {"all", "loco"}:
+            results["loco"] = _smoke_loco()
+        if requested in {"all", "lowcmd"}:
+            results["lowcmd"] = _smoke_lowcmd()
 
-    robot = G1Robot.connect(endpoints=endpoints)
-    status = robot.status()
-    safety = robot.safety_check()
-    report = {
-        "ok": all(item.get("ok") for item in results.values()) and safety.get("safe_to_command", False),
-        "kind": requested,
-        "results": results,
-        "status": {
-            "ready": status.ready,
-            "pose": status.pose,
-            "paused": status.paused,
-            "speed": status.speed,
-            "lowcmd_active": status.lowcmd_active,
-            "lowcmd_stale": status.lowcmd_stale,
-            "lowcmd_age_seconds": status.lowcmd_age_seconds,
-        },
-        "safety": safety,
-        "agent_hints": [
-            "This is behavior-level smoke coverage for safe official-style calls, not full physical parity.",
-            "Use sdk-audit first for import/method coverage, then sdk-smoke for simulator behavior evidence.",
-            "Run safety_stop after manual experiments that leave locomotion or lowcmd active.",
-        ],
-    }
+        robot = G1Robot.connect(endpoints=endpoints)
+        status = robot.status()
+        safety = robot.safety_check()
+        if normalized_transport == "rpc_bridge" and not bridge_was_running:
+            cleanup = _stop_rpc_bridge()
+        report = {
+            "ok": all(item.get("ok") for item in results.values()) and safety.get("safe_to_command", False),
+            "kind": requested,
+            "transport": normalized_transport or os.environ.get("CYBER_UNITREE_TRANSPORT", "local_http"),
+            "results": results,
+            "status": {
+                "ready": status.ready,
+                "pose": status.pose,
+                "paused": status.paused,
+                "speed": status.speed,
+                "lowcmd_active": status.lowcmd_active,
+                "lowcmd_stale": status.lowcmd_stale,
+                "lowcmd_age_seconds": status.lowcmd_age_seconds,
+            },
+            "safety": safety,
+            "cleanup": cleanup,
+            "agent_hints": [
+                "This is behavior-level smoke coverage for safe official-style calls, not full physical parity.",
+                "Use sdk-audit first for import/method coverage, then sdk-smoke for simulator behavior evidence.",
+                "Use transport=rpc_bridge to prove normal LocoClient/AgvClient calls cross the managed Unitree RPC bridge.",
+                "Run safety_stop after manual experiments that leave locomotion or lowcmd active.",
+            ],
+        }
     if output_path is not None:
         path = Path(output_path)
         report["output_path"] = str(path)
@@ -60,6 +72,51 @@ def _normalize_kind(kind: str) -> str:
     if value not in {"all", "arm", "loco", "lowcmd"}:
         raise ValueError(f"unknown SDK smoke kind: {kind}")
     return value
+
+
+def _normalize_transport(transport: str | None) -> str | None:
+    if transport is None:
+        return None
+    value = transport.strip().lower().replace("-", "_")
+    if value not in {"local_http", "rpc_bridge", "dds"}:
+        raise ValueError(f"unknown SDK smoke transport: {transport}")
+    return value
+
+
+@contextmanager
+def _temporary_transport(transport: str | None):
+    previous = os.environ.get("CYBER_UNITREE_TRANSPORT")
+    if transport is not None:
+        os.environ["CYBER_UNITREE_TRANSPORT"] = transport
+    try:
+        yield
+    finally:
+        if transport is not None:
+            if previous is None:
+                os.environ.pop("CYBER_UNITREE_TRANSPORT", None)
+            else:
+                os.environ["CYBER_UNITREE_TRANSPORT"] = previous
+
+
+def _rpc_bridge_running(transport: str | None) -> bool:
+    if transport != "rpc_bridge":
+        return False
+    try:
+        from .official import OfficialG1Sim
+
+        status = OfficialG1Sim.discover().rpc_bridge_status()
+        return bool(status.get("running"))
+    except Exception:
+        return False
+
+
+def _stop_rpc_bridge() -> dict[str, Any]:
+    try:
+        from .official import OfficialG1Sim
+
+        return OfficialG1Sim.discover().stop_rpc_bridge()
+    except Exception as error:  # noqa: BLE001 - cleanup should not hide smoke results.
+        return {"ok": False, "error": str(error)}
 
 
 def _smoke_arm() -> dict[str, Any]:

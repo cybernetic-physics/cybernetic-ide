@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     sdk_smoke = subcommands.add_parser("sdk-smoke")
     sdk_smoke.add_argument("--kind", choices=["all", "arm", "loco", "lowcmd"], default="all")
     sdk_smoke.add_argument("--output", type=Path)
+    sdk_smoke.add_argument("--transport", choices=["local_http", "rpc_bridge", "dds"])
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
@@ -89,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sdk-audit":
         return _print(audit_official_g1_examples(args.upstream_root))
     if args.command == "sdk-smoke":
-        return _print(run_official_g1_sdk_smoke(args.kind, output_path=args.output))
+        return _print(run_official_g1_sdk_smoke(args.kind, output_path=args.output, transport=args.transport))
 
     robot = G1Robot.connect(wait=args.command not in {"snapshot", "diagnostics"})
     if args.command == "status":

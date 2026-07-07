@@ -718,7 +718,10 @@ The current repo has the first narrow version of that API boundary:
   official-example compatibility report before porting an upstream script.
 - `unitree_sdk_behavior_smoke` gives Agent-panel users a behavior-level smoke
   check for safe Unitree SDK-shaped calls after the simulator is running, and
-  persists a JSON evidence report for later review.
+  persists a JSON evidence report for later review. Its `transport` argument can
+  be set to `rpc_bridge` to prove that ordinary `LocoClient`/`AgvClient` code
+  is crossing the managed Unitree `sport`/`agv` RPC bridge rather than direct
+  local HTTP.
 - `unitree_sdk_scaffold_python` now generates arm-action, locomotion,
   named-joint lowcmd, scene-edit, and telemetry-monitor scripts so agents can
   create editable Unitree-style starting points without guessing boilerplate.
@@ -735,7 +738,10 @@ The current repo has the first narrow version of that API boundary:
   `CYBER_UNITREE_TRANSPORT=rpc_bridge` is set in simulator mode. This gives
   normal user scripts the same SDK-shaped bridge path as
   `unitree_command_rpc_bridge` without asking beginners to manually manage the
-  bridge container.
+  bridge container. The bridge now maps upstream-style `HighStand` /
+  `LowStand` and the official wave/shake task-id convention, so
+  `cyber-g1 sdk-smoke --kind loco --transport rpc_bridge` can exercise the
+  normal locomotion smoke surface through the bridge.
 - MCP now has `unitree_official_mujoco_evidence_bundle` for the agent-native
   version of that workflow: ensure the managed official peer is available, read
   official `rt/lowstate` before the pose, command a bounded arm pose over

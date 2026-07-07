@@ -158,6 +158,11 @@ const tools = [
         default: ".runtime/sdk-smoke/latest.json",
         description: "Workspace-relative JSON file for the smoke evidence report.",
       },
+      transport: {
+        type: "string",
+        enum: ["local_http", "rpc_bridge", "dds"],
+        description: "Optional Unitree transport override for the smoke run.",
+      },
     },
     [],
     {
@@ -1460,6 +1465,7 @@ function unitreeSdkCompatibilityAudit(args = {}) {
 
 function unitreeSdkBehaviorSmoke(args = {}) {
   const kind = ["all", "arm", "loco", "lowcmd"].includes(args.kind) ? args.kind : "all";
+  const transport = ["local_http", "rpc_bridge", "dds"].includes(args.transport) ? args.transport : null;
   const outputPath = typeof args.output_path === "string" && args.output_path
     ? args.output_path
     : ".runtime/sdk-smoke/latest.json";
@@ -1470,11 +1476,11 @@ function unitreeSdkBehaviorSmoke(args = {}) {
     PYTHONPATH: process.env.PYTHONPATH ? `${packageSrc}${path.delimiter}${process.env.PYTHONPATH}` : packageSrc,
     CYBER_G1_GAME_CONTROL_URL: gameControlUrl(),
   };
-  const result = runChecked(
-    "python3",
-    ["-m", "cybernetic_robotics.cli", "sdk-smoke", "--kind", kind, "--output", outputPath],
-    { timeoutMs: 90_000, env },
-  );
+  const commandArgs = ["-m", "cybernetic_robotics.cli", "sdk-smoke", "--kind", kind, "--output", outputPath];
+  if (transport) {
+    commandArgs.push("--transport", transport);
+  }
+  const result = runChecked("python3", commandArgs, { timeoutMs: 120_000, env });
   let report = null;
   try {
     report = JSON.parse(result.stdout);
@@ -1482,7 +1488,7 @@ function unitreeSdkBehaviorSmoke(args = {}) {
     report = null;
   }
   return {
-    command: `python3 -m cybernetic_robotics.cli sdk-smoke --kind ${kind} --output ${outputPath}`,
+    command: `python3 ${commandArgs.join(" ")}`,
     stdout: result.stdout,
     stderr: result.stderr,
     report,
