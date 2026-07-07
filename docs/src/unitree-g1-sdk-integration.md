@@ -138,6 +138,14 @@ Default endpoints:
 - `http://127.0.0.1:38383/camera_frame_0.jpg`
 - `ws://127.0.0.1:8788`
 
+Agent workflows use the same viewer protocol through the default
+`cybernetic-robotics` MCP server. `viewer_snapshot` returns the current camera
+frame inline, `viewer_snapshot_file` writes one frame to the workspace, and
+`viewer_snapshot_series` captures a small evidence packet of named views such
+as `current`, `front`, `right`, and `three_quarter` into
+`.runtime/robot-viewer-snapshots/`. This is the preferred way for agents to
+show what changed after a Python control script or scene edit.
+
 Runtime environment knobs:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.

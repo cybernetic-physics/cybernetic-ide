@@ -263,6 +263,31 @@ The viewer uses these default endpoints:
 - `http://127.0.0.1:38383/camera_frame_0.jpg`
 - `ws://127.0.0.1:8788`
 
+## Robotics MCP Tools
+
+Cybernetic IDE's default Agent profile enables the `cybernetic-robotics` MCP
+server so coding agents can inspect and control the simulator without finding
+ad hoc scripts first. The default tool surface includes:
+
+- simulator lifecycle: `sim_prepare_runtime`, `sim_start`, `sim_stop`,
+  `sim_restart`, `sim_status`, `sim_pause`, `sim_resume`, `sim_reset`, and
+  `sim_step`;
+- viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
+  `viewer_snapshot_file`, and `viewer_snapshot_series`;
+- scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
+  `scene_add_box`;
+- Unitree-shaped G1 controls: `g1_execute_action`, `g1_loco_command`,
+  `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`;
+- Python control jobs: `python_control_run`, `python_control_start`,
+  `python_control_logs`, `python_control_pause`, `python_control_resume`,
+  `python_control_stop`, and `python_control_list`.
+
+Use `viewer_snapshot_series` after running a behavior script when you want a
+small visual packet for debugging. It writes a timestamped directory under
+`.runtime/robot-viewer-snapshots/` with `current`, `front`, `right`, and
+`three_quarter` views by default, plus a `manifest.json` containing simulator
+status and file paths.
+
 Useful environment variables:
 
 - `CYBER_ROBOT_HARNESS_DIR`: repo root for the Docker harness.

@@ -13,6 +13,36 @@ const DEFAULT_WS_URL = "ws://127.0.0.1:8788";
 const DEFAULT_CONTAINER = "unitree-g1-mujoco";
 const DEFAULT_POSE = "raise_right_hand";
 const MAX_LOG_BYTES = 256_000;
+const VIEW_PRESETS = {
+  current: {
+    description: "Current viewer camera without moving it.",
+    commands: [],
+  },
+  front: {
+    description: "Default reset camera framing.",
+    commands: [{ action: "reset" }],
+  },
+  left: {
+    description: "Reset camera, then orbit to the robot's left side.",
+    commands: [{ action: "reset" }, { action: "orbit", dx: -90, dy: 0 }],
+  },
+  right: {
+    description: "Reset camera, then orbit to the robot's right side.",
+    commands: [{ action: "reset" }, { action: "orbit", dx: 90, dy: 0 }],
+  },
+  rear: {
+    description: "Reset camera, then orbit behind the robot.",
+    commands: [{ action: "reset" }, { action: "orbit", dx: 180, dy: 0 }],
+  },
+  top: {
+    description: "Reset camera, then tilt toward a top-down debugging angle.",
+    commands: [{ action: "reset" }, { action: "orbit", dx: 0, dy: -65 }, { action: "zoom", delta: -0.5 }],
+  },
+  three_quarter: {
+    description: "Reset camera, then capture a three-quarter view.",
+    commands: [{ action: "reset" }, { action: "orbit", dx: 45, dy: -12 }],
+  },
+};
 
 const root = findRepoRoot(process.env.CYBER_ROBOTICS_ROOT || process.cwd());
 const jobs = new Map();
@@ -105,6 +135,22 @@ const tools = [
       format: { type: "string", enum: ["jpeg", "png"], default: "jpeg" },
     },
     ["path"],
+    { readOnlyHint: false },
+  ),
+  tool(
+    "viewer_snapshot_series",
+    "Capture a named set of Robot Viewer camera angles to workspace files for visual debugging.",
+    {
+      output_dir: { type: "string", default: ".runtime/robot-viewer-snapshots" },
+      prefix: { type: "string", default: "g1" },
+      format: { type: "string", enum: ["jpeg", "png"], default: "jpeg" },
+      views: {
+        type: "array",
+        items: { type: "string", enum: ["current", "front", "left", "right", "rear", "top", "three_quarter"] },
+        default: ["current", "front", "right", "three_quarter"],
+      },
+    },
+    [],
     { readOnlyHint: false },
   ),
   tool("scene_get", "Read the current visual scene summary from the simulator.", {}, [], {
@@ -429,6 +475,8 @@ async function callTool(name, args) {
       return imageResult(await snapshot(args.format || "jpeg"));
     case "viewer_snapshot_file":
       return textResult(await snapshotFile(args.path, args.format || "jpeg"));
+    case "viewer_snapshot_series":
+      return textResult(await snapshotSeries(args));
     case "scene_get":
       return textResult(await getJson("/visual_scene"));
     case "scene_read_mjcf":
@@ -593,6 +641,57 @@ async function snapshotFile(userPath, format) {
     path: outputPath,
     workspace_relative_path: path.relative(root, outputPath),
   };
+}
+
+async function snapshotSeries(args) {
+  const format = args.format === "png" ? "png" : "jpeg";
+  const extension = format === "png" ? "png" : "jpg";
+  const outputDir = safeWorkspacePath(args.output_dir || ".runtime/robot-viewer-snapshots");
+  const prefix = safeSegment(args.prefix || "g1");
+  const requestedViews = Array.isArray(args.views) && args.views.length > 0 ? args.views : ["current", "front", "right", "three_quarter"];
+  const views = requestedViews.map((view) => {
+    const key = String(view);
+    if (!VIEW_PRESETS[key]) {
+      throw new Error(`Unsupported snapshot view: ${key}`);
+    }
+    return key;
+  });
+  const stamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+  const seriesDir = path.join(outputDir, `${prefix}-${stamp}`);
+  await fsp.mkdir(seriesDir, { recursive: true });
+
+  const captures = [];
+  for (const view of views) {
+    const preset = VIEW_PRESETS[view];
+    if (preset.commands.length > 0) {
+      for (const cameraCommand of preset.commands) {
+        await camera(cameraCommand);
+      }
+    }
+    const filePath = path.join(seriesDir, `${captures.length + 1}-${view}.${extension}`);
+    const capture = await snapshotFile(path.relative(root, filePath), format);
+    captures.push({
+      view,
+      description: preset.description,
+      path: capture.path,
+      workspace_relative_path: capture.workspace_relative_path,
+      bytes: capture.bytes,
+      render: capture.render,
+      pose: capture.pose,
+      paused: capture.paused,
+    });
+  }
+
+  const manifest = {
+    captured_at: new Date().toISOString(),
+    output_dir: seriesDir,
+    workspace_relative_output_dir: path.relative(root, seriesDir),
+    format,
+    views: captures,
+    status: await getJson("/status").catch((error) => ({ error: error.message })),
+  };
+  await fsp.writeFile(path.join(seriesDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
 }
 
 async function executeG1LocoCommand(args) {
@@ -1138,6 +1237,11 @@ function numericArray(value, length, name) {
 
 function escapeXml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function safeSegment(value) {
+  const segment = String(value).trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return segment || "g1";
 }
 
 function tail(value, max) {

@@ -224,7 +224,11 @@ Tasks:
 - Done: add `g1_joint_state` with named joint mapping.
 - Done: add `g1_apply_joint_targets` with joint names rather than only motor
   indices.
-- Add `sim_capture_sequence` for before/during/after behavior review.
+- Done: add `viewer_snapshot_series` for multi-angle visual evidence after an
+  agent runs a behavior or scene edit.
+- Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
+  `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
+  tools in the default Robotics Agent profile.
 - Add `scene_add_object`, `scene_remove_object`, and `scene_list_objects`.
 - Add `sim_validate_behavior` that checks fallen state, command freshness, and
   screenshot availability after a script runs.
