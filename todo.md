@@ -229,7 +229,8 @@ Tasks:
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.
-- Add `scene_add_object`, `scene_remove_object`, and `scene_list_objects`.
+- Done: add `scene_add_object`, `scene_remove_object`, and
+  `scene_list_objects` for simple generated MJCF scene objects.
 - Add `sim_validate_behavior` that checks fallen state, command freshness, and
   screenshot availability after a script runs.
 - Add `unitree_example_scaffold` variants for arm action, locomotion,

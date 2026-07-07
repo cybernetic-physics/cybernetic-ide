@@ -186,6 +186,45 @@ const tools = [
     { readOnlyHint: false, destructiveHint: true },
   ),
   tool(
+    "scene_add_object",
+    "Create a Unitree G1 MJCF scene copy with an added object. Currently supports box objects.",
+    {
+      type: { type: "string", enum: ["box"], default: "box" },
+      name: { type: "string", pattern: "^[A-Za-z0-9_-]+$" },
+      position: { type: "array", items: { type: "number" }, minItems: 3, maxItems: 3 },
+      size: { type: "array", items: { type: "number" }, minItems: 3, maxItems: 3 },
+      rgba: { type: "array", items: { type: "number" }, minItems: 4, maxItems: 4 },
+      activate: {
+        type: "boolean",
+        default: false,
+        description: "When true, updates compose.env and recreates the simulator container.",
+      },
+    },
+    ["name", "position", "size"],
+    { readOnlyHint: false, destructiveHint: true },
+  ),
+  tool("scene_list_objects", "List Cybernetic-generated MJCF scene objects and generated scene files.", {}, [], {
+    readOnlyHint: true,
+  }),
+  tool(
+    "scene_remove_object",
+    "Create a Unitree G1 MJCF scene copy with a Cybernetic-generated object removed and optionally activate it.",
+    {
+      name: { type: "string", pattern: "^[A-Za-z0-9_-]+$" },
+      scene_path: {
+        type: "string",
+        description: "Optional workspace, host, or /opt/unitree_mujoco/... scene path. Defaults to the active scene.",
+      },
+      activate: {
+        type: "boolean",
+        default: false,
+        description: "When true, updates compose.env and recreates the simulator container.",
+      },
+    },
+    ["name"],
+    { readOnlyHint: false, destructiveHint: true },
+  ),
+  tool(
     "unitree_sdk_scaffold_python",
     "Generate or write a Unitree SDK-shaped Python control script for the local G1 simulator.",
     {
@@ -485,6 +524,12 @@ async function callTool(name, args) {
       return textResult(validateMjcf(args.model_path));
     case "scene_add_box":
       return textResult(await addBoxToScene(args));
+    case "scene_add_object":
+      return textResult(await addObjectToScene(args));
+    case "scene_list_objects":
+      return textResult(await listSceneObjects());
+    case "scene_remove_object":
+      return textResult(await removeObjectFromScene(args));
     case "unitree_sdk_scaffold_python":
       return textResult(await scaffoldPython(args));
     case "g1_list_actions":
@@ -830,6 +875,81 @@ async function addBoxToScene(args) {
   return result;
 }
 
+async function addObjectToScene(args) {
+  const type = args.type || "box";
+  if (type !== "box") {
+    throw new Error(`Unsupported scene object type: ${type}`);
+  }
+  return addBoxToScene(args);
+}
+
+async function listSceneObjects() {
+  const paths = runtimePaths();
+  const sceneDir = path.join(paths.assetRoot, "cybernetic_scenes");
+  const files = fs.existsSync(sceneDir)
+    ? (await fsp.readdir(sceneDir)).filter((entry) => entry.endsWith(".xml")).sort()
+    : [];
+  const scenes = [];
+  for (const file of files) {
+    const hostPath = path.join(sceneDir, file);
+    const xml = await fsp.readFile(hostPath, "utf8");
+    scenes.push({
+      name: file,
+      host_path: hostPath,
+      container_path: `/opt/unitree_mujoco/cybernetic_scenes/${file}`,
+      active: hostPath === paths.hostModelPath,
+      objects: parseCyberneticObjects(xml),
+    });
+  }
+  const activeXml = fs.existsSync(paths.hostModelPath) ? await fsp.readFile(paths.hostModelPath, "utf8") : "";
+  return {
+    active_scene: {
+      host_model_path: paths.hostModelPath,
+      container_model_path: paths.containerModelPath,
+      generated: paths.hostModelPath.startsWith(sceneDir),
+      objects: activeXml ? parseCyberneticObjects(activeXml) : [],
+    },
+    generated_scene_dir: sceneDir,
+    scenes,
+  };
+}
+
+async function removeObjectFromScene(args) {
+  const name = String(args.name || "").trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+    throw new Error("scene_remove_object requires a safe alphanumeric name");
+  }
+
+  const paths = runtimePaths();
+  const sourcePath = resolveSceneHostPath(args.scene_path, paths);
+  const sourceXml = await fsp.readFile(sourcePath, "utf8");
+  const { xml, removed } = removeCyberneticObjectBlock(sourceXml, name);
+  if (!removed) {
+    throw new Error(`Object '${name}' was not found as a Cybernetic-generated scene object in ${sourcePath}`);
+  }
+
+  const sceneDir = path.join(paths.assetRoot, "cybernetic_scenes");
+  await fsp.mkdir(sceneDir, { recursive: true });
+  const base = path.basename(sourcePath, ".xml").replace(/^g1_/, "");
+  const outName = `g1_${safeSegment(base)}_without_${safeSegment(name)}.xml`;
+  const hostOutputPath = path.join(sceneDir, outName);
+  const containerOutputPath = `/opt/unitree_mujoco/cybernetic_scenes/${outName}`;
+  await fsp.writeFile(hostOutputPath, xml);
+
+  const result = {
+    host_output_path: hostOutputPath,
+    container_output_path: containerOutputPath,
+    removed_object: name,
+    activated: false,
+  };
+  if (args.activate === true) {
+    updateComposeEnv({ UNITREE_G1_MODEL_PATH: containerOutputPath });
+    result.activate = runChecked("docker", [...composeArgs(), "up", "-d", "--force-recreate"], { timeoutMs: 180000 });
+    result.activated = true;
+  }
+  return result;
+}
+
 async function scaffoldPython(args) {
   const action = args.action === "release_arm" ? "release_arm" : "raise_hand";
   const code = sdkPythonTemplate(action);
@@ -1077,6 +1197,22 @@ function runtimePaths() {
   };
 }
 
+function resolveSceneHostPath(userPath, paths = runtimePaths()) {
+  if (!userPath) {
+    return paths.hostModelPath;
+  }
+  const value = String(userPath);
+  if (value.startsWith("/opt/unitree_mujoco/")) {
+    return path.join(paths.assetRoot, value.slice("/opt/unitree_mujoco/".length));
+  }
+  const absolute = path.isAbsolute(value) ? path.resolve(value) : safeWorkspacePath(value);
+  const assetRoot = path.resolve(paths.assetRoot);
+  if (absolute !== assetRoot && !absolute.startsWith(`${assetRoot}${path.sep}`)) {
+    throw new Error(`Scene path must stay inside the mounted Unitree asset tree: ${userPath}`);
+  }
+  return absolute;
+}
+
 function runChecked(command, args, options = {}) {
   const result = run(command, args, options);
   if (result.status !== 0) {
@@ -1237,6 +1373,36 @@ function numericArray(value, length, name) {
 
 function escapeXml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function parseCyberneticObjects(xml) {
+  const objects = [];
+  const pattern =
+    /<body name="([^"]+)" pos="([^"]+)">\s*<geom name="\1_geom" type="box" size="([^"]+)" rgba="([^"]+)"\/>\s*<\/body>/g;
+  for (const match of xml.matchAll(pattern)) {
+    objects.push({
+      name: match[1],
+      type: "box",
+      position: match[2].split(/\s+/).map(Number),
+      size: match[3].split(/\s+/).map(Number),
+      rgba: match[4].split(/\s+/).map(Number),
+    });
+  }
+  return objects;
+}
+
+function removeCyberneticObjectBlock(xml, name) {
+  const escaped = escapeRegExp(name);
+  const pattern = new RegExp(
+    `\\n?\\s*<body name="${escaped}" pos="[^"]+">\\s*<geom name="${escaped}_geom" type="box" size="[^"]+" rgba="[^"]+"\\/>\\s*<\\/body>\\n?`,
+    "m",
+  );
+  const next = xml.replace(pattern, "\n");
+  return { xml: next, removed: next !== xml };
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function safeSegment(value) {

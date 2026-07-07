@@ -241,6 +241,10 @@ the Agent panel. The most useful camera tools are:
 viewer_camera_control
 viewer_snapshot
 viewer_snapshot_file
+viewer_snapshot_series
+scene_add_object
+scene_list_objects
+scene_remove_object
 g1_lowstate
 g1_joint_state
 g1_apply_joint_targets
@@ -250,6 +254,12 @@ g1_lowcmd
 `viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the
 current camera frame to a workspace file, which is better when the agent needs
 to compare before/after views across multiple steps.
+`scene_add_object`, `scene_list_objects`, and `scene_remove_object` let agents
+iterate on simple MuJoCo scene objects. Scene edits write new MJCF copies under
+`.runtime/unitree-g1-mujoco/unitree_mujoco/cybernetic_scenes/`; the simulator
+container is only recreated when the tool call sets `activate` to true.
+`scene_remove_object` defaults to the active scene, or can remove from a
+generated-but-not-activated scene by passing its `scene_path`.
 
 ## Power User API
 
