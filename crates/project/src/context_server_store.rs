@@ -1,7 +1,7 @@
 pub mod extension;
 pub mod registry;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,6 +34,8 @@ use crate::{
 /// Maximum timeout for context server requests
 /// Prevents extremely large timeout values from tying up resources indefinitely.
 const MAX_TIMEOUT_SECS: u64 = 600; // 10 minutes
+const CYBERNETIC_ROBOTICS_MCP_COMMAND: &str = "cybernetic-robotics-mcp";
+const CYBERNETIC_ROBOTICS_MCP_SOURCE: &str = include_str!("../../../script/cyber-robotics-mcp.mjs");
 
 pub fn init(cx: &mut App) {
     extension::init(cx);
@@ -914,6 +916,9 @@ impl ContextServerStore {
                         .command()
                         .context("Missing command configuration for stdio context server")?
                         .clone();
+                    command =
+                        Self::resolve_builtin_context_server_command(command, root_path.as_deref())
+                            .context("Failed to resolve built-in context server command")?;
                     command.timeout = Some(
                         command
                             .timeout
@@ -933,6 +938,51 @@ impl ContextServerStore {
         })??;
 
         Ok((server, configuration))
+    }
+
+    fn cybernetic_robotics_mcp_script_path() -> Result<PathBuf> {
+        let helper_dir = paths::temp_dir()
+            .join("context-servers")
+            .join("cybernetic-robotics");
+        std::fs::create_dir_all(&helper_dir).with_context(|| {
+            format!(
+                "creating Cybernetic robotics MCP helper dir {}",
+                helper_dir.display()
+            )
+        })?;
+
+        let helper_path = helper_dir.join("cyber-robotics-mcp.mjs");
+        std::fs::write(&helper_path, CYBERNETIC_ROBOTICS_MCP_SOURCE).with_context(|| {
+            format!(
+                "writing Cybernetic robotics MCP helper {}",
+                helper_path.display()
+            )
+        })?;
+        Ok(helper_path)
+    }
+
+    fn resolve_builtin_context_server_command(
+        mut command: ContextServerCommand,
+        root_path: Option<&Path>,
+    ) -> Result<ContextServerCommand> {
+        if command.path != Path::new(CYBERNETIC_ROBOTICS_MCP_COMMAND) {
+            return Ok(command);
+        }
+
+        let helper_path = Self::cybernetic_robotics_mcp_script_path()?;
+        let mut args = Vec::with_capacity(command.args.len() + 1);
+        args.push(helper_path.to_string_lossy().to_string());
+        args.extend(command.args);
+
+        let env = command.env.get_or_insert_with(HashMap::default);
+        if let Some(root_path) = root_path {
+            env.entry("CYBER_ROBOTICS_ROOT".into())
+                .or_insert_with(|| root_path.display().to_string());
+        }
+
+        command.path = PathBuf::from("node");
+        command.args = args;
+        Ok(command)
     }
 
     async fn handle_get_context_server_command(
@@ -1801,5 +1851,37 @@ async fn resolve_start_failure(
                 error: format!("OAuth discovery failed: {discovery_err}").into(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_builtin_context_server_command_embeds_robotics_server() {
+        let root_path = Path::new("/tmp/cybernetic-robotics-root");
+        let command = ContextServerCommand {
+            path: PathBuf::from(CYBERNETIC_ROBOTICS_MCP_COMMAND),
+            args: vec!["serve".into()],
+            env: None,
+            timeout: Some(120),
+        };
+
+        let resolved =
+            ContextServerStore::resolve_builtin_context_server_command(command, Some(root_path))
+                .expect("built-in robotics MCP command should resolve");
+
+        assert_eq!(resolved.path, PathBuf::from("node"));
+        assert!(resolved.args[0].ends_with("cyber-robotics-mcp.mjs"));
+        assert_eq!(resolved.args[1], "serve");
+        assert_eq!(resolved.timeout, Some(120));
+        assert_eq!(
+            resolved
+                .env
+                .as_ref()
+                .and_then(|env| env.get("CYBER_ROBOTICS_ROOT")),
+            Some(&root_path.display().to_string())
+        );
     }
 }

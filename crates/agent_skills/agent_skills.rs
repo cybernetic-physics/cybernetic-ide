@@ -694,14 +694,22 @@ pub fn read_skill_body_from_content(
     Ok(body.trim().to_string())
 }
 
-/// Content of the built-in `create-skill` SKILL.md, embedded at compile time.
+/// Content of the built-in skills, embedded at compile time.
 const CREATE_SKILL_CONTENT: &str = include_str!("builtin/create-skill/SKILL.md");
+const UNITREE_G1_SDK_CONTENT: &str = include_str!("builtin/unitree-g1-sdk/SKILL.md");
+const MUJOCO_SCENE_EDITING_CONTENT: &str = include_str!("builtin/mujoco-scene-editing/SKILL.md");
+const CYBERNETIC_SIM_PROTOCOL_CONTENT: &str =
+    include_str!("builtin/cybernetic-sim-protocol/SKILL.md");
+const ROBOT_SAFETY_CONTENT: &str = include_str!("builtin/robot-safety/SKILL.md");
+const ROBOTICS_DEBUGGING_CONTENT: &str = include_str!("builtin/robotics-debugging/SKILL.md");
 
 /// Returns the set of skills that are compiled into the Zed binary.
 pub fn builtin_skills() -> Vec<Skill> {
     let mut skills = Vec::new();
-    if let Ok(skill) = parse_builtin_skill("create-skill", CREATE_SKILL_CONTENT) {
-        skills.push(skill);
+    for (name, content) in BUILTIN_SKILL_ENTRIES {
+        if let Ok(skill) = parse_builtin_skill(name, content) {
+            skills.push(skill);
+        }
     }
     skills
 }
@@ -730,7 +738,14 @@ fn parse_builtin_skill(name: &str, content: &'static str) -> Result<Skill> {
 
 /// All built-in skills as `(name, raw_content)` pairs. Used by
 /// `builtin_skill_content` to serve the full SKILL.md without disk I/O.
-const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[("create-skill", CREATE_SKILL_CONTENT)];
+const BUILTIN_SKILL_ENTRIES: &[(&str, &str)] = &[
+    ("create-skill", CREATE_SKILL_CONTENT),
+    ("unitree-g1-sdk", UNITREE_G1_SDK_CONTENT),
+    ("mujoco-scene-editing", MUJOCO_SCENE_EDITING_CONTENT),
+    ("cybernetic-sim-protocol", CYBERNETIC_SIM_PROTOCOL_CONTENT),
+    ("robot-safety", ROBOT_SAFETY_CONTENT),
+    ("robotics-debugging", ROBOTICS_DEBUGGING_CONTENT),
+];
 
 /// Look up the full embedded content of a built-in skill by its
 /// synthetic file path. Returns `None` if the path doesn't match any
@@ -883,6 +898,33 @@ mod tests {
         }
         .precedence();
         assert_eq!(project, other_project);
+    }
+
+    #[test]
+    fn test_builtin_skills_parse_and_have_embedded_content() {
+        let skills = builtin_skills();
+        let skill_names = skills
+            .iter()
+            .map(|skill| skill.name.as_str())
+            .collect::<Vec<_>>();
+
+        for name in [
+            "create-skill",
+            "unitree-g1-sdk",
+            "mujoco-scene-editing",
+            "cybernetic-sim-protocol",
+            "robot-safety",
+            "robotics-debugging",
+        ] {
+            let skill = skills
+                .iter()
+                .find(|skill| skill.name == name)
+                .unwrap_or_else(|| panic!("missing built-in skill {name}; got {skill_names:?}"));
+
+            assert_eq!(skill.source, SkillSource::BuiltIn);
+            assert!(skill.embedded_body.is_some());
+            assert!(builtin_skill_content(&skill.skill_file_path).is_some());
+        }
     }
 
     #[test]
