@@ -58,6 +58,7 @@ cyber-g1 diagnostics
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 cyber-g1 safety-check
 cyber-g1 safety-stop
+cyber-g1 dex3-state --hand right
 cyber-g1 official status
 cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10

@@ -504,6 +504,9 @@ Tasks:
   `SelectMode`, `ReleaseMode`, `SetSilent`, and `GetSilent` workflows.
 - Done: expose `g1_dex3_command` so agents can publish a bounded Dex3
   `HandCmd_` intent and inspect synthesized hand state after grasp scripts.
+- Done: expose read-only Dex3 hand telemetry through `G1Robot.dex3_state()`,
+  `cyber-g1 dex3-state`, and MCP `g1_dex3_state` so agents can verify hand
+  commands without scraping broad `/status`.
 - Done: expose the existing `viewer_snapshot_file`, `g1_loco_command`,
   `g1_lowstate`, `g1_joint_state`, `g1_apply_joint_targets`, and `g1_lowcmd`
   tools in the default Robotics Agent profile.

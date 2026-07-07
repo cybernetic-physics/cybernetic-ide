@@ -1231,6 +1231,7 @@
               "g1_lowcmd": true,
               "g1_hand_sdk": true,
               "g1_dex3_command": true,
+              "g1_dex3_state": true,
               "safety_stop": true,
               "docker_logs": true,
               "protocol_probe_http": true,

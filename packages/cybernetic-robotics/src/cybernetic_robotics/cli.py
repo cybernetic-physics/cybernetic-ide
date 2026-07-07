@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("reset")
     subcommands.add_parser("safety-check")
     subcommands.add_parser("safety-stop")
+    dex3_state = subcommands.add_parser("dex3-state")
+    dex3_state.add_argument("--hand", choices=["left", "right"])
 
     step = subcommands.add_parser("step")
     step.add_argument("--count", type=int, default=1)
@@ -112,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
         return _print(robot.safety_check())
     if args.command == "safety-stop":
         return _print(robot.safety_stop())
+    if args.command == "dex3-state":
+        return _print(robot.dex3_state(args.hand))
     if args.command == "step":
         return _print({"steps": robot.step(args.count)})
     if args.command == "pose":

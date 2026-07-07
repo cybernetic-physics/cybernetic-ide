@@ -127,6 +127,9 @@ class G1Robot:
     def joint_state(self) -> dict[str, Any]:
         return self.sim.joint_state()
 
+    def dex3_state(self, hand: str | None = None) -> dict[str, Any]:
+        return self.sim.dex3_state(hand)
+
     def apply_joint_targets(self, targets: dict[str, float], **kwargs: Any) -> dict[str, Any]:
         return self.sim.apply_joint_targets(targets, **kwargs)
 

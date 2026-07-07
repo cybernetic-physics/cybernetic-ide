@@ -1243,6 +1243,13 @@ class RobotApiTests(unittest.TestCase):
                 self.assertAlmostEqual(hand_state.motor_state[0].q, 0.25)
                 self.assertAlmostEqual(hand_state.press_sensor_state[0].pressure[0], 0.5)
                 self.assertAlmostEqual(hand_state.power_v, 12.0)
+
+                robot = G1Robot.connect(endpoints=RobotEndpoints(game_control_url=fake.url))
+                right_state = robot.dex3_state("right")
+                all_state = robot.dex3_state()
+                self.assertEqual(right_state["hand"], "right")
+                self.assertEqual(right_state["intent"], "grip")
+                self.assertIn("right", all_state["hands"])
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

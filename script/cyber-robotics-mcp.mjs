@@ -1167,6 +1167,19 @@ const tools = [
     [],
     { readOnlyHint: false },
   ),
+  tool(
+    "g1_dex3_state",
+    "Read simulator-backed Unitree Dex3 hand telemetry for one hand or both hands.",
+    {
+      hand: {
+        type: "string",
+        enum: ["left", "right", "all"],
+        default: "all",
+      },
+    },
+    [],
+    { readOnlyHint: true },
+  ),
   tool("safety_stop", "Release motion mode, damp locomotion, neutralize the G1 pose, and pause the simulator.", {}, [], {
     readOnlyHint: false,
     destructiveHint: true,
@@ -1506,6 +1519,8 @@ async function callTool(name, args) {
       return textResult(await executeG1HandSdk(args));
     case "g1_dex3_command":
       return textResult(await executeG1Dex3Command(args));
+    case "g1_dex3_state":
+      return textResult(await readG1Dex3State(args));
     case "safety_stop":
       return textResult(await safetyStop());
     case "docker_logs":
@@ -2691,6 +2706,18 @@ async function executeG1Dex3Command(args) {
   });
 }
 
+async function readG1Dex3State(args) {
+  const status = await getJson("/status");
+  const simulation = status && typeof status.simulation === "object" ? status.simulation : {};
+  const dex3 = simulation.dex3 && typeof simulation.dex3 === "object" ? simulation.dex3 : {};
+  const hands = dex3.hands && typeof dex3.hands === "object" ? dex3.hands : {};
+  const hand = args.hand === "left" || args.hand === "right" ? args.hand : "all";
+  if (hand === "all") {
+    return { ok: true, dex3 };
+  }
+  return { ok: true, hand, dex3: hands[hand] || {} };
+}
+
 async function executeG1JointTargets(args) {
   if (!args.targets || typeof args.targets !== "object" || Array.isArray(args.targets)) {
     throw new Error("g1_apply_joint_targets requires targets as an object");
@@ -2914,6 +2941,7 @@ function roboticsToolReference() {
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
       toolReference("g1_hand_sdk", "robot-motion-intent", "Publishes rt/hand_sdk open/close intent.", "Simulator running; records hand intent rather than full finger physics."),
       toolReference("g1_dex3_command", "robot-motion-intent", "Publishes Dex3 HandCmd_ intent and records synthesized hand state.", "Simulator running; records hand telemetry rather than full finger physics."),
+      toolReference("g1_dex3_state", "read", "Reads synthesized Dex3 hand telemetry for one or both hands.", "Simulator running after optional hand command."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),
       toolReference("g1_joint_state", "read", "Reads named joint mapping and limits.", "Simulator running."),
       toolReference("safety_stop", "safety", "Damps locomotion, neutralizes pose, pauses sim.", "Use after motion or when state feels uncertain."),

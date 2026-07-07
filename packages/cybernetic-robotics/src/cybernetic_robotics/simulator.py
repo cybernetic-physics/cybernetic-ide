@@ -82,6 +82,11 @@ class SimulatorStatus:
         return value if isinstance(value, dict) else {}
 
     @property
+    def dex3(self) -> JsonObject:
+        value = self.simulation.get("dex3")
+        return value if isinstance(value, dict) else {}
+
+    @property
     def lowcmd_active(self) -> bool:
         return bool(self.lowcmd.get("active"))
 
@@ -183,6 +188,14 @@ class SimulatorClient:
 
     def dex3(self, hand: str, motor_cmd: list[JsonObject], **fields: Any) -> JsonObject:
         return self.command("dex3", hand=hand, motor_cmd=motor_cmd, **fields)
+
+    def dex3_state(self, hand: str | None = None) -> JsonObject:
+        dex3 = self.status().dex3
+        if hand is None:
+            return dex3
+        hands = dex3.get("hands") if isinstance(dex3.get("hands"), dict) else {}
+        normalized = str(hand).lower()
+        return hands.get(normalized, {}) if normalized in {"left", "right"} else {}
 
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")

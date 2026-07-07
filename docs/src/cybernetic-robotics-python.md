@@ -86,6 +86,7 @@ The package installs `cyber-g1`:
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 cyber-g1 safety-stop
+cyber-g1 dex3-state --hand right
 cyber-g1 official status
 cyber-g1 official raise-hand
 cyber-g1 camera orbit --dx 40 --dy -10
@@ -614,6 +615,7 @@ g1_joint_state
 g1_apply_joint_targets
 g1_lowcmd
 g1_dex3_command
+g1_dex3_state
 ```
 
 `viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the

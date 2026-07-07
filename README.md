@@ -143,6 +143,7 @@ Then try:
 cyber-g1 status
 cyber-g1 provider
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 dex3-state --hand right
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/g1_loco_sdk.py
 python3 examples/g1_wave_hand_sdk.py
@@ -406,8 +407,8 @@ ad hoc scripts first. The default tool surface includes:
   `scene_add_box`;
 - Unitree-shaped G1 controls: `g1_execute_action`, `g1_loco_command`,
   `g1_agv_command`, `g1_motion_switcher`, `g1_safety_check`, `g1_lowstate`,
-  `g1_joint_state`, `g1_apply_joint_targets`, `g1_lowcmd`, and
-  `g1_hand_sdk`, and `g1_dex3_command`;
+  `g1_joint_state`, `g1_apply_joint_targets`, `g1_lowcmd`, `g1_hand_sdk`,
+  `g1_dex3_command`, and `g1_dex3_state`;
 - Python control jobs: `python_control_run`, `python_control_start`,
   `python_control_logs`, `python_control_pause`, `python_control_resume`,
   `python_control_stop`, and `python_control_list`.
