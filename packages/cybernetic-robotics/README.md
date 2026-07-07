@@ -11,9 +11,9 @@ It has three layers:
 - `SimulatorClient` and `TinyWebSocket`: direct HTTP/WebSocket access for
   power users who want the Booster-style simulator protocol.
 - `unitree_sdk2py` compatibility modules: a simulator-backed subset of the
-  official Unitree SDK2 Python import shape, including G1 arm actions and
-  G1 locomotion client methods plus low-level `rt/lowcmd` / `rt/lowstate`
-  channels.
+  official Unitree SDK2 Python import shape, including G1 arm actions, G1
+  locomotion client methods, G1 audio intent, plus low-level `rt/lowcmd` /
+  `rt/lowstate` channels.
 
 The package intentionally uses only the Python standard library. The simulator
 it talks to is still the Dockerized Cybernetic IDE G1 MuJoCo harness.
@@ -90,6 +90,23 @@ loco.Init()
 loco.Start()
 loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
+```
+
+G1 audio examples can use Unitree's `AudioClient` import shape. In the local
+MuJoCo simulator this records intent only; real speakers, microphone, and LEDs
+are still a future SDK2/DDS backend concern:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+audio = AudioClient()
+audio.Init()
+audio.TtsMaker("hello from Cybernetic IDE", 0)
+audio.SetVolume(40)
+audio.LedControl(0, 80, 255)
 ```
 
 Low-level SDK2-shaped examples can publish `LowCmd_` and read `LowState_`:

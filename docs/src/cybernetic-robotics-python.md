@@ -110,8 +110,9 @@ arm.Init()
 arm.ExecuteAction(action_map["right hand up"])
 ```
 
-The compatibility package currently implements only high-level arm actions
-and locomotion actions needed by the local simulator:
+The compatibility package currently implements high-level arm actions,
+locomotion actions, G1 audio intent, and the low-level channels needed by the
+local simulator:
 
 | Action name | Action ID | Simulator pose |
 | --- | ---: | --- |
@@ -148,6 +149,26 @@ Supported methods include `GetFsmId`, `SetFsmId`, `Damp`, `Start`,
 `ZeroTorque`, `Move`, `StopMove`, `LowStand`, `HighStand`, `WaveHand`, and
 `ShakeHand`. `Move` is currently simulated with simple kinematic base motion;
 it is not yet Unitree's full locomotion controller.
+
+## Unitree G1 AudioClient-Shaped Code
+
+Unitree's official G1 SDK also exposes
+`unitree_sdk2py.g1.audio.g1_audio_client.AudioClient`. Cybernetic mirrors the
+method names for code compatibility:
+
+```python
+from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
+
+audio = AudioClient()
+audio.Init()
+audio.TtsMaker("hello from the simulator", 0)
+audio.SetVolume(40)
+audio.LedControl(0, 80, 255)
+```
+
+The MuJoCo simulator has no audio or LED hardware, so this records intent only.
+It keeps examples import-compatible until the provider can route the same calls
+through Unitree's official SDK2/DDS stack.
 
 ## Low-Level Unitree Channels
 

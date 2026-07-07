@@ -106,9 +106,9 @@ python3 examples/yoga_teacher.py
 ```
 
 They cover the beginner `G1Robot` API, Unitree-shaped arm actions, Unitree
-`LocoClient`-shaped locomotion, low-level `rt/lowcmd`/`rt/lowstate` control,
-named-joint target control, a behavior gallery with snapshots, and a
-higher-level scripted motion flow.
+`LocoClient`-shaped locomotion, G1 audio intent (`AudioClient`), low-level
+`rt/lowcmd`/`rt/lowstate` control, named-joint target control, a behavior
+gallery with snapshots, and a higher-level scripted motion flow.
 
 ## LocoMuJoCo Policy-Training Package
 

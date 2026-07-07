@@ -347,11 +347,15 @@ The current repo has the first narrow version of that API boundary:
 - `packages/cybernetic-robotics/` packages that same beginner experience into
   an installable Python project with `G1Robot`, `SimulatorClient`,
   `TinyWebSocket`, `SceneWorkspace`, `cyber-g1`, and simulator-backed
-  `unitree_sdk2py` modules for high-level arm, locomotion, and low-level
-  `rt/lowcmd` / `rt/lowstate` channel examples.
+  `unitree_sdk2py` modules for high-level arm, locomotion, G1 audio intent, and
+  low-level `rt/lowcmd` / `rt/lowstate` channel examples.
 - `examples/g1_raise_hand_sdk.py` uses the Unitree-shaped imports and calls
   `ExecuteAction(action_map["right hand up"])`.
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface.
+- The shim exposes `unitree_sdk2py.g1.audio.g1_audio_client.AudioClient` for
+  TTS, volume, LED, and stream method-shape compatibility. In MuJoCo this
+  records intent only; real audio hardware still belongs to the future official
+  SDK2/DDS provider.
 - `examples/g1_lowcmd_sdk.py` uses Unitree-shaped `ChannelPublisher`,
   `ChannelSubscriber`, `LowCmd_`, `LowState_`, `CRC`, and
   `MotionSwitcherClient` imports.

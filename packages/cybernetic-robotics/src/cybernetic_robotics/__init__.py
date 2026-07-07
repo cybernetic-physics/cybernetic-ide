@@ -18,11 +18,12 @@ from .config import RobotEndpoints
 from .errors import CyberneticRoboticsError, ProtocolError, SimulatorUnavailable
 from .g1 import G1Robot, G1Status, connect
 from .simulator import CameraState, SimulatorClient, SimulatorStatus
-from .unitree import LocoClient
+from .unitree import AudioClient, LocoClient
 from .websocket import TinyWebSocket
 
 __all__ = [
     "CameraState",
+    "AudioClient",
     "CyberneticRoboticsError",
     "G1Robot",
     "G1Status",

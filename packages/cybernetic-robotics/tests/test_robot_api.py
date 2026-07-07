@@ -9,6 +9,7 @@ import unittest
 from cybernetic_robotics import G1Robot, RobotEndpoints, SimulatorClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
+from unitree_sdk2py.g1.audio.g1_audio_client import AudioClient
 from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
 from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
@@ -24,6 +25,12 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "velocity": [0.0, 0.0, 0.0],
         "balance_mode": 0,
         "stand_height": None,
+    }
+    audio = {
+        "volume": 50,
+        "led": {"R": 0, "G": 0, "B": 0},
+        "tts": [],
+        "streams": {},
     }
     camera = {
         "cameraId": 0,
@@ -169,6 +176,21 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         },
                     }
                 )
+            elif command == "audio":
+                action = payload.get("action")
+                if action == "set_volume":
+                    type(self).audio["volume"] = int(payload["volume"])
+                elif action == "get_volume":
+                    pass
+                elif action == "set_rgb_led":
+                    type(self).audio["led"] = {"R": payload["R"], "G": payload["G"], "B": payload["B"]}
+                elif action == "tts":
+                    type(self).audio["tts"].append(payload)
+                elif action == "start_play":
+                    type(self).audio["streams"][payload["stream_id"]] = payload
+                elif action == "stop_play":
+                    type(self).audio["streams"].clear()
+                return self._json({"ok": True, "command": command, "audio": type(self).audio, **payload})
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -208,6 +230,12 @@ class FakeServer:
         FakeG1Handler.lowcmd_count = 0
         FakeG1Handler.last_lowcmd = {}
         FakeG1Handler.joint_targets = {}
+        FakeG1Handler.audio = {
+            "volume": 50,
+            "led": {"R": 0, "G": 0, "B": 0},
+            "tts": [],
+            "streams": {},
+        }
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -347,6 +375,32 @@ class RobotApiTests(unittest.TestCase):
             self.assertEqual(result["lowcmd"]["source"], "joint_targets")
             self.assertEqual(after["by_name"]["right_shoulder_pitch_joint"]["q"], -1.2)
             self.assertEqual(after["by_name"]["right_elbow_joint"]["q"], 0.8)
+
+    def test_unitree_style_audio_client_records_simulator_intent(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                audio = AudioClient()
+                audio.SetTimeout(2.0)
+                audio.Init()
+
+                self.assertEqual(audio.TtsMaker("hello robot", 0), 0)
+                self.assertEqual(audio.SetVolume(33), 0)
+                self.assertEqual(audio.GetVolume(), (0, {"volume": 33}))
+                self.assertEqual(audio.LedControl(1, 2, 3), 0)
+                stream_code, stream_response = audio.PlayStream("cyber", "stream-1", b"1234")
+                self.assertEqual(stream_code, 0)
+                self.assertEqual(stream_response["pcm_bytes"], 4)
+                self.assertEqual(audio.PlayStop("cyber"), 0)
+
+                self.assertEqual(FakeG1Handler.audio["tts"][0]["text"], "hello robot")
+                self.assertEqual(FakeG1Handler.audio["led"], {"R": 1, "G": 2, "B": 3})
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
 
 
 if __name__ == "__main__":

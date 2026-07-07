@@ -7,6 +7,8 @@ from .simulator import SimulatorClient
 
 LOCO_SERVICE_NAME = "sport"
 LOCO_API_VERSION = "1.0.0.0"
+AUDIO_SERVICE_NAME = "voice"
+AUDIO_API_VERSION = "1.0.0.0"
 ROBOT_API_ID_LOCO_GET_FSM_ID = 7001
 ROBOT_API_ID_LOCO_GET_FSM_MODE = 7002
 ROBOT_API_ID_LOCO_GET_BALANCE_MODE = 7003
@@ -19,6 +21,13 @@ ROBOT_API_ID_LOCO_SET_SWING_HEIGHT = 7103
 ROBOT_API_ID_LOCO_SET_STAND_HEIGHT = 7104
 ROBOT_API_ID_LOCO_SET_VELOCITY = 7105
 ROBOT_API_ID_LOCO_SET_ARM_TASK = 7106
+ROBOT_API_ID_AUDIO_TTS = 1001
+ROBOT_API_ID_AUDIO_ASR = 1002
+ROBOT_API_ID_AUDIO_START_PLAY = 1003
+ROBOT_API_ID_AUDIO_STOP_PLAY = 1004
+ROBOT_API_ID_AUDIO_GET_VOLUME = 1005
+ROBOT_API_ID_AUDIO_SET_VOLUME = 1006
+ROBOT_API_ID_AUDIO_SET_RGB_LED = 1010
 
 _FSM_NAMES = {
     0: "zero_torque",
@@ -224,3 +233,87 @@ class LocoClient:
 
 def _code_and_data(response: dict[str, Any], data: Any):
     return (0, data) if response.get("ok") else (-1, None)
+
+
+class AudioClient:
+    """Simulator-backed subset of Unitree's official G1 `AudioClient`.
+
+    MuJoCo has no speaker, microphone, or LED hardware. This shim preserves the
+    official SDK2 Python call shape and records intent through the local
+    GameControl endpoint when available. If the current simulator image does not
+    implement the optional `audio` command yet, calls still succeed locally and
+    expose the recorded metadata through `last_response`.
+    """
+
+    def __init__(self):
+        self.service_name = AUDIO_SERVICE_NAME
+        self.api_version: str | None = None
+        self.timeout = 1.0
+        self.tts_index = 0
+        self.volume = 50
+        self.led = {"R": 0, "G": 0, "B": 0}
+        self.last_response: dict[str, Any] | None = None
+        self._simulator = SimulatorClient.from_env(timeout=self.timeout)
+
+    def SetTimeout(self, timeout: float):  # noqa: N802 - match Unitree SDK2 API.
+        self.timeout = float(timeout)
+        self._simulator.timeout = self.timeout
+
+    def Init(self):  # noqa: N802 - match Unitree SDK2 API.
+        self.api_version = AUDIO_API_VERSION
+        self._registered_apis = {
+            ROBOT_API_ID_AUDIO_TTS,
+            ROBOT_API_ID_AUDIO_ASR,
+            ROBOT_API_ID_AUDIO_START_PLAY,
+            ROBOT_API_ID_AUDIO_STOP_PLAY,
+            ROBOT_API_ID_AUDIO_GET_VOLUME,
+            ROBOT_API_ID_AUDIO_SET_VOLUME,
+            ROBOT_API_ID_AUDIO_SET_RGB_LED,
+        }
+
+    def TtsMaker(self, text: str, speaker_id: int):  # noqa: N802 - match Unitree SDK2 API.
+        self.tts_index += 1
+        response = self._call_audio("tts", index=self.tts_index, text=str(text), speaker_id=int(speaker_id))
+        return self._code(response)
+
+    def GetVolume(self):  # noqa: N802 - match Unitree SDK2 API.
+        response = self._call_audio("get_volume", volume=self.volume)
+        volume = response.get("volume", self.volume)
+        return _code_and_data(response, {"volume": volume})
+
+    def SetVolume(self, volume: int):  # noqa: N802 - match Unitree SDK2 API.
+        self.volume = int(volume)
+        return self._code(self._call_audio("set_volume", volume=self.volume))
+
+    def LedControl(self, R: int, G: int, B: int):  # noqa: N802,N803 - match Unitree SDK2 API.
+        self.led = {"R": int(R), "G": int(G), "B": int(B)}
+        return self._code(self._call_audio("set_rgb_led", **self.led))
+
+    def PlayStream(self, app_name: str, stream_id: str, pcm_data: bytes):  # noqa: N802 - match Unitree SDK2 API.
+        response = self._call_audio(
+            "start_play",
+            app_name=str(app_name),
+            stream_id=str(stream_id),
+            pcm_bytes=len(bytes(pcm_data)),
+        )
+        return self._code(response), response
+
+    def PlayStop(self, app_name: str):  # noqa: N802 - match Unitree SDK2 API.
+        return self._code(self._call_audio("stop_play", app_name=str(app_name)))
+
+    def _call_audio(self, action: str, **fields: Any) -> dict[str, Any]:
+        payload = {"action": action, **fields}
+        try:
+            response = self._simulator.command("audio", **payload)
+            if response.get("ok"):
+                self.last_response = response
+                if action in {"get_volume", "set_volume"} and "volume" in response:
+                    self.volume = int(response["volume"])
+                return response
+        except Exception as error:  # noqa: BLE001 - simulator audio is optional.
+            payload["transport_error"] = str(error)
+        self.last_response = {"ok": True, "simulated": True, "service": AUDIO_SERVICE_NAME, **payload}
+        return self.last_response
+
+    def _code(self, response: dict[str, Any]) -> int:
+        return 0 if response.get("ok") else -1
