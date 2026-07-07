@@ -106,6 +106,7 @@ Or use the CLI:
 ```sh
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 safety-check
 cyber-g1 safety-stop
 ```
 
@@ -536,6 +537,10 @@ The current repo has the first narrow version of that API boundary:
 - `examples/g1_safety_stop.py` demonstrates the shared simulator stop path:
   release motion-switcher mode, damp locomotion, neutralize the arm pose, pause
   the simulator, and save an after-stop snapshot.
+- `cyber-g1 safety-check`, `G1Robot.safety_check()`, and MCP
+  `g1_safety_check` expose read-only Unitree G1-inspired termination checks
+  from `common/terminations.hpp`: bad orientation, joint velocity, angular
+  velocity, motor temperature, stale lowcmd, and fall state.
 - `examples/g1_agent_debug_loop.py` runs one behavior, captures before/after
   screenshots, status, `rt/lowstate`, named joint state, and the safety-stop
   result into `.runtime/g1-agent-debug-loop/debug_bundle.json` for agent review.

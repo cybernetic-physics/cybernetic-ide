@@ -109,6 +109,11 @@ It also exposes `g1_loco_command` for common `LocoClient`-style commands:
 `g1_agv_command` mirrors the `AgvClient` surface for agents that are reading
 or writing newer G1 AGV-style examples.
 
+`g1_safety_check` mirrors the intent of Unitree's
+`include/unitree/robot/g1/common/terminations.hpp` in a read-only JSON form. It
+checks orientation, joint velocity, angular velocity, motor temperatures,
+lowcmd staleness, and simulator fall state before an agent issues more motion.
+
 For lower-level inspection and control, agents can use:
 
 - `g1_lowstate`: read synthesized `rt/lowstate` telemetry.

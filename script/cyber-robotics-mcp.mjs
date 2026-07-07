@@ -740,6 +740,9 @@ const tools = [
   tool("g1_lowstate", "Read simulator-backed Unitree rt/lowstate motor and IMU telemetry.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("g1_safety_check", "Evaluate Unitree G1-inspired lowstate safety checks before issuing more motion.", {}, [], {
+    readOnlyHint: true,
+  }),
   tool("g1_joint_state", "Read named G1 joint state with motor-index mapping and limits.", {}, [], {
     readOnlyHint: true,
   }),
@@ -1073,6 +1076,8 @@ async function callTool(name, args) {
       return textResult(await executeG1MotionSwitcher(args));
     case "g1_lowstate":
       return textResult(await getJson("/lowstate"));
+    case "g1_safety_check":
+      return textResult(await safetyCheck());
     case "g1_joint_state":
       return textResult(await getJson("/joint_state"));
     case "g1_apply_joint_targets":
@@ -1475,6 +1480,147 @@ async function validateBehavior(args) {
 
 function addCheck(checks, name, ok, message, extra = {}) {
   checks.push({ name, ok: Boolean(ok), message, ...extra });
+}
+
+async function safetyCheck() {
+  const [status, lowstate] = await Promise.all([getJson("/status"), getJson("/lowstate")]);
+  const simulation = status?.simulation && typeof status.simulation === "object" ? status.simulation : {};
+  const imu = lowstate?.imu_state && typeof lowstate.imu_state === "object" ? lowstate.imu_state : {};
+  const motors = Array.isArray(lowstate?.motor_state) ? lowstate.motor_state : [];
+  const lowcmd = lowstate?.lowcmd && typeof lowstate.lowcmd === "object" ? lowstate.lowcmd : {};
+  const limits = {
+    orientation_limit_rad: 1.0,
+    joint_velocity_limit: 10.0,
+    angular_velocity_limit: 6.0,
+    motor_casing_temp_limit: 85.0,
+    motor_winding_temp_limit: 120.0,
+  };
+  const checks = [];
+  const orientationAngle = orientationAngleFromQuaternion(imu.quaternion);
+  addCheck(
+    checks,
+    "bad_orientation",
+    orientationAngle === null || orientationAngle <= limits.orientation_limit_rad,
+    orientationAngle === null
+      ? "orientation unavailable"
+      : `orientation angle ${orientationAngle.toFixed(3)} rad within ${limits.orientation_limit_rad.toFixed(3)} rad`,
+    { value: orientationAngle, limit: limits.orientation_limit_rad, source: "unitree_g1_terminations.bad_orientation" },
+  );
+  const maxJointVelocity = maxAbsMotorField(motors, "dq");
+  addCheck(
+    checks,
+    "joint_vel_out_of_limit",
+    maxJointVelocity === null || maxJointVelocity <= limits.joint_velocity_limit,
+    maxJointVelocity === null
+      ? "joint velocities unavailable"
+      : `max joint velocity ${maxJointVelocity.toFixed(3)} within ${limits.joint_velocity_limit.toFixed(3)}`,
+    { value: maxJointVelocity, limit: limits.joint_velocity_limit, source: "unitree_g1_terminations.joint_vel_out_of_limit" },
+  );
+  const maxAngularVelocity = maxAbsArray(imu.gyroscope);
+  addCheck(
+    checks,
+    "ang_vel_out_of_limit",
+    maxAngularVelocity === null || maxAngularVelocity <= limits.angular_velocity_limit,
+    maxAngularVelocity === null
+      ? "angular velocity unavailable"
+      : `max angular velocity ${maxAngularVelocity.toFixed(3)} within ${limits.angular_velocity_limit.toFixed(3)}`,
+    { value: maxAngularVelocity, limit: limits.angular_velocity_limit, source: "unitree_g1_terminations.ang_vel_out_of_limit" },
+  );
+  const maxCasingTemp = maxTemperature(motors, 0);
+  addCheck(
+    checks,
+    "motor_casing_overheat",
+    maxCasingTemp === null || maxCasingTemp <= limits.motor_casing_temp_limit,
+    maxCasingTemp === null
+      ? "motor casing temperatures unavailable"
+      : `max casing temperature ${maxCasingTemp.toFixed(1)}C within ${limits.motor_casing_temp_limit.toFixed(1)}C`,
+    { value: maxCasingTemp, limit: limits.motor_casing_temp_limit, source: "unitree_g1_terminations.motor_casing_overheat" },
+  );
+  const maxWindingTemp = maxTemperature(motors, 1);
+  addCheck(
+    checks,
+    "motor_winding_overheat",
+    maxWindingTemp === null || maxWindingTemp <= limits.motor_winding_temp_limit,
+    maxWindingTemp === null
+      ? "motor winding temperatures unavailable"
+      : `max winding temperature ${maxWindingTemp.toFixed(1)}C within ${limits.motor_winding_temp_limit.toFixed(1)}C`,
+    { value: maxWindingTemp, limit: limits.motor_winding_temp_limit, source: "unitree_g1_terminations.motor_winding_overheat" },
+  );
+  addCheck(
+    checks,
+    "lowcmd_stale",
+    lowcmd.stale !== true,
+    lowcmd.stale === true ? "lowcmd watchdog reports stale command" : "lowcmd watchdog is not stale",
+    { value: lowcmd.stale === true, source: "cybernetic_simulator.lowcmd_watchdog" },
+  );
+  addCheck(
+    checks,
+    "fallen",
+    simulation.fallen !== true,
+    simulation.fallen === true ? "simulator reports robot fallen" : "simulator does not report a fall",
+    { value: simulation.fallen === true, source: "cybernetic_simulator.status" },
+  );
+  const failedChecks = checks.filter((check) => !check.ok);
+  return {
+    ok: failedChecks.length === 0,
+    safe_to_command: failedChecks.length === 0,
+    source: "unitree_g1_terminations_json_lowstate",
+    checked_at: new Date().toISOString(),
+    limits,
+    checks,
+    failed_checks: failedChecks,
+    recommendation: failedChecks.length === 0 ? "continue" : "call safety_stop before issuing more motion",
+  };
+}
+
+function orientationAngleFromQuaternion(value) {
+  if (!Array.isArray(value) || value.length < 4) {
+    return null;
+  }
+  let [w, x, y, z] = value.slice(0, 4).map(Number);
+  if (![w, x, y, z].every(Number.isFinite)) {
+    return null;
+  }
+  const norm = Math.sqrt(w * w + x * x + y * y + z * z);
+  if (norm <= 0) {
+    return null;
+  }
+  w /= norm;
+  x /= norm;
+  y /= norm;
+  z /= norm;
+  const projectedZ = Math.max(-1, Math.min(1, -1 + 2 * (x * x + y * y)));
+  return Math.acos(Math.max(-1, Math.min(1, -projectedZ)));
+}
+
+function maxAbsMotorField(motors, field) {
+  const values = motors
+    .map((motor) => Number(motor?.[field]))
+    .filter(Number.isFinite)
+    .map(Math.abs);
+  return values.length > 0 ? Math.max(...values) : null;
+}
+
+function maxAbsArray(value) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const values = value.map(Number).filter(Number.isFinite).map(Math.abs);
+  return values.length > 0 ? Math.max(...values) : null;
+}
+
+function maxTemperature(motors, index) {
+  const values = [];
+  for (const motor of motors) {
+    const temperature = motor?.temperature;
+    if (Array.isArray(temperature) && temperature.length > index) {
+      const value = Number(temperature[index]);
+      if (Number.isFinite(value)) {
+        values.push(value);
+      }
+    }
+  }
+  return values.length > 0 ? Math.max(...values) : null;
 }
 
 async function command(body) {
@@ -2067,6 +2213,7 @@ function roboticsToolReference() {
       toolReference("g1_execute_action", "robot-motion", "Applies a high-level G1 pose.", "Simulator running; use safety_stop afterward."),
       toolReference("g1_loco_command", "robot-motion", "Changes locomotion FSM or velocity.", "Simulator running; prefer small velocities and safety_stop afterward."),
       toolReference("g1_agv_command", "robot-motion", "Runs Unitree G1 AgvClient-shaped move or height intent.", "Simulator running; lateral AGV velocity is ignored."),
+      toolReference("g1_safety_check", "read", "Evaluates Unitree-inspired termination checks.", "Run before and after deliberate motion."),
       toolReference("g1_apply_joint_targets", "robot-motion", "Publishes simulator-backed lowcmd targets.", "Simulator running with joint_state endpoint."),
       toolReference("g1_lowcmd", "robot-motion", "Publishes low-level motor commands.", "Advanced use only; validate joint indices and use safety_stop."),
       toolReference("g1_lowstate", "read", "Reads rt/lowstate-shaped telemetry.", "Simulator running."),

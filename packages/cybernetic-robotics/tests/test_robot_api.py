@@ -19,6 +19,7 @@ from cybernetic_robotics import (
     SimulatorClient,
     UnitreeSession,
     UnitreeTransportConfig,
+    evaluate_lowstate_safety,
 )
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.comm.motion_switcher.motion_switcher_client import MotionSwitcherClient
@@ -117,7 +118,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "accelerometer": [0.0, 0.0, 0.0],
                     },
                     "motor_state": [
-                        {"mode": 1, "q": 0.1 * index, "dq": 0.0, "tau_est": 0.0}
+                        {"mode": 1, "q": 0.1 * index, "dq": 0.0, "tau_est": 0.0, "temperature": [35, 40]}
                         for index in range(35)
                     ],
                     "wireless_remote": [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
@@ -392,6 +393,47 @@ class RobotApiTests(unittest.TestCase):
             self.assertTrue(status.paused)
             self.assertEqual(FakeG1Handler.loco["fsm_mode"], "damp")
             self.assertEqual(FakeG1Handler.motion_switcher["name"], "")
+
+    def test_beginner_robot_api_safety_check_reports_safe_lowstate(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            robot = G1Robot.connect(endpoints=endpoints)
+
+            result = robot.safety_check()
+
+            self.assertTrue(result["ok"])
+            self.assertTrue(result["safe_to_command"])
+            self.assertEqual(result["recommendation"], "continue")
+            self.assertFalse(result["failed_checks"])
+            self.assertIn("bad_orientation", {check["name"] for check in result["checks"]})
+
+    def test_safety_check_flags_unitree_termination_conditions(self):
+        lowstate = {
+            "imu_state": {
+                "quaternion": [0.0, 1.0, 0.0, 0.0],
+                "gyroscope": [0.0, 7.5, 0.0],
+            },
+            "motor_state": [
+                {"dq": 12.0, "temperature": [90, 130]},
+                {"dq": 0.0, "temperature": [35, 40]},
+            ],
+            "lowcmd": {"stale": True},
+        }
+        status = {"simulation": {"fallen": True}}
+
+        result = evaluate_lowstate_safety(lowstate, status=status)
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["safe_to_command"])
+        failed = {check["name"] for check in result["failed_checks"]}
+        self.assertIn("bad_orientation", failed)
+        self.assertIn("joint_vel_out_of_limit", failed)
+        self.assertIn("ang_vel_out_of_limit", failed)
+        self.assertIn("motor_casing_overheat", failed)
+        self.assertIn("motor_winding_overheat", failed)
+        self.assertIn("lowcmd_stale", failed)
+        self.assertIn("fallen", failed)
+        self.assertEqual(result["recommendation"], "call safety_stop before issuing more motion")
 
     def test_power_user_client_can_drive_camera_and_commands(self):
         with FakeServer() as fake:

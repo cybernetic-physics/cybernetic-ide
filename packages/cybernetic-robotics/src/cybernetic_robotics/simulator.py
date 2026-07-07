@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 from .config import RobotEndpoints
 from .errors import ProtocolError, SimulatorUnavailable
+from .safety import evaluate_lowstate_safety
 
 
 JsonObject = dict[str, Any]
@@ -179,6 +180,11 @@ class SimulatorClient:
 
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")
+
+    def safety_check(self, **limits: Any) -> JsonObject:
+        status = self.status().raw
+        lowstate = self.lowstate()
+        return evaluate_lowstate_safety(lowstate, status=status, **limits)
 
     def safety_stop(self) -> JsonObject:
         """Best-effort simulator stop: release motion, damp, neutral, pause."""

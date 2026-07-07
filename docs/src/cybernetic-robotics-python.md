@@ -389,6 +389,7 @@ scene_add_object
 scene_list_objects
 scene_remove_object
 g1_agv_command
+g1_safety_check
 g1_lowstate
 g1_joint_state
 g1_apply_joint_targets
@@ -402,6 +403,11 @@ to compare before/after views across multiple steps.
 simulator is ready, the robot is not fallen, the render cache is healthy,
 lowstate telemetry is available, recent lowcmds are fresh when applicable, and
 optionally writes a snapshot for visual evidence.
+`g1_safety_check` is the quick pre-motion check: it reads `/status` and
+`/lowstate`, then applies Unitree G1-inspired termination predicates for bad
+orientation, high joint velocity, high angular velocity, motor temperature,
+stale lowcmd, and simulator fall state. It is read-only; use `safety_stop` to
+actually damp, neutralize, and pause the simulator.
 `unitree_session_status` answers the broader connection question: which
 transport is selected, which DDS domain/interface would be used, whether the
 current path is implemented, whether the local simulator is reachable, and how

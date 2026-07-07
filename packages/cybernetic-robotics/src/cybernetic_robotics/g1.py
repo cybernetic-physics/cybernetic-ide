@@ -116,6 +116,11 @@ class G1Robot:
 
         return self.sim.safety_stop()
 
+    def safety_check(self, **limits: Any) -> dict[str, Any]:
+        """Read lowstate and evaluate Unitree-inspired safety checks."""
+
+        return self.sim.safety_check(**limits)
+
     def pose(self, name: str, **kwargs: Any) -> dict[str, Any]:
         return self.sim.pose(name, **kwargs)
 

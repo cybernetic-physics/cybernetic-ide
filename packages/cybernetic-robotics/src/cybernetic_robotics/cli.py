@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("pause")
     subcommands.add_parser("resume")
     subcommands.add_parser("reset")
+    subcommands.add_parser("safety-check")
     subcommands.add_parser("safety-stop")
 
     step = subcommands.add_parser("step")
@@ -89,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         return _print(robot.resume())
     if args.command == "reset":
         return _print(robot.reset())
+    if args.command == "safety-check":
+        return _print(robot.safety_check())
     if args.command == "safety-stop":
         return _print(robot.safety_stop())
     if args.command == "step":

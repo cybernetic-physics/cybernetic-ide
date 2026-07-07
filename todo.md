@@ -272,6 +272,11 @@ Tasks:
   `SimulatorClient.safety_stop()`, `cyber-g1 safety-stop`, and MCP
   `safety_stop` step reports. The simulator stop path releases motion mode,
   damps locomotion, neutralizes the pose, and pauses.
+- Done: add read-only Unitree G1-inspired safety checks through
+  `G1Robot.safety_check()`, `SimulatorClient.safety_check()`,
+  `cyber-g1 safety-check`, and MCP `g1_safety_check`, covering bad
+  orientation, high joint velocity, high angular velocity, motor temperature,
+  stale lowcmd, and simulator fall state.
 - Document what each stop path sends: `StopMove`, damping, zero torque, or
   pause-only simulator behavior.
 - Add structured warnings to examples that could be unsafe on hardware.

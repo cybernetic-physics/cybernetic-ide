@@ -56,6 +56,7 @@ with G1Robot.connect() as robot:
 cyber-g1 status
 cyber-g1 diagnostics
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
+cyber-g1 safety-check
 cyber-g1 safety-stop
 cyber-g1 official status
 cyber-g1 official raise-hand
@@ -70,6 +71,10 @@ domain/interface, simulator reachability, and `rt/lowcmd` / `rt/lowstate`
 freshness. With `CYBER_UNITREE_TRANSPORT=dds` in simulator mode it also runs
 the official sidecar status probe and reports SDK2 import, CycloneDDS domain,
 channel creation, and official MuJoCo peer readiness.
+`cyber-g1 safety-check` is read-only and applies Unitree G1-inspired
+termination checks to the current simulator lowstate before you issue more
+motion. Use `cyber-g1 safety-stop` when you want to actually damp, neutralize,
+and pause.
 
 The same data is available from Python:
 

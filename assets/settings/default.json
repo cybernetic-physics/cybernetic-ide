@@ -1210,6 +1210,7 @@
               "g1_loco_command": true,
               "g1_agv_command": true,
               "g1_motion_switcher": true,
+              "g1_safety_check": true,
               "g1_lowstate": true,
               "g1_joint_state": true,
               "g1_apply_joint_targets": true,
