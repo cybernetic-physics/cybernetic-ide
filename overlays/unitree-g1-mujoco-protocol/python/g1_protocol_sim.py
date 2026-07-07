@@ -69,25 +69,28 @@ NAMED_POSES = {
     # hips for forward bends, which swung the legs backward instead — one of
     # the reasons these poses toppled under PD hold.
     "forward_fold": {
-        "base_pitch": 0.5,
+        # torso pitch 0.87 rad (~50 deg) stays under the fall detector's
+        # torso-up-axis 0.5 threshold; the feet sit ~14 cm ahead of the hips
+        # (legs world tilt -0.2) so the hips counterweight the folded torso
+        "base_pitch": 0.35,
         "waist_pitch_joint": 0.52,
-        "left_hip_pitch_joint": -0.42,
-        "right_hip_pitch_joint": -0.42,
+        "left_hip_pitch_joint": -0.55,
+        "right_hip_pitch_joint": -0.55,
         "left_knee_joint": 0.12,
         "right_knee_joint": 0.12,
-        "left_ankle_pitch_joint": -0.2,
-        "right_ankle_pitch_joint": -0.2,
-        "left_shoulder_pitch_joint": -1.1,
-        "right_shoulder_pitch_joint": -1.1,
+        "left_ankle_pitch_joint": 0.08,
+        "right_ankle_pitch_joint": 0.08,
+        "left_shoulder_pitch_joint": -1.2,
+        "right_shoulder_pitch_joint": -1.2,
         "left_elbow_joint": 0.1,
         "right_elbow_joint": 0.1,
     },
     "chair": {
-        "waist_pitch_joint": 0.45,
-        "left_hip_pitch_joint": -0.8,
-        "right_hip_pitch_joint": -0.8,
-        "left_knee_joint": 0.9,
-        "right_knee_joint": 0.9,
+        "waist_pitch_joint": 0.5,
+        "left_hip_pitch_joint": -0.75,
+        "right_hip_pitch_joint": -0.75,
+        "left_knee_joint": 0.85,
+        "right_knee_joint": 0.85,
         "left_ankle_pitch_joint": -0.1,
         "right_ankle_pitch_joint": -0.1,
         "left_shoulder_pitch_joint": -1.7,
@@ -130,8 +133,9 @@ NAMED_POSES = {
         "right_shoulder_roll_joint": -1.4,
     },
     "goddess": {
-        "left_hip_roll_joint": 0.55,
-        "right_hip_roll_joint": -0.55,
+        "waist_pitch_joint": 0.2,
+        "left_hip_roll_joint": 0.45,
+        "right_hip_roll_joint": -0.45,
         "left_hip_pitch_joint": -0.5,
         "right_hip_pitch_joint": -0.5,
         "left_knee_joint": 0.5,

@@ -294,11 +294,12 @@ Open questions:
 
 - Partially answered: `packages/g1-yoga-rl/` now scaffolds the LocoMuJoCo path
   by projecting Cybernetic's yoga pose registry into LocoMuJoCo's Unitree G1
-  joint set and providing trajectory/speed benchmark scripts.
+  joint set and providing trajectory, stability, tuning, speed benchmark, and
+  experimental PPOJax mimic-training/export scripts.
 - Partially answered: `g1-yoga-analyze-stability` now shows the easy curriculum
-  (`mountain`, `upward_salute`, `chair`, `warrior_one`, `warrior_two`,
-  `namaste`) has positive static support margins, while forward fold, goddess,
-  and tree still require a balance controller.
+  now includes every yoga pose except `tree` after the latest foot and torso
+  pose tuning. `tree` remains the single-support stretch case that still
+  requires a balance controller.
 - Should the next balance controller use official Unitree examples first, or a
   learned policy path from Unitree RL Gym / LocoMuJoCo?
 - What is the smallest controller that can hold a yoga pose without toppling?

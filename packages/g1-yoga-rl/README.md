@@ -53,6 +53,25 @@ Check that LocoMuJoCo's imitation factory accepts a generated trajectory:
 g1-yoga-check-imitation --traj .runtime/g1-yoga-rl/yoga_trajectory.npz
 ```
 
+Start an experimental PPOJax mimic-training run on the generated trajectory:
+
+```sh
+g1-yoga-train \
+  --traj .runtime/g1-yoga-rl/yoga_trajectory.npz \
+  --out .runtime/g1-yoga-rl/runs/smoke \
+  --total-timesteps 1000000 \
+  --num-envs 64
+```
+
+Export a trained PPOJax agent to a plain NumPy policy bundle for future
+simulator deployment:
+
+```sh
+g1-yoga-export \
+  --agent .runtime/g1-yoga-rl/runs/smoke/PPOJax_saved.pkl \
+  --out .runtime/g1-yoga-rl/policies/yoga_policy.npz
+```
+
 Render one frame per pose hold for visual QA:
 
 ```sh
@@ -66,6 +85,13 @@ Analyze the static support margin for each source pose before training:
 ```sh
 g1-yoga-analyze-stability \
   --render-dir .runtime/g1-yoga-rl/stability-frames
+```
+
+Numerically solve planted-foot ankle pitch/roll and selected lunge reach joints
+when tuning the simulator's `NAMED_POSES` registry:
+
+```sh
+g1-yoga-tune-feet
 ```
 
 Benchmark local stepping speed:

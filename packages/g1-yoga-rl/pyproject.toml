@@ -14,6 +14,7 @@ dependencies = []
 locomujoco = [
   "jax",
   "numpy",
+  "omegaconf",
 ]
 
 [project.scripts]
@@ -24,6 +25,8 @@ g1-yoga-check-imitation = "g1_yoga_rl.check_imitation_env:main"
 g1-yoga-render-frames = "g1_yoga_rl.render_traj_frames:main"
 g1-yoga-analyze-stability = "g1_yoga_rl.analyze_pose_stability:main"
 g1-yoga-tune-feet = "g1_yoga_rl.tune_pose_feet:main"
+g1-yoga-train = "g1_yoga_rl.train_mimic:main"
+g1-yoga-export = "g1_yoga_rl.export_policy:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["g1_yoga_rl"]

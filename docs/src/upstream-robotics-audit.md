@@ -123,6 +123,10 @@ explicit and reproducible:
   projected yoga sequence when LocoMuJoCo is installed.
 - `g1-yoga-analyze-stability`: computes per-pose foot clearance, foot tilt, and
   center-of-mass support margin, with optional renders for visual QA.
+- `g1-yoga-train`: starts an experimental PPOJax mimic-training run from a
+  generated trajectory.
+- `g1-yoga-export`: exports a trained PPOJax actor to a plain NumPy `.npz`
+  bundle intended for future Docker-simulator deployment.
 - `g1-yoga-bench-env`: benchmarks local CPU/MJX stepping speed to decide
   whether to use JAX mimic training or a simpler CPU fallback.
 
@@ -130,8 +134,7 @@ This package is intentionally dependency-light at import time. Scripts import
 LocoMuJoCo, JAX, NumPy, and MuJoCo only when the relevant command is run inside
 the dedicated training environment.
 
-The current analyzer output confirms the curriculum split: `mountain`,
-`upward_salute`, `chair`, `warrior_one`, `warrior_two`, and `namaste` have
-positive support margins, while `forward_fold`, `goddess`, and `tree` still
-need a learned or whole-body balance controller rather than pure static joint
-targets.
+The current analyzer output confirms the curriculum split: every pose except
+`tree` has a positive static support margin after the latest foot and torso
+pose tuning. `tree` remains a single-support stretch goal that still needs a
+learned or whole-body balance controller rather than pure static joint targets.
