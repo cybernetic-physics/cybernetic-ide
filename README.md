@@ -329,6 +329,9 @@ ad hoc scripts first. The default tool surface includes:
 - simulator lifecycle: `sim_prepare_runtime`, `sim_start`, `sim_stop`,
   `sim_restart`, `sim_status`, `sim_pause`, `sim_resume`, `sim_reset`, and
   `sim_step`;
+- command-state debugging: `robot_command_state`, which summarizes the active
+  inferred controller, pose, locomotion state, lowcmd topic/watchdog/CRC, hand
+  SDK intent, and Dex3 hand intent from `/status` plus `/lowstate`;
 - simulator validation: `sim_validate_behavior`, which checks ready/fallen
   state, render health, lowstate availability, lowcmd freshness, and optional
   snapshot evidence after a script runs;
@@ -439,6 +442,11 @@ Use `viewer_camera_bookmark_save` before a behavior run when you want exact
 before/after evidence from the same free-camera angle; bookmarks are stored in
 `.runtime/robot-viewer-camera-bookmarks.json` and can be restored with
 `viewer_camera_bookmark_apply`.
+
+Use `robot_command_state` before explaining or debugging motion. It gives the
+short controller answer that broad status dumps hide: whether the simulator is
+currently pose-driven, locomotion-driven, lowcmd-driven, stale-lowcmd, hand SDK,
+or Dex3 intent, plus the key timestamps and mode/CRC fields.
 
 Useful environment variables:
 

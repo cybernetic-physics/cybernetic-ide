@@ -59,6 +59,20 @@ python3 my_g1_script.py
 The context manager pauses the simulator when the block exits. That keeps
 beginner experiments from leaving a control script running by accident.
 
+When a behavior looks wrong, ask for command state before guessing:
+
+```python
+state = robot.command_state()
+print(state["inferred_controller"])
+print(state["lowcmd"]["active"], state["lowcmd"]["stale"])
+print(state["loco"]["fsm_mode"], state["pose"])
+```
+
+The same summary is available as `cyber-g1 command-state` and MCP
+`robot_command_state`. It is read-only and condenses `/status` plus
+`/lowstate` into the active pose, locomotion, lowcmd, hand SDK, and Dex3
+control facts agents usually need first.
+
 The repo also includes a ready-to-run version that exercises both the beginner
 API and the Unitree SDK-shaped shim:
 
@@ -604,6 +618,7 @@ sim_policy_bundle_info
 sim_policy_status
 sim_policy_start
 sim_policy_stop
+robot_command_state
 upstream_robotics_audit
 unitree_provider_status
 unitree_session_status

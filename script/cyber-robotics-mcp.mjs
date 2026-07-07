@@ -189,6 +189,9 @@ const tools = [
   tool("sim_status", "Read simulator, Docker, render-cache, and robot status.", {}, [], {
     readOnlyHint: true,
   }),
+  tool("robot_command_state", "Summarize the active simulator command/controller state for debugging.", {}, [], {
+    readOnlyHint: true,
+  }),
   tool("unitree_session_status", "Read Unitree G1 session transport, DDS, simulator, and topic diagnostics.", {}, [], {
     readOnlyHint: true,
   }),
@@ -1607,6 +1610,8 @@ async function callTool(name, args) {
       return textResult(runChecked("docker", [...composeArgs(), "restart", DEFAULT_CONTAINER], { timeoutMs: 120000 }));
     case "sim_status":
       return textResult(await simStatus());
+    case "robot_command_state":
+      return textResult(await robotCommandState());
     case "unitree_session_status":
       return textResult(await unitreeSessionStatus());
     case "unitree_provider_status":
@@ -1835,6 +1840,120 @@ async function simStatus() {
     docker: inspect.status === 0 ? inspect.stdout.trim() : inspect.stderr.trim(),
     env,
     status,
+  };
+}
+
+async function robotCommandState() {
+  const status = await getJson("/status");
+  const lowstate = await getJson("/lowstate").catch((error) => ({ error: error.message }));
+  return commandStateFromPayload(status, lowstate);
+}
+
+function commandStateFromPayload(status, lowstate) {
+  const simulation = status.simulation && typeof status.simulation === "object" ? status.simulation : {};
+  const lowcmd = simulation.lowcmd && typeof simulation.lowcmd === "object" ? simulation.lowcmd : {};
+  const lowstateLowcmd = lowstate.lowcmd && typeof lowstate.lowcmd === "object" ? lowstate.lowcmd : {};
+  const effectiveLowcmd = { ...lowstateLowcmd, ...lowcmd };
+  const loco = simulation.loco && typeof simulation.loco === "object" ? simulation.loco : {};
+  const motionSwitcher = simulation.motion_switcher && typeof simulation.motion_switcher === "object" ? simulation.motion_switcher : {};
+  const handSdk = simulation.hand_sdk && typeof simulation.hand_sdk === "object" ? simulation.hand_sdk : {};
+  const dex3 = simulation.dex3 && typeof simulation.dex3 === "object" ? simulation.dex3 : {};
+  const dex3Hands = dex3.hands && typeof dex3.hands === "object" ? dex3.hands : {};
+  const velocity = Array.isArray(loco.velocity) ? loco.velocity : [];
+  const lowcmdActive = effectiveLowcmd.active === true;
+  const lowcmdStale = effectiveLowcmd.stale === true;
+  const moving = velocity.some((value) => Math.abs(Number(value) || 0) > 1e-6);
+  const handIntent = String(handSdk.intent || "idle");
+  const dex3ActiveHands = Object.entries(dex3Hands)
+    .filter(([, state]) => state && typeof state === "object" && !["", "idle", "hold"].includes(String(state.intent || "idle")))
+    .map(([hand]) => hand);
+  const pose = simulation.pose ?? null;
+  const controlMode = simulation.control_mode || null;
+
+  let inferredController = "idle";
+  if (lowcmdActive && !lowcmdStale) {
+    inferredController = "lowcmd";
+  } else if (lowcmdStale) {
+    inferredController = "lowcmd_stale";
+  } else if (moving) {
+    inferredController = "locomotion";
+  } else if (!["", "idle", "hold"].includes(handIntent)) {
+    inferredController = "hand_sdk";
+  } else if (dex3ActiveHands.length > 0) {
+    inferredController = "dex3";
+  } else if (pose) {
+    inferredController = "pose";
+  }
+
+  return {
+    ok: status.ready === true,
+    captured_at_unix: Date.now() / 1000,
+    inferred_controller: inferredController,
+    inference_source: "simulator_status_lowstate",
+    ready: status.ready === true,
+    paused: simulation.paused === true,
+    fallen: simulation.fallen === true,
+    pose,
+    control_mode: controlMode,
+    loco: {
+      fsm_id: loco.fsm_id ?? null,
+      fsm_mode: loco.fsm_mode ?? null,
+      velocity,
+      velocity_until: loco.velocity_until ?? null,
+      balance_mode: loco.balance_mode ?? null,
+      stand_height: loco.stand_height ?? null,
+      swing_height: loco.swing_height ?? null,
+      phase: loco.phase ?? null,
+      continuous_move: loco.continuous_move === true,
+      speed_mode: loco.speed_mode ?? null,
+      control_owner: loco.control_owner ?? null,
+      arm_task_id: loco.arm_task_id ?? null,
+    },
+    motion_switcher: motionSwitcher,
+    lowcmd: {
+      topic: effectiveLowcmd.topic ?? null,
+      source: effectiveLowcmd.source ?? null,
+      active: lowcmdActive,
+      stale: lowcmdStale,
+      age_seconds: effectiveLowcmd.age_seconds ?? null,
+      watchdog_seconds: effectiveLowcmd.watchdog_seconds ?? null,
+      received_at: effectiveLowcmd.received_at ?? null,
+      expires_at: effectiveLowcmd.expires_at ?? null,
+      motor_cmd_count: effectiveLowcmd.motor_cmd_count ?? null,
+      applied_position_targets: effectiveLowcmd.applied_position_targets ?? null,
+      accepted_indices: effectiveLowcmd.accepted_indices ?? null,
+      ignored_indices: effectiveLowcmd.ignored_indices ?? null,
+      clamped_indices: effectiveLowcmd.clamped_indices ?? null,
+      mode_pr: lowstate.mode_pr ?? effectiveLowcmd.mode_pr ?? null,
+      mode_machine: lowstate.mode_machine ?? effectiveLowcmd.mode_machine ?? null,
+      crc: lowstate.crc ?? effectiveLowcmd.crc ?? null,
+    },
+    hand_sdk: {
+      topic: handSdk.topic ?? null,
+      intent: handIntent,
+      motor_count: handSdk.motor_count ?? null,
+      weight: handSdk.weight ?? null,
+      tau: handSdk.tau ?? null,
+    },
+    dex3: {
+      active_hands: dex3ActiveHands,
+      hands: Object.fromEntries(
+        Object.entries(dex3Hands)
+          .filter(([, state]) => state && typeof state === "object")
+          .map(([hand, state]) => [hand, {
+            intent: state.intent ?? null,
+            topic: state.topic ?? null,
+            motor_count: state.motor_count ?? null,
+          }]),
+      ),
+    },
+    lowstate: {
+      mode_machine: lowstate.mode_machine ?? null,
+      mode_pr: lowstate.mode_pr ?? null,
+      crc: lowstate.crc ?? null,
+      motor_count: Array.isArray(lowstate.motor_state) ? lowstate.motor_state.length : null,
+      error: lowstate.error || null,
+    },
   };
 }
 
@@ -3404,6 +3523,12 @@ function roboticsToolReference() {
     ],
     tools: [
       toolReference("sim_status", "read", "none", "Simulator may be stopped or running."),
+      toolReference(
+        "robot_command_state",
+        "read",
+        "Summarizes active pose/loco/lowcmd/hand/Dex3 controller state without moving the robot.",
+        "Simulator HTTP endpoint reachable; use before and after debugging motion.",
+      ),
       toolReference("sim_start", "lifecycle", "Starts Docker MuJoCo harness.", "Docker available and assets prepared."),
       toolReference("sim_stop", "lifecycle", "Stops Docker MuJoCo harness.", "Simulator container exists."),
       toolReference("sim_reset", "state-changing", "Resets MuJoCo state.", "Simulator HTTP endpoint reachable."),

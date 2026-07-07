@@ -168,6 +168,10 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                         "dex3": type(self).dex3,
                         "lowcmd": {
                             "motor_cmd_count": type(self).lowcmd_count,
+                            "topic": type(self).last_lowcmd.get("topic"),
+                            "mode_pr": type(self).last_lowcmd.get("mode_pr"),
+                            "mode_machine": type(self).last_lowcmd.get("mode_machine"),
+                            "crc": type(self).last_lowcmd.get("crc"),
                             **type(self).lowcmd_meta,
                         },
                     },
@@ -197,6 +201,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     "wireless_remote": [127, 0, 255, 64, 0, 0, 0, 0, 0x34, 0x12],
                     "lowcmd": {
                         "motor_cmd_count": type(self).lowcmd_count,
+                        "topic": type(self).last_lowcmd.get("topic"),
                         **type(self).lowcmd_meta,
                     },
                 }
@@ -1186,6 +1191,34 @@ class RobotApiTests(unittest.TestCase):
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
                 else:
                     os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_g1_robot_command_state_summarizes_active_lowcmd_controller(self):
+        with FakeServer() as fake:
+            endpoints = RobotEndpoints(game_control_url=fake.url)
+            robot = G1Robot.connect(endpoints=endpoints)
+
+            initial = robot.command_state()
+            self.assertEqual(initial["inferred_controller"], "pose")
+            self.assertFalse(initial["lowcmd"]["active"])
+
+            robot.sim.lowcmd(
+                [{"mode": 1, "q": -0.4, "kp": 30.0, "kd": 1.0}],
+                topic="rt/user_lowcmd",
+                mode_pr=1,
+                mode_machine=5,
+                crc=2468,
+            )
+            state = robot.command_state()
+
+            self.assertEqual(state["inferred_controller"], "lowcmd")
+            self.assertTrue(state["lowcmd"]["active"])
+            self.assertFalse(state["lowcmd"]["stale"])
+            self.assertEqual(state["lowcmd"]["topic"], "rt/user_lowcmd")
+            self.assertEqual(state["lowcmd"]["mode_pr"], 1)
+            self.assertEqual(state["lowcmd"]["mode_machine"], 1)
+            self.assertEqual(state["lowcmd"]["crc"], 2468)
+            self.assertEqual(state["lowcmd"]["motor_cmd_count"], 1)
+            self.assertEqual(state["lowcmd"]["watchdog_seconds"], 2.0)
 
     def test_unitree_style_user_lowcmd_topic_uses_same_lowcmd_provider(self):
         with FakeServer() as fake:

@@ -197,6 +197,13 @@ class SimulatorClient:
         normalized = str(hand).lower()
         return hands.get(normalized, {}) if normalized in {"left", "right"} else {}
 
+    def command_state(self) -> JsonObject:
+        """Summarize the currently active simulator command/control state."""
+
+        status = self.status().raw
+        lowstate = self.lowstate()
+        return _command_state_from_payload(status, lowstate)
+
     def lowstate(self) -> JsonObject:
         return self.get_json("/lowstate")
 
@@ -326,3 +333,113 @@ def _optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _command_state_from_payload(status: JsonObject, lowstate: JsonObject) -> JsonObject:
+    simulation = status.get("simulation") if isinstance(status.get("simulation"), dict) else {}
+    lowcmd = simulation.get("lowcmd") if isinstance(simulation.get("lowcmd"), dict) else {}
+    loco = simulation.get("loco") if isinstance(simulation.get("loco"), dict) else {}
+    motion_switcher = simulation.get("motion_switcher") if isinstance(simulation.get("motion_switcher"), dict) else {}
+    hand_sdk = simulation.get("hand_sdk") if isinstance(simulation.get("hand_sdk"), dict) else {}
+    dex3 = simulation.get("dex3") if isinstance(simulation.get("dex3"), dict) else {}
+    lowstate_lowcmd = lowstate.get("lowcmd") if isinstance(lowstate.get("lowcmd"), dict) else {}
+    effective_lowcmd = {**lowstate_lowcmd, **lowcmd}
+    dex3_hands = dex3.get("hands") if isinstance(dex3.get("hands"), dict) else {}
+    velocity = loco.get("velocity") if isinstance(loco.get("velocity"), list) else []
+
+    lowcmd_active = bool(effective_lowcmd.get("active"))
+    lowcmd_stale = bool(effective_lowcmd.get("stale"))
+    moving = any(abs(_optional_float(value) or 0.0) > 1e-6 for value in velocity)
+    hand_intent = str(hand_sdk.get("intent") or "idle")
+    dex3_active_hands = [
+        hand
+        for hand, state in dex3_hands.items()
+        if isinstance(state, dict) and str(state.get("intent") or "idle") not in {"", "idle", "hold"}
+    ]
+    control_mode = str(simulation.get("control_mode") or "")
+    pose = simulation.get("pose")
+
+    if lowcmd_active and not lowcmd_stale:
+        inferred_controller = "lowcmd"
+    elif lowcmd_stale:
+        inferred_controller = "lowcmd_stale"
+    elif moving:
+        inferred_controller = "locomotion"
+    elif hand_intent not in {"", "idle", "hold"}:
+        inferred_controller = "hand_sdk"
+    elif dex3_active_hands:
+        inferred_controller = "dex3"
+    elif pose:
+        inferred_controller = "pose"
+    else:
+        inferred_controller = "idle"
+
+    return {
+        "ok": bool(status.get("ready", False)),
+        "captured_at_unix": time.time(),
+        "inferred_controller": inferred_controller,
+        "inference_source": "simulator_status_lowstate",
+        "ready": bool(status.get("ready", False)),
+        "paused": bool(simulation.get("paused")),
+        "fallen": bool(simulation.get("fallen")),
+        "pose": pose,
+        "control_mode": control_mode or None,
+        "loco": {
+            "fsm_id": loco.get("fsm_id"),
+            "fsm_mode": loco.get("fsm_mode"),
+            "velocity": velocity,
+            "velocity_until": loco.get("velocity_until"),
+            "balance_mode": loco.get("balance_mode"),
+            "stand_height": loco.get("stand_height"),
+            "swing_height": loco.get("swing_height"),
+            "phase": loco.get("phase"),
+            "continuous_move": bool(loco.get("continuous_move")),
+            "speed_mode": loco.get("speed_mode"),
+            "control_owner": loco.get("control_owner"),
+            "arm_task_id": loco.get("arm_task_id"),
+        },
+        "motion_switcher": motion_switcher,
+        "lowcmd": {
+            "topic": effective_lowcmd.get("topic"),
+            "source": effective_lowcmd.get("source"),
+            "active": lowcmd_active,
+            "stale": lowcmd_stale,
+            "age_seconds": effective_lowcmd.get("age_seconds"),
+            "watchdog_seconds": effective_lowcmd.get("watchdog_seconds"),
+            "received_at": effective_lowcmd.get("received_at"),
+            "expires_at": effective_lowcmd.get("expires_at"),
+            "motor_cmd_count": effective_lowcmd.get("motor_cmd_count"),
+            "applied_position_targets": effective_lowcmd.get("applied_position_targets"),
+            "accepted_indices": effective_lowcmd.get("accepted_indices"),
+            "ignored_indices": effective_lowcmd.get("ignored_indices"),
+            "clamped_indices": effective_lowcmd.get("clamped_indices"),
+            "mode_pr": lowstate.get("mode_pr", effective_lowcmd.get("mode_pr")),
+            "mode_machine": lowstate.get("mode_machine", effective_lowcmd.get("mode_machine")),
+            "crc": lowstate.get("crc", effective_lowcmd.get("crc")),
+        },
+        "hand_sdk": {
+            "topic": hand_sdk.get("topic"),
+            "intent": hand_intent,
+            "motor_count": hand_sdk.get("motor_count"),
+            "weight": hand_sdk.get("weight"),
+            "tau": hand_sdk.get("tau"),
+        },
+        "dex3": {
+            "active_hands": dex3_active_hands,
+            "hands": {
+                hand: {
+                    "intent": state.get("intent"),
+                    "topic": state.get("topic"),
+                    "motor_count": state.get("motor_count"),
+                }
+                for hand, state in dex3_hands.items()
+                if isinstance(state, dict)
+            },
+        },
+        "lowstate": {
+            "mode_machine": lowstate.get("mode_machine"),
+            "mode_pr": lowstate.get("mode_pr"),
+            "crc": lowstate.get("crc"),
+            "motor_count": len(lowstate.get("motor_state") or []) if isinstance(lowstate.get("motor_state"), list) else None,
+        },
+    }

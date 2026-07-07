@@ -1164,6 +1164,7 @@
               "sim_stop": true,
               "sim_restart": true,
               "sim_status": true,
+              "robot_command_state": true,
               "unitree_session_status": true,
               "upstream_robotics_audit": true,
               "unitree_sdk_compatibility_audit": true,

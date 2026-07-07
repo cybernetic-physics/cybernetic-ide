@@ -21,6 +21,7 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("status")
     subcommands.add_parser("diagnostics")
     subcommands.add_parser("provider")
+    subcommands.add_parser("command-state")
     sdk_audit = subcommands.add_parser("sdk-audit")
     sdk_audit.add_argument("--upstream-root", default="/Users/cuboniks/wagmi/unitree_sdk2_python")
     sdk_smoke = subcommands.add_parser("sdk-smoke")
@@ -104,6 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "provider":
         config = UnitreeTransportConfig.from_env(robot.sim.endpoints)
         return _print(UnitreeSession(config, robot.sim).provider_status())
+    if args.command == "command-state":
+        return _print(robot.command_state())
     if args.command == "pause":
         return _print(robot.pause())
     if args.command == "resume":

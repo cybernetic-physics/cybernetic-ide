@@ -631,6 +631,10 @@ The current repo has the first narrow version of that API boundary:
   `unitree_provider_status` MCP tool give agents and users the short answer for
   which backend is active: provider name, command path, telemetry path, motion
   surfaces, limitations, and next step.
+- `G1Robot.command_state()`, `cyber-g1 command-state`, and MCP
+  `robot_command_state` give agents and users the short active-controller
+  answer from simulator telemetry: pose, locomotion, lowcmd, stale-lowcmd, hand
+  SDK, or Dex3 intent, plus lowcmd topic/watchdog/mode/CRC fields.
 - `robot_evidence_bundle` is the default agent-native review artifact for the
   simulator path. It persists `/status`, `/lowstate`, `/joint_state`, hand
   SDK/Dex3 state, visual scene metadata, provider diagnostics, checks, and

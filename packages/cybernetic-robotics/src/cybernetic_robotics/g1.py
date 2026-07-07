@@ -130,6 +130,11 @@ class G1Robot:
     def dex3_state(self, hand: str | None = None) -> dict[str, Any]:
         return self.sim.dex3_state(hand)
 
+    def command_state(self) -> dict[str, Any]:
+        """Read the active command/controller summary for debugging."""
+
+        return self.sim.command_state()
+
     def apply_joint_targets(self, targets: dict[str, float], **kwargs: Any) -> dict[str, Any]:
         return self.sim.apply_joint_targets(targets, **kwargs)
 

@@ -490,7 +490,10 @@ fallen state, current scene, active controller, and logs.
 Tasks:
 
 - Add a low-state panel with joint table and IMU summary.
-- Add command state showing last high-level action, last lowcmd, and watchdog.
+- Done: add command state through `G1Robot.command_state()`,
+  `cyber-g1 command-state`, and MCP `robot_command_state`, showing inferred
+  active controller, pose/loco state, lowcmd topic/watchdog/mode/CRC, hand SDK
+  intent, and Dex3 intent.
 - Add scene/object inventory from `/visual_scene`.
 - Done: add MCP camera bookmark controls
   (`viewer_camera_bookmark_save/list/apply/delete`) backed by
