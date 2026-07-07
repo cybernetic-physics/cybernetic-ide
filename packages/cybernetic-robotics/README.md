@@ -11,7 +11,8 @@ It has three layers:
 - `SimulatorClient` and `TinyWebSocket`: direct HTTP/WebSocket access for
   power users who want the Booster-style simulator protocol.
 - `unitree_sdk2py` compatibility modules: a simulator-backed subset of the
-  official Unitree SDK2 Python import shape.
+  official Unitree SDK2 Python import shape, including G1 arm actions and
+  G1 locomotion client methods.
 
 The package intentionally uses only the Python standard library. The simulator
 it talks to is still the Dockerized Cybernetic IDE G1 MuJoCo harness.
@@ -72,6 +73,22 @@ arm = G1ArmActionClient()
 arm.SetTimeout(10.0)
 arm.Init()
 arm.ExecuteAction(action_map["right hand up"])
+```
+
+G1 locomotion examples can use Unitree's `LocoClient` shape:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+loco = LocoClient()
+loco.SetTimeout(10.0)
+loco.Init()
+loco.Start()
+loco.Move(0.25, 0.0, 0.0)
+loco.StopMove()
 ```
 
 This is a bootstrap bridge. In sim mode it posts to Cybernetic's local

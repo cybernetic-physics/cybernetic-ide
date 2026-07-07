@@ -45,6 +45,7 @@
 
 - [Unitree G1 SDK Integration](./unitree-g1-sdk-integration.md)
 - [Cybernetic Robotics Python](./cybernetic-robotics-python.md)
+- [Upstream Robotics Audit](./upstream-robotics-audit.md)
 
 # AI
 

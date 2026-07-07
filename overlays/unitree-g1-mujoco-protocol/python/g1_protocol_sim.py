@@ -191,6 +191,16 @@ class G1MujocoState:
         self.last_step_wall_time = time.monotonic()
         self.last_render_error = None
         self.active_pose = None
+        self.loco_state = {
+            "fsm_id": 1,
+            "fsm_mode": "damp",
+            "balance_mode": 0,
+            "swing_height": None,
+            "stand_height": None,
+            "velocity": [0.0, 0.0, 0.0],
+            "velocity_until": None,
+            "arm_task_id": None,
+        }
         self.latest_jpeg = None
         self.latest_jpeg_frame_id = None
         self.latest_jpeg_rendered_at = None
@@ -264,6 +274,7 @@ class G1MujocoState:
 
         self.hold_target_qpos = np.zeros(count)
         self.control_mode = None
+        self.base_yaw = 0.0
 
     def reset(self):
         with self.lock:
@@ -272,6 +283,16 @@ class G1MujocoState:
             self.frame_id = 0
             self.active_pose = None
             self.control_mode = None
+            self.base_yaw = 0.0
+            self.loco_state.update(
+                {
+                    "fsm_id": 1,
+                    "fsm_mode": "damp",
+                    "velocity": [0.0, 0.0, 0.0],
+                    "velocity_until": None,
+                    "arm_task_id": None,
+                }
+            )
             self.data.ctrl[:] = 0.0
             self.paused = True
             self.last_step_wall_time = time.monotonic()
@@ -287,6 +308,7 @@ class G1MujocoState:
         with self.lock:
             for _ in range(max(1, count)):
                 self.apply_hold_control_locked()
+                self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
 
@@ -411,6 +433,108 @@ class G1MujocoState:
         tau = gravity_comp + self.kp * (self.hold_target_qpos - q) - self.kd * qd
         np.clip(tau, self.ctrl_lo, self.ctrl_hi, out=tau)
         self.data.ctrl[:] = tau
+
+    def apply_loco_velocity_locked(self, dt):
+        if self.control_mode != "loco_velocity":
+            return
+        now = time.monotonic()
+        velocity_until = self.loco_state.get("velocity_until")
+        if velocity_until is not None and now > velocity_until:
+            self.loco_state["velocity"] = [0.0, 0.0, 0.0]
+            self.loco_state["velocity_until"] = None
+            self.control_mode = None
+            self.active_pose = "stand"
+            self.paused = True
+            return
+        if self.model.njnt == 0 or self.model.jnt_type[0] != mujoco.mjtJoint.mjJNT_FREE:
+            return
+        vx, vy, omega = [float(value) for value in self.loco_state.get("velocity", [0.0, 0.0, 0.0])]
+        base_addr = int(self.model.jnt_qposadr[0])
+        yaw = self.base_yaw
+        cos_yaw = math.cos(yaw)
+        sin_yaw = math.sin(yaw)
+        self.data.qpos[base_addr + 0] += (vx * cos_yaw - vy * sin_yaw) * dt
+        self.data.qpos[base_addr + 1] += (vx * sin_yaw + vy * cos_yaw) * dt
+        self.base_yaw += omega * dt
+        half_yaw = self.base_yaw * 0.5
+        self.data.qpos[base_addr + 3 : base_addr + 7] = [
+            math.cos(half_yaw),
+            0.0,
+            0.0,
+            math.sin(half_yaw),
+        ]
+
+    def handle_loco_command(self, payload):
+        action = payload.get("action", "state")
+        with self.lock:
+            if action == "state":
+                return {"ok": True, "loco": dict(self.loco_state), "control_mode": self.control_mode}
+            if action == "get_fsm_id":
+                return {"ok": True, "fsm_id": self.loco_state["fsm_id"], "loco": dict(self.loco_state)}
+            if action == "set_fsm_id":
+                fsm_id = int(payload.get("fsm_id", 1))
+                self.loco_state["fsm_id"] = fsm_id
+                self.loco_state["fsm_mode"] = payload.get("mode") or str(fsm_id)
+                if fsm_id in (0, 1):
+                    self.control_mode = None
+                    self.loco_state["velocity"] = [0.0, 0.0, 0.0]
+                    self.loco_state["velocity_until"] = None
+                    self.paused = True
+                    self.active_pose = "zero_torque" if fsm_id == 0 else "damp"
+                elif fsm_id == 500:
+                    self.active_pose = "stand"
+                return {"ok": True, "loco": dict(self.loco_state), "paused": self.paused}
+            if action == "set_balance_mode":
+                self.loco_state["balance_mode"] = int(payload.get("balance_mode", 0))
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "set_swing_height":
+                self.loco_state["swing_height"] = float(payload.get("swing_height", 0.0))
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "set_stand_height":
+                stand_height = float(payload.get("stand_height", 0.0))
+                self.loco_state["stand_height"] = stand_height
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "set_velocity":
+                velocity = payload.get("velocity", [0.0, 0.0, 0.0])
+                if not isinstance(velocity, list) or len(velocity) != 3:
+                    return {"ok": False, "error": "velocity must be [vx, vy, omega]"}
+                duration = float(payload.get("duration", 1.0))
+                self.loco_state["velocity"] = [float(velocity[0]), float(velocity[1]), float(velocity[2])]
+                if all(abs(value) < 1e-9 for value in self.loco_state["velocity"]) or duration <= 0:
+                    self.loco_state["velocity_until"] = None
+                    self.control_mode = None
+                    self.active_pose = "stand"
+                    self.paused = True
+                else:
+                    self.loco_state["velocity_until"] = None if duration >= 864000.0 else time.monotonic() + max(0.0, duration)
+                    self.active_pose = "loco_move"
+                    self.control_mode = "loco_velocity"
+                    self.paused = False
+                self.last_step_wall_time = time.monotonic()
+                return {"ok": True, "loco": dict(self.loco_state), "paused": self.paused}
+            if action == "set_arm_task":
+                task_id = int(payload.get("task_id", 0))
+                self.loco_state["arm_task_id"] = task_id
+                pose_name = "raise_right_hand" if task_id in (0, 1, 2, 3) else "neutral"
+                response = self.apply_named_pose(pose_name)
+                response["loco"] = dict(self.loco_state)
+                return response
+            if action == "high_stand":
+                self.loco_state["stand_height"] = "high"
+                response = self.apply_named_pose("mountain")
+                response["loco"] = dict(self.loco_state)
+                return response
+            if action == "low_stand":
+                self.loco_state["stand_height"] = "low"
+                response = self.apply_named_pose("chair")
+                response["loco"] = dict(self.loco_state)
+                return response
+            if action in ("wave_hand", "shake_hand"):
+                self.loco_state["arm_task_id"] = 1 if action == "wave_hand" else 2
+                response = self.apply_named_pose("raise_right_hand")
+                response["loco"] = dict(self.loco_state)
+                return response
+            return {"ok": False, "error": f"unsupported loco action: {action}"}
 
     def set_hold_pose(self, pose_name, teleport=True):
         """Drive the motors to hold a pose while physics runs.
@@ -580,6 +704,7 @@ class G1MujocoState:
             steps = max(1, int(elapsed / self.model.opt.timestep))
             for _ in range(steps):
                 self.apply_hold_control_locked()
+                self.apply_loco_velocity_locked(self.model.opt.timestep)
                 mujoco.mj_step(self.model, self.data)
                 self.frame_id += 1
             self.last_step_wall_time = now
@@ -602,6 +727,7 @@ class G1MujocoState:
                     else ("stand" if self.paused else "free_sim")
                 },
                 "pose": self.active_pose,
+                "loco": dict(self.loco_state),
                 "model_path": str(self.model_path),
                 "model_revision": self.model_revision,
                 "all_robot_names": [self.robot_name],
@@ -863,6 +989,8 @@ class G1MujocoState:
                 payload.get("pose", "raise_right_hand"),
                 teleport=payload.get("teleport", True),
             )
+        if command == "loco":
+            return self.handle_loco_command(payload)
         if command in NAMED_POSES:
             return self.apply_named_pose(command)
         return {"ok": False, "error": f"unsupported command: {command}"}

@@ -150,6 +150,9 @@ class SimulatorClient:
     def hold_pose(self, name: str, teleport: bool = True) -> JsonObject:
         return self.command("hold_pose", pose=name, teleport=bool(teleport))
 
+    def loco(self, action: str = "state", **fields: Any) -> JsonObject:
+        return self.command("loco", action=action, **fields)
+
     def camera(self, action: str = "state", **fields: Any) -> CameraState:
         if action == "state" and not fields:
             return CameraState(self.get_json("/camera"))

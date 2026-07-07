@@ -9,11 +9,19 @@ import unittest
 from cybernetic_robotics import G1Robot, RobotEndpoints, SimulatorClient
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize, current_channel_factory_config
 from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
 
 
 class FakeG1Handler(BaseHTTPRequestHandler):
     pose = "neutral"
     paused = True
+    loco = {
+        "fsm_id": 1,
+        "fsm_mode": "damp",
+        "velocity": [0.0, 0.0, 0.0],
+        "balance_mode": 0,
+        "stand_height": None,
+    }
     camera = {
         "cameraId": 0,
         "type": "free",
@@ -63,6 +71,19 @@ class FakeG1Handler(BaseHTTPRequestHandler):
             elif command == "reset":
                 type(self).pose = "neutral"
                 type(self).paused = True
+            elif command == "loco":
+                action = payload.get("action")
+                if action == "set_velocity":
+                    type(self).loco["velocity"] = payload["velocity"]
+                    type(self).paused = False
+                elif action == "set_fsm_id":
+                    type(self).loco["fsm_id"] = payload["fsm_id"]
+                    type(self).loco["fsm_mode"] = payload.get("mode")
+                elif action == "get_fsm_id":
+                    return self._json({"ok": True, "fsm_id": type(self).loco["fsm_id"], "loco": type(self).loco})
+                elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
+                    type(self).pose = "raise_right_hand"
+                return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
         if self.path == "/camera":
             type(self).camera = {**type(self).camera, **payload}
@@ -92,6 +113,13 @@ class FakeServer:
     def __enter__(self):
         FakeG1Handler.pose = "neutral"
         FakeG1Handler.paused = True
+        FakeG1Handler.loco = {
+            "fsm_id": 1,
+            "fsm_mode": "damp",
+            "velocity": [0.0, 0.0, 0.0],
+            "balance_mode": 0,
+            "stand_height": None,
+        }
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -145,6 +173,31 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(code, 0)
                 self.assertEqual(arm.last_response["pose"], "raise_right_hand")
                 self.assertEqual(current_channel_factory_config().domain_id, 3)
+            finally:
+                if previous is None:
+                    os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)
+                else:
+                    os.environ["CYBER_G1_GAME_CONTROL_URL"] = previous
+
+    def test_unitree_style_loco_client_uses_same_simulator(self):
+        with FakeServer() as fake:
+            previous = os.environ.get("CYBER_G1_GAME_CONTROL_URL")
+            os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
+            try:
+                ChannelFactoryInitialize(3, "cyber-sim")
+                loco = LocoClient()
+                loco.SetTimeout(2.0)
+                loco.Init()
+
+                move_code = loco.Move(0.25, 0.0, 0.1)
+                fsm_code = loco.Start()
+                get_code, fsm_id = loco.GetFsmId()
+
+                self.assertEqual(move_code, 0)
+                self.assertEqual(fsm_code, 0)
+                self.assertEqual(get_code, 0)
+                self.assertEqual(fsm_id, 500)
+                self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
             finally:
                 if previous is None:
                     os.environ.pop("CYBER_G1_GAME_CONTROL_URL", None)

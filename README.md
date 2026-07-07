@@ -27,7 +27,8 @@ making the user think about the transport layer.
 - An installable `cybernetic-robotics` Python package under
   `packages/cybernetic-robotics/` with a beginner `G1Robot` API, CLI, raw
   protocol clients, scene helpers, and a packaged `unitree_sdk2py` simulator
-  shim.
+  shim, including the Unitree-shaped `G1ArmActionClient` and `LocoClient`
+  surfaces.
 - Example scripts in `examples/` for both low-level simulator probes and the
   Unitree-shaped hand-raise demo.
 - Cybernetic IDE task entries for running the simulator demo directly from the
@@ -46,6 +47,8 @@ making the user think about the transport layer.
 | `script/probe-unitree-g1-mujoco-protocol.mjs` | CLI probe for the reversed Booster-like simulator envelope. |
 | `examples/control_g1_sim.py` | Dependency-free Python control/probe script for reset, step, camera, and pose commands. |
 | `examples/g1_raise_hand_sdk.py` | End-user-style Unitree SDK2 facade demo that raises the G1's right hand. |
+| `examples/g1_loco_sdk.py` | End-user-style Unitree G1 `LocoClient` demo for start, move, stop, and wave-hand commands. |
+| `examples/g1_behavior_gallery.py` | Behavior gallery that runs arm action, locomotion, wave, stand-height, safe-neutral, and saves snapshots. |
 | `examples/easy_g1_playground.py` | Beginner package demo using `cybernetic_robotics.G1Robot`. |
 | `examples/use_cybernetic_robotics_lib.py` | Polished package demo that exercises both `G1Robot` and the Unitree SDK2-shaped shim. |
 | `docs/src/unitree-g1-sdk-integration.md` | Architecture, end-user guide, developer guide, safety gates, and next milestones. |
@@ -114,6 +117,8 @@ Then try:
 cyber-g1 status
 cyber-g1 raise-hand --snapshot .runtime/g1-control-demo/right-hand-up.jpg
 python3 examples/use_cybernetic_robotics_lib.py
+python3 examples/g1_loco_sdk.py
+python3 examples/g1_behavior_gallery.py
 python3 examples/easy_g1_playground.py
 ```
 
@@ -169,6 +174,36 @@ Dockerized MuJoCo command:
 That direct pose command is intentionally transitional. The user-facing API is
 already aligned with Unitree SDK2; the backend can move toward official
 `unitree_mujoco` + SDK2/CycloneDDS topics without changing example code.
+
+## Running the G1 LocoClient Demo
+
+Unitree's official Python SDK exposes high-level G1 locomotion through
+`unitree_sdk2py.g1.loco.g1_loco_client.LocoClient`. Cybernetic's simulator
+shim now supports that import shape for local development:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+loco = LocoClient()
+loco.SetTimeout(10.0)
+loco.Init()
+loco.Start()
+loco.Move(0.25, 0.0, 0.0)
+loco.StopMove()
+```
+
+Run the included example:
+
+```sh
+python3 examples/g1_loco_sdk.py
+```
+
+The current backend maps `Move` to a simple simulator-base velocity and maps
+FSM/stand/arm-task commands to local simulator state and poses. Full
+CycloneDDS `LowCmd`/`LowState` parity remains the deeper sim-to-real backend.
 
 ## Robot Viewer Controls
 

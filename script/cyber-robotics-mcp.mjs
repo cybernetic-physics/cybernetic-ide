@@ -97,6 +97,16 @@ const tools = [
     [],
     { readOnlyHint: true },
   ),
+  tool(
+    "viewer_snapshot_file",
+    "Capture the current Robot Viewer camera frame to a workspace file and return the path.",
+    {
+      path: { type: "string", description: "Workspace-relative output path." },
+      format: { type: "string", enum: ["jpeg", "png"], default: "jpeg" },
+    },
+    ["path"],
+    { readOnlyHint: false },
+  ),
   tool("scene_get", "Read the current visual scene summary from the simulator.", {}, [], {
     readOnlyHint: true,
   }),
@@ -149,6 +159,23 @@ const tools = [
       action: { type: "string", enum: ["raise_right_hand", "release_arm", "neutral"] },
     },
     ["action"],
+    { readOnlyHint: false },
+  ),
+  tool(
+    "g1_loco_command",
+    "Execute a Unitree G1 LocoClient-shaped simulator command such as Move, StopMove, Damp, or Start.",
+    {
+      command: {
+        type: "string",
+        enum: ["state", "damp", "start", "zero_torque", "stop_move", "move", "low_stand", "high_stand", "wave_hand", "shake_hand"],
+        default: "state",
+      },
+      vx: { type: "number", default: 0 },
+      vy: { type: "number", default: 0 },
+      omega: { type: "number", default: 0 },
+      duration: { type: "number", default: 1.0 },
+    },
+    ["command"],
     { readOnlyHint: false },
   ),
   tool("safety_stop", "Pause the simulator and release the G1 arm to the neutral pose.", {}, [], {
@@ -361,6 +388,8 @@ async function callTool(name, args) {
       return textResult(await camera(args));
     case "viewer_snapshot":
       return imageResult(await snapshot(args.format || "jpeg"));
+    case "viewer_snapshot_file":
+      return textResult(await snapshotFile(args.path, args.format || "jpeg"));
     case "scene_get":
       return textResult(await getJson("/visual_scene"));
     case "scene_read_mjcf":
@@ -381,6 +410,8 @@ async function callTool(name, args) {
       });
     case "g1_execute_action":
       return textResult(await executeG1Action(args.action));
+    case "g1_loco_command":
+      return textResult(await executeG1LocoCommand(args));
     case "safety_stop":
       return textResult({
         pause: await command({ command: "pause" }),
@@ -503,6 +534,48 @@ async function snapshot(format) {
       paused: status?.simulation?.paused,
     },
   };
+}
+
+async function snapshotFile(userPath, format) {
+  const snapshotValue = await snapshot(format);
+  const outputPath = safeWorkspacePath(userPath);
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  await fsp.writeFile(outputPath, Buffer.from(snapshotValue.data, "base64"));
+  return {
+    ...snapshotValue.metadata,
+    path: outputPath,
+    workspace_relative_path: path.relative(root, outputPath),
+  };
+}
+
+async function executeG1LocoCommand(args) {
+  const commandName = args.command || "state";
+  if (commandName === "state") {
+    return command({ command: "loco", action: "state" });
+  }
+  if (commandName === "move") {
+    return command({
+      command: "loco",
+      action: "set_velocity",
+      velocity: [Number(args.vx || 0), Number(args.vy || 0), Number(args.omega || 0)],
+      duration: Number(args.duration || 1.0),
+    });
+  }
+  const actionByCommand = {
+    damp: { action: "set_fsm_id", fsm_id: 1, mode: "damp" },
+    start: { action: "set_fsm_id", fsm_id: 500, mode: "start" },
+    zero_torque: { action: "set_fsm_id", fsm_id: 0, mode: "zero_torque" },
+    stop_move: { action: "set_velocity", velocity: [0, 0, 0], duration: 0 },
+    low_stand: { action: "low_stand" },
+    high_stand: { action: "high_stand" },
+    wave_hand: { action: "wave_hand" },
+    shake_hand: { action: "shake_hand" },
+  };
+  const payload = actionByCommand[commandName];
+  if (!payload) {
+    throw new Error(`Unsupported G1 loco command: ${commandName}`);
+  }
+  return command({ command: "loco", ...payload });
 }
 
 async function readActiveMjcf() {
@@ -872,7 +945,7 @@ function sdkPythonTemplate(action) {
   const actionName = action === "release_arm" ? "release arm" : "right hand up";
   return `#!/usr/bin/env python3
 from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient
+from unitree_sdk2py.g1.arm.g1_arm_action_client import G1ArmActionClient, action_map
 
 
 def main():
@@ -880,7 +953,7 @@ def main():
     client = G1ArmActionClient()
     client.Init()
     client.SetTimeout(10.0)
-    action_id = client.action_map["${actionName}"]
+    action_id = action_map["${actionName}"]
     result = client.ExecuteAction(action_id)
     if result != 0:
         raise SystemExit(f"G1 action failed with status {result}")

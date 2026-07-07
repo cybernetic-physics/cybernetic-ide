@@ -64,6 +64,7 @@ API and the Unitree SDK-shaped shim:
 ```sh
 python3 examples/use_cybernetic_robotics_lib.py
 python3 examples/use_cybernetic_robotics_lib.py --mode unitree
+python3 examples/g1_loco_sdk.py
 ```
 
 ## CLI
@@ -108,7 +109,7 @@ arm.ExecuteAction(action_map["right hand up"])
 ```
 
 The compatibility package currently implements only high-level arm actions
-needed by the local simulator:
+and locomotion actions needed by the local simulator:
 
 | Action name | Action ID | Simulator pose |
 | --- | ---: | --- |
@@ -118,6 +119,48 @@ needed by the local simulator:
 Unsupported actions return a non-zero result and list the action map. That
 makes missing simulator coverage obvious while keeping the official SDK2 method
 shape.
+
+## Unitree G1 LocoClient-Shaped Code
+
+Unitree's official Python SDK exposes G1 locomotion through
+`unitree_sdk2py.g1.loco.g1_loco_client.LocoClient`. Cybernetic mirrors the
+method names against the local simulator:
+
+```python
+from unitree_sdk2py.core.channel import ChannelFactoryInitialize
+from unitree_sdk2py.g1.loco.g1_loco_client import LocoClient
+
+ChannelFactoryInitialize(0, "cyber-sim")
+
+loco = LocoClient()
+loco.SetTimeout(10.0)
+loco.Init()
+
+loco.Start()
+loco.Move(0.25, 0.0, 0.0)
+loco.StopMove()
+loco.WaveHand()
+```
+
+Supported methods include `GetFsmId`, `SetFsmId`, `Damp`, `Start`,
+`ZeroTorque`, `Move`, `StopMove`, `LowStand`, `HighStand`, `WaveHand`, and
+`ShakeHand`. `Move` is currently simulated with simple kinematic base motion;
+it is not yet Unitree's full locomotion controller.
+
+## Agent MCP Tools
+
+The default Cybernetic IDE robotics MCP exposes viewer and simulator tools to
+the Agent panel. The most useful camera tools are:
+
+```text
+viewer_camera_control
+viewer_snapshot
+viewer_snapshot_file
+```
+
+`viewer_snapshot` returns an MCP image result. `viewer_snapshot_file` writes the
+current camera frame to a workspace file, which is better when the agent needs
+to compare before/after views across multiple steps.
 
 ## Power User API
 
