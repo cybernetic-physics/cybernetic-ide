@@ -34,6 +34,7 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "elevation": -8.0,
     }
     lowcmd_count = 0
+    last_lowcmd = {}
 
     def do_GET(self):  # noqa: N802 - stdlib handler method.
         if self.path == "/health":
@@ -61,6 +62,8 @@ class FakeG1Handler(BaseHTTPRequestHandler):
             return self._json(
                 {
                     "mode_machine": 1,
+                    "mode_pr": int(type(self).last_lowcmd.get("mode_pr", 0)),
+                    "crc": int(type(self).last_lowcmd.get("crc", 0)),
                     "imu_state": {
                         "quaternion": [1.0, 0.0, 0.0, 0.0],
                         "gyroscope": [0.0, 0.0, 0.0],
@@ -106,12 +109,18 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
             elif command == "lowcmd":
                 type(self).lowcmd_count = len(payload.get("motor_cmd", []))
+                type(self).last_lowcmd = payload
                 type(self).paused = False
                 return self._json(
                     {
                         "ok": True,
                         "control_mode": "lowcmd",
-                        "lowcmd": {"motor_cmd_count": type(self).lowcmd_count},
+                        "lowcmd": {
+                            "motor_cmd_count": type(self).lowcmd_count,
+                            "mode_pr": payload.get("mode_pr"),
+                            "mode_machine": payload.get("mode_machine"),
+                            "crc": payload.get("crc"),
+                        },
                     }
                 )
             return self._json({"ok": True, "command": command, "pose": type(self).pose})
@@ -151,6 +160,7 @@ class FakeServer:
             "stand_height": None,
         }
         FakeG1Handler.lowcmd_count = 0
+        FakeG1Handler.last_lowcmd = {}
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeG1Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -241,6 +251,9 @@ class RobotApiTests(unittest.TestCase):
             os.environ["CYBER_G1_GAME_CONTROL_URL"] = fake.url
             try:
                 lowcmd = unitree_hg_msg_dds__LowCmd_()
+                lowcmd.mode_pr = 1
+                lowcmd.mode_machine = 500
+                lowcmd.crc = 12345
                 lowcmd.motor_cmd[22].mode = 1
                 lowcmd.motor_cmd[22].q = -1.0
                 lowcmd.motor_cmd[22].kp = 40.0
@@ -255,7 +268,12 @@ class RobotApiTests(unittest.TestCase):
                 lowstate = subscriber.Read()
 
                 self.assertEqual(FakeG1Handler.lowcmd_count, 35)
+                self.assertEqual(FakeG1Handler.last_lowcmd["mode_pr"], 1)
+                self.assertEqual(FakeG1Handler.last_lowcmd["mode_machine"], 500)
+                self.assertEqual(FakeG1Handler.last_lowcmd["crc"], 12345)
+                self.assertEqual(lowstate.mode_pr, 1)
                 self.assertEqual(lowstate.mode_machine, 1)
+                self.assertEqual(lowstate.crc, 12345)
                 self.assertAlmostEqual(lowstate.motor_state[1].q, 0.1)
             finally:
                 if previous is None:

@@ -205,6 +205,13 @@ class G1MujocoState:
             "topic": None,
             "received_at": None,
             "motor_cmd_count": 0,
+            "mode_pr": 0,
+            "mode_machine": None,
+            "crc": None,
+            "accepted": 0,
+            "applied_position_targets": 0,
+            "clamped": [],
+            "ignored": [],
         }
         self.latest_jpeg = None
         self.latest_jpeg_frame_id = None
@@ -304,6 +311,13 @@ class G1MujocoState:
                 "topic": None,
                 "received_at": None,
                 "motor_cmd_count": 0,
+                "mode_pr": 0,
+                "mode_machine": None,
+                "crc": None,
+                "accepted": 0,
+                "applied_position_targets": 0,
+                "clamped": [],
+                "ignored": [],
             }
             self.data.ctrl[:] = 0.0
             self.paused = True
@@ -495,7 +509,9 @@ class G1MujocoState:
                 else:
                     motor_state.append({"mode": 0, "q": 0.0, "dq": 0.0, "tau_est": 0.0})
             return {
+                "mode_pr": int(self.lowcmd_state.get("mode_pr") or 0),
                 "mode_machine": int(self.loco_state.get("fsm_id") or 0),
+                "crc": int(self.lowcmd_state.get("crc") or 0),
                 "imu_state": {
                     "quaternion": as_list(self.data.qpos[3:7]) if self.model.nq >= 7 else [1.0, 0.0, 0.0, 0.0],
                     "gyroscope": [0.0, 0.0, 0.0],
@@ -509,39 +525,70 @@ class G1MujocoState:
         motor_cmd = payload.get("motor_cmd", [])
         if not isinstance(motor_cmd, list):
             return {"ok": False, "error": "motor_cmd must be a list"}
+        if len(motor_cmd) > 35:
+            return {"ok": False, "error": "motor_cmd supports at most 35 entries"}
         with self.lock:
             q = self.data.qpos[self.actuator_qpos_adr]
             qd = self.data.qvel[self.actuator_dof_adr]
             applied_targets = 0
+            accepted = 0
+            clamped = []
+            ignored = []
             for index, command in enumerate(motor_cmd[: self.model.nu]):
                 if not isinstance(command, dict):
-                    continue
-                tau = float(command.get("tau", 0.0))
-                kp = float(command.get("kp", 0.0))
-                kd = float(command.get("kd", 0.0))
-                target_q = float(command.get("q", q[index]))
-                target_dq = float(command.get("dq", 0.0))
-                if int(command.get("mode", 0)) and (kp > 0.0 or kd > 0.0):
+                    return {"ok": False, "error": f"motor_cmd[{index}] must be an object"}
+                try:
+                    mode = int(command.get("mode", 0))
+                    tau = float(command.get("tau", 0.0))
+                    kp = float(command.get("kp", 0.0))
+                    kd = float(command.get("kd", 0.0))
+                    target_q = float(command.get("q", q[index]))
+                    target_dq = float(command.get("dq", 0.0))
+                except (TypeError, ValueError) as error:
+                    return {"ok": False, "error": f"motor_cmd[{index}] has non-numeric fields: {error}"}
+                accepted += 1
+                if mode and (kp > 0.0 or kd > 0.0):
                     joint_id = int(self.actuator_joint_id[index])
                     qpos_addr = int(self.actuator_qpos_adr[index])
+                    requested_q = target_q
                     if self.model.jnt_limited[joint_id]:
                         minimum, maximum = self.model.jnt_range[joint_id]
                         target_q = clamp(target_q, float(minimum), float(maximum))
+                        if target_q != requested_q:
+                            clamped.append(
+                                {
+                                    "index": index,
+                                    "requested_q": requested_q,
+                                    "applied_q": target_q,
+                                    "minimum": float(minimum),
+                                    "maximum": float(maximum),
+                                }
+                            )
                     self.data.qpos[qpos_addr] = target_q
                     self.data.qvel[int(self.actuator_dof_adr[index])] = target_dq
                     applied_targets += 1
+                elif not mode:
+                    ignored.append({"index": index, "reason": "mode disabled"})
                 self.data.ctrl[index] = clamp(
                     tau + kp * (target_q - q[index]) + kd * (target_dq - qd[index]),
                     self.ctrl_lo[index],
                     self.ctrl_hi[index],
                 )
+            for index in range(min(len(motor_cmd), self.model.nu), len(motor_cmd)):
+                ignored.append({"index": index, "reason": "no actuator in this G1 model"})
             mujoco.mj_forward(self.model, self.data)
             self.drop_to_floor_locked()
             self.lowcmd_state = {
                 "topic": payload.get("topic", "rt/lowcmd"),
                 "received_at": time.time(),
                 "motor_cmd_count": len(motor_cmd),
+                "mode_pr": int(payload.get("mode_pr", 0) or 0),
+                "mode_machine": int(payload.get("mode_machine", self.loco_state.get("fsm_id") or 0) or 0),
+                "crc": int(payload.get("crc", 0) or 0),
+                "accepted": accepted,
                 "applied_position_targets": applied_targets,
+                "clamped": clamped,
+                "ignored": ignored,
             }
             self.control_mode = "lowcmd"
             self.active_pose = "lowcmd"

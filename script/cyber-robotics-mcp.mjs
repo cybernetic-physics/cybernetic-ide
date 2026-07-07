@@ -191,6 +191,9 @@ const tools = [
         items: { type: "object" },
       },
       topic: { type: "string", default: "rt/lowcmd" },
+      mode_pr: { type: "integer", default: 0 },
+      mode_machine: { type: "integer", default: 0 },
+      crc: { type: "integer", default: 0 },
     },
     ["motor_cmd"],
     { readOnlyHint: false },
@@ -606,6 +609,9 @@ async function executeG1Lowcmd(args) {
   return command({
     command: "lowcmd",
     topic: args.topic || "rt/lowcmd",
+    mode_pr: Number(args.mode_pr || 0),
+    mode_machine: Number(args.mode_machine || 0),
+    crc: Number(args.crc || 0),
     motor_cmd: args.motor_cmd.map((cmd) => ({
       mode: Number(cmd?.mode || 0),
       q: Number(cmd?.q || 0),

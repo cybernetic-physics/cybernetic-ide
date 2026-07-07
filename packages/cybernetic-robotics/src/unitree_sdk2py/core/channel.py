@@ -47,7 +47,13 @@ class ChannelPublisher:
         if self.name not in {"rt/lowcmd", "rt/arm_sdk"}:
             raise NotImplementedError(f"Cybernetic simulator channel publisher does not support {self.name}")
         motor_cmd = [_motor_cmd_to_json(cmd) for cmd in getattr(message, "motor_cmd", [])]
-        SimulatorClient.from_env(timeout=timeout or 5.0).lowcmd(motor_cmd, topic=self.name)
+        SimulatorClient.from_env(timeout=timeout or 5.0).lowcmd(
+            motor_cmd,
+            topic=self.name,
+            mode_pr=int(getattr(message, "mode_pr", 0)),
+            mode_machine=int(getattr(message, "mode_machine", 0)),
+            crc=int(getattr(message, "crc", 0)),
+        )
         return True
 
     def Close(self):
@@ -108,7 +114,9 @@ def _lowstate_from_json(value: dict):
     from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
 
     state = unitree_hg_msg_dds__LowState_()
+    state.mode_pr = int(value.get("mode_pr", 0))
     state.mode_machine = int(value.get("mode_machine", 0))
+    state.crc = int(value.get("crc", 0))
     imu = value.get("imu_state") or {}
     state.imu_state.quaternion[:] = list(imu.get("quaternion", state.imu_state.quaternion))[:4]
     state.imu_state.gyroscope[:] = list(imu.get("gyroscope", state.imu_state.gyroscope))[:3]

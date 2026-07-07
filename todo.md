@@ -104,7 +104,7 @@ Acceptance:
 
 ### 2. Re-run Live Validation After The Held-Lowcmd Change
 
-Status: pending.
+Status: complete as of the latest lowcmd telemetry slice.
 
 Why: validation revealed that free-running low-level torque commands can topple
 the robot because we do not yet have Unitree's balance controller. We changed
@@ -113,17 +113,18 @@ frames. That must be validated live before treating the slice as done.
 
 Acceptance:
 
-- Rebuild `cyber/unitree-g1-mujoco-protocol:0.1.0`.
-- Recreate the `unitree-g1-mujoco` container.
-- `curl http://127.0.0.1:38383/lowstate` returns motor and IMU state.
-- `PYTHONPATH=packages/cybernetic-robotics/src python3 examples/g1_lowcmd_sdk.py`
+- Done: rebuilt `cyber/unitree-g1-mujoco-protocol:0.1.0`.
+- Done: recreated the `unitree-g1-mujoco` container.
+- Done: `curl http://127.0.0.1:38383/lowstate` returns motor and IMU state.
+- Done: `PYTHONPATH=packages/cybernetic-robotics/src python3 examples/g1_lowcmd_sdk.py`
   runs without falling the robot.
-- `/status` shows `fallen: false` after the low-level demo.
-- Capture a viewer snapshot after the demo.
+- Done: `/status` shows `fallen: false` after the low-level demo.
+- Done: captured `.runtime/g1-control-demo/lowcmd-telemetry-smoke.jpg` after
+  the demo.
 
 ### 3. Tighten Low-Level Simulator Semantics
 
-Status: pending.
+Status: partially complete.
 
 Why: the low-level channel path is useful, but it is still an approximation.
 The simulator should behave predictably for developers and agents while making
@@ -131,12 +132,13 @@ it obvious where official controller behavior is missing.
 
 Tasks:
 
-- Add a command watchdog timestamp to `lowcmd_state`.
-- Expose `mode_pr`, `mode_machine`, and command CRC in `/lowstate`.
-- Clamp low-level commands by G1 variant and joint limits.
-- Record which motor indices were accepted, ignored, or clamped.
-- Add explicit errors for invalid command shapes instead of silently skipping
-  malformed entries.
+- Done: expose `mode_pr`, `mode_machine`, and command CRC in `/lowstate`.
+- Done: clamp low-level commands by G1 variant and joint limits.
+- Done: record which motor indices were accepted, ignored, or clamped.
+- Done: add explicit errors for invalid command shapes instead of silently
+  skipping malformed entries.
+- Remaining: add a command watchdog timeout, not only the current
+  `received_at` timestamp.
 - Add tests for clamping and malformed command lists.
 
 Reasoning: clear low-level semantics make examples safer and make AI agents
