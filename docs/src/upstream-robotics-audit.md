@@ -29,21 +29,34 @@ The arm action shim supports `ExecuteAction(action_map["right hand up"])` and
 The locomotion shim supports the official method names:
 
 - `GetFsmId`
+- `GetPhase`
 - `SetFsmId`
 - `Damp`
 - `Start`
+- `Squat`
+- `Sit`
+- `StandUp`
 - `ZeroTorque`
 - `Move`
 - `StopMove`
 - `LowStand`
 - `HighStand`
+- `BalanceStand`
+- `ContinuousGait`
+- `SwitchMoveMode`
+- `SetSpeedMode`
+- `SwitchToUserCtrl`
+- `SwitchToInternalCtrl`
 - `WaveHand`
 - `ShakeHand`
 
 In simulator mode, these methods post to Cybernetic's local GameControl API.
 `Move` is represented as simple kinematic base motion in MuJoCo. Stand and arm
-task commands map to local named poses. This makes official-shaped user code
-runnable now while keeping the deeper DDS backend boundary explicit.
+task commands map to local named poses. Continuous move mode, speed mode,
+phase, and user/internal control ownership are recorded as simulator state for
+compatibility with the official C++ G1 client surface. This makes
+official-shaped user code runnable now while keeping the deeper DDS backend
+boundary explicit.
 
 The low-level channel shim synthesizes `LowState_` from MuJoCo joint and IMU
 state, applies `LowCmd_` joint targets into a held MuJoCo frame, and records

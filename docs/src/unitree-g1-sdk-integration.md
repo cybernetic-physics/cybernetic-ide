@@ -509,7 +509,11 @@ The current repo has the first narrow version of that API boundary:
   `reject`, `x-ray`, and release.
 - `examples/g1_loco_sdk.py` uses the Unitree-shaped `LocoClient` surface,
   including official-style FSM, balance, swing-height, and stand-height
-  getters/setters.
+  getters/setters. The shim also mirrors official C++ G1 methods such as
+  `GetPhase`, `Squat`, `StandUp`, `ContinuousGait`, `SwitchMoveMode`,
+  `SetSpeedMode`, `SwitchToUserCtrl`, and `SwitchToInternalCtrl`; in the local
+  simulator these are stateful compatibility flags around the kinematic
+  velocity path, not a whole-body balance controller.
 - `examples/g1_wave_hand_sdk.py` isolates the official-style
   `LocoClient.WaveHand()` call and writes before/after screenshots plus a
   manifest for agent review.

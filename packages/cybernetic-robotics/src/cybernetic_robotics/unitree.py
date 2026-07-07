@@ -22,6 +22,9 @@ ROBOT_API_ID_LOCO_SET_SWING_HEIGHT = 7103
 ROBOT_API_ID_LOCO_SET_STAND_HEIGHT = 7104
 ROBOT_API_ID_LOCO_SET_VELOCITY = 7105
 ROBOT_API_ID_LOCO_SET_ARM_TASK = 7106
+ROBOT_API_ID_LOCO_SET_SPEED_MODE = 7107
+ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL = 7110
+ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL = 7111
 ROBOT_API_ID_AUDIO_TTS = 1001
 ROBOT_API_ID_AUDIO_ASR = 1002
 ROBOT_API_ID_AUDIO_START_PLAY = 1003
@@ -188,6 +191,9 @@ class LocoClient:
             ROBOT_API_ID_LOCO_SET_STAND_HEIGHT,
             ROBOT_API_ID_LOCO_SET_VELOCITY,
             ROBOT_API_ID_LOCO_SET_ARM_TASK,
+            ROBOT_API_ID_LOCO_SET_SPEED_MODE,
+            ROBOT_API_ID_LOCO_SWITCH_TO_USER_CTRL,
+            ROBOT_API_ID_LOCO_SWITCH_TO_INTERNAL_CTRL,
         }
 
     def GetFsmId(self):
@@ -209,6 +215,10 @@ class LocoClient:
     def GetStandHeight(self):
         response = self._call_loco("get_stand_height")
         return _code_and_data(response, response.get("stand_height"))
+
+    def GetPhase(self):
+        response = self._call_loco("get_phase")
+        return _code_and_data(response, response.get("phase"))
 
     def SetFsmId(self, fsm_id: int):
         return self._code(self._call_loco("set_fsm_id", fsm_id=int(fsm_id), mode=_FSM_NAMES.get(int(fsm_id))))
@@ -234,11 +244,23 @@ class LocoClient:
     def SetTaskId(self, task_id: float):
         return self._code(self._call_loco("set_arm_task", task_id=int(task_id)))
 
+    def SetSpeedMode(self, speed_mode: int):
+        return self._code(self._call_loco("set_speed_mode", speed_mode=int(speed_mode)))
+
+    def SwitchToUserCtrl(self):
+        return self._code(self._call_loco("switch_to_user_ctrl"))
+
+    def SwitchToInternalCtrl(self, mode: int = 0):
+        return self._code(self._call_loco("switch_to_internal_ctrl", internal_mode=int(mode)))
+
     def Damp(self):
         return self.SetFsmId(1)
 
     def Start(self):
         return self.SetFsmId(500)
+
+    def Squat(self):
+        return self.SetFsmId(2)
 
     def Squat2StandUp(self):
         return self.SetFsmId(706)
@@ -248,6 +270,9 @@ class LocoClient:
 
     def Sit(self):
         return self.SetFsmId(3)
+
+    def StandUp(self):
+        return self.SetFsmId(4)
 
     def StandUp2Squat(self):
         return self.SetFsmId(706)
@@ -264,12 +289,21 @@ class LocoClient:
     def LowStand(self):
         return self._code(self._call_loco("low_stand"))
 
-    def Move(self, vx: float, vy: float, vyaw: float, continous_move: bool = False):
+    def Move(self, vx: float, vy: float, vyaw: float, continous_move: bool | None = None):
+        if continous_move is None:
+            state = self.last_response.get("loco") if isinstance(self.last_response, dict) else {}
+            continous_move = bool(state.get("continuous_move")) if isinstance(state, dict) else False
         duration = 864000.0 if continous_move else 1.0
         return self.SetVelocity(vx, vy, vyaw, duration)
 
-    def BalanceStand(self, balance_mode: int):
+    def BalanceStand(self, balance_mode: int = 0):
         return self.SetBalanceMode(balance_mode)
+
+    def ContinuousGait(self, flag: bool):
+        return self.SetBalanceMode(1 if flag else 0)
+
+    def SwitchMoveMode(self, flag: bool):
+        return self._code(self._call_loco("switch_move_mode", continuous_move=bool(flag)))
 
     def WaveHand(self, turn_flag: bool = False):
         return self._code(self._call_loco("wave_hand", turn=bool(turn_flag)))

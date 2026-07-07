@@ -200,6 +200,7 @@ print(loco.GetFsmId())
 print(loco.GetFsmMode())
 loco.SetSwingHeight(0.08)
 print(loco.GetSwingHeight())
+loco.SwitchMoveMode(True)
 loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
 loco.WaveHand()
@@ -207,10 +208,13 @@ loco.WaveHand()
 
 Supported methods include `GetFsmId`, `GetFsmMode`, `GetBalanceMode`,
 `GetSwingHeight`, `GetStandHeight`, `SetFsmId`, `SetBalanceMode`,
-`SetSwingHeight`, `SetStandHeight`, `Damp`, `Start`, `ZeroTorque`, `Move`,
-`StopMove`, `LowStand`, `HighStand`, `WaveHand`, and `ShakeHand`. `Move` is
-currently simulated with simple kinematic base motion; it is not yet Unitree's
-full locomotion controller.
+`GetPhase`, `SetSwingHeight`, `SetStandHeight`, `Damp`, `Start`, `Squat`,
+`Sit`, `StandUp`, `ZeroTorque`, `Move`, `StopMove`, `LowStand`, `HighStand`,
+`BalanceStand`, `ContinuousGait`, `SwitchMoveMode`, `SetSpeedMode`,
+`SwitchToUserCtrl`, `SwitchToInternalCtrl`, `WaveHand`, and `ShakeHand`.
+`Move` is currently simulated with simple kinematic base motion; continuous
+move, speed mode, and control-owner calls are recorded as simulator state flags
+for SDK compatibility, not as Unitree's full whole-body balance controller.
 
 Two focused examples are useful when teaching agents or new users the
 locomotion surface:

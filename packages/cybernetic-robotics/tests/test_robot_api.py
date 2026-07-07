@@ -40,6 +40,12 @@ class FakeG1Handler(BaseHTTPRequestHandler):
         "velocity": [0.0, 0.0, 0.0],
         "balance_mode": 0,
         "stand_height": None,
+        "swing_height": None,
+        "phase": [0.0, 0.0],
+        "continuous_move": False,
+        "speed_mode": 0,
+        "control_owner": "internal",
+        "internal_mode": 0,
     }
     motion_switcher = {
         "name": "",
@@ -187,12 +193,23 @@ class FakeG1Handler(BaseHTTPRequestHandler):
                     return self._json({"ok": True, "swing_height": type(self).loco["swing_height"], "loco": type(self).loco})
                 elif action == "get_stand_height":
                     return self._json({"ok": True, "stand_height": type(self).loco["stand_height"], "loco": type(self).loco})
+                elif action == "get_phase":
+                    return self._json({"ok": True, "phase": type(self).loco["phase"], "loco": type(self).loco})
                 elif action == "set_balance_mode":
                     type(self).loco["balance_mode"] = payload["balance_mode"]
                 elif action == "set_swing_height":
                     type(self).loco["swing_height"] = payload["swing_height"]
                 elif action == "set_stand_height":
                     type(self).loco["stand_height"] = payload["stand_height"]
+                elif action == "set_speed_mode":
+                    type(self).loco["speed_mode"] = payload["speed_mode"]
+                elif action == "switch_move_mode":
+                    type(self).loco["continuous_move"] = payload["continuous_move"]
+                elif action == "switch_to_user_ctrl":
+                    type(self).loco["control_owner"] = "user"
+                elif action == "switch_to_internal_ctrl":
+                    type(self).loco["control_owner"] = "internal"
+                    type(self).loco["internal_mode"] = payload["internal_mode"]
                 elif action in {"wave_hand", "shake_hand", "set_arm_task"}:
                     type(self).pose = "raise_right_hand"
                 return self._json({"ok": True, "command": command, "action": action, "loco": type(self).loco})
@@ -301,7 +318,13 @@ class FakeServer:
             "fsm_mode": "damp",
             "velocity": [0.0, 0.0, 0.0],
             "balance_mode": 0,
+            "swing_height": None,
             "stand_height": None,
+            "phase": [0.0, 0.0],
+            "continuous_move": False,
+            "speed_mode": 0,
+            "control_owner": "internal",
+            "internal_mode": 0,
         }
         FakeG1Handler.motion_switcher = {
             "name": "",
@@ -470,6 +493,13 @@ class RobotApiTests(unittest.TestCase):
                 swing_code, swing_height = loco.GetSwingHeight()
                 self.assertEqual(loco.SetStandHeight(0.18), 0)
                 stand_code, stand_height = loco.GetStandHeight()
+                phase_code, phase = loco.GetPhase()
+                self.assertEqual(loco.ContinuousGait(True), 0)
+                self.assertEqual(loco.SwitchMoveMode(True), 0)
+                continuous_move_code = loco.Move(0.1, 0.0, 0.0)
+                self.assertEqual(loco.SetSpeedMode(2), 0)
+                self.assertEqual(loco.SwitchToUserCtrl(), 0)
+                self.assertEqual(loco.SwitchToInternalCtrl(2), 0)
 
                 self.assertEqual(move_code, 0)
                 self.assertEqual(fsm_code, 0)
@@ -478,12 +508,19 @@ class RobotApiTests(unittest.TestCase):
                 self.assertEqual(balance_code, 0)
                 self.assertEqual(swing_code, 0)
                 self.assertEqual(stand_code, 0)
+                self.assertEqual(phase_code, 0)
                 self.assertEqual(fsm_id, 500)
                 self.assertEqual(fsm_mode, "start")
                 self.assertEqual(balance_mode, 2)
                 self.assertAlmostEqual(swing_height, 0.09)
                 self.assertAlmostEqual(stand_height, 0.18)
-                self.assertEqual(FakeG1Handler.loco["velocity"], [0.25, 0.0, 0.1])
+                self.assertEqual(phase, [0.0, 0.0])
+                self.assertEqual(continuous_move_code, 0)
+                self.assertEqual(FakeG1Handler.loco["velocity"], [0.1, 0.0, 0.0])
+                self.assertTrue(FakeG1Handler.loco["continuous_move"])
+                self.assertEqual(FakeG1Handler.loco["speed_mode"], 2)
+                self.assertEqual(FakeG1Handler.loco["control_owner"], "internal")
+                self.assertEqual(FakeG1Handler.loco["internal_mode"], 2)
                 self.assertEqual(loco.last_response["loco"]["fsm_id"], 500)
             finally:
                 if previous is None:

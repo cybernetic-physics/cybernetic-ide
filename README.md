@@ -271,6 +271,8 @@ print(loco.GetFsmId())
 print(loco.GetFsmMode())
 loco.SetSwingHeight(0.08)
 print(loco.GetSwingHeight())
+loco.SwitchMoveMode(True)
+loco.SetSpeedMode(1)
 loco.Move(0.25, 0.0, 0.0)
 loco.StopMove()
 ```
@@ -282,8 +284,11 @@ python3 examples/g1_loco_sdk.py
 ```
 
 The current backend maps `Move` to a simple simulator-base velocity and maps
-FSM/stand/arm-task commands to local simulator state and poses. Full
-CycloneDDS `LowCmd`/`LowState` parity remains the deeper sim-to-real backend.
+FSM/stand/arm-task commands to local simulator state and poses. `GetPhase`,
+continuous move mode, speed mode, and user/internal control ownership are
+recorded as compatibility state. Full CycloneDDS `LowCmd`/`LowState` parity
+and Unitree's whole-body balance controller remain the deeper sim-to-real
+backend.
 
 ## Robot Viewer Controls
 

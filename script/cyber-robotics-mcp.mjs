@@ -641,11 +641,19 @@ const tools = [
           "get_balance_mode",
           "get_swing_height",
           "get_stand_height",
+          "get_phase",
           "set_balance_mode",
           "set_swing_height",
           "set_stand_height",
+          "set_speed_mode",
+          "switch_move_mode",
+          "switch_to_user_ctrl",
+          "switch_to_internal_ctrl",
           "damp",
           "start",
+          "squat",
+          "sit",
+          "stand_up",
           "zero_torque",
           "stop_move",
           "move",
@@ -659,6 +667,9 @@ const tools = [
       balance_mode: { type: "integer", default: 0 },
       swing_height: { type: "number", default: 0 },
       stand_height: { type: "number", default: 0 },
+      speed_mode: { type: "integer", default: 0 },
+      continuous_move: { type: "boolean", default: false },
+      internal_mode: { type: "integer", default: 0 },
       vx: { type: "number", default: 0 },
       vy: { type: "number", default: 0 },
       omega: { type: "number", default: 0 },
@@ -1587,15 +1598,29 @@ async function executeG1LocoCommand(args) {
   if (commandName === "set_stand_height") {
     return command({ command: "loco", action: "set_stand_height", stand_height: Number(args.stand_height || 0) });
   }
+  if (commandName === "set_speed_mode") {
+    return command({ command: "loco", action: "set_speed_mode", speed_mode: toInt(args.speed_mode, 0) });
+  }
+  if (commandName === "switch_move_mode") {
+    return command({ command: "loco", action: "switch_move_mode", continuous_move: args.continuous_move === true });
+  }
+  if (commandName === "switch_to_internal_ctrl") {
+    return command({ command: "loco", action: "switch_to_internal_ctrl", internal_mode: toInt(args.internal_mode, 0) });
+  }
   const actionByCommand = {
     get_fsm_id: { action: "get_fsm_id" },
     get_fsm_mode: { action: "get_fsm_mode" },
     get_balance_mode: { action: "get_balance_mode" },
     get_swing_height: { action: "get_swing_height" },
     get_stand_height: { action: "get_stand_height" },
+    get_phase: { action: "get_phase" },
     damp: { action: "set_fsm_id", fsm_id: 1, mode: "damp" },
     start: { action: "set_fsm_id", fsm_id: 500, mode: "start" },
+    squat: { action: "set_fsm_id", fsm_id: 2, mode: "squat" },
+    sit: { action: "set_fsm_id", fsm_id: 3, mode: "sit" },
+    stand_up: { action: "set_fsm_id", fsm_id: 4, mode: "stand_up" },
     zero_torque: { action: "set_fsm_id", fsm_id: 0, mode: "zero_torque" },
+    switch_to_user_ctrl: { action: "switch_to_user_ctrl" },
     stop_move: { action: "set_velocity", velocity: [0, 0, 0], duration: 0 },
     low_stand: { action: "low_stand" },
     high_stand: { action: "high_stand" },

@@ -354,6 +354,11 @@ class G1MujocoState:
             "velocity": [0.0, 0.0, 0.0],
             "velocity_until": None,
             "arm_task_id": None,
+            "phase": [0.0, 0.0],
+            "continuous_move": False,
+            "speed_mode": 0,
+            "control_owner": "internal",
+            "internal_mode": 0,
         }
         self.motion_switcher_state = {
             "name": "",
@@ -1076,10 +1081,13 @@ class G1MujocoState:
                 return {"ok": True, "swing_height": self.loco_state["swing_height"], "loco": dict(self.loco_state)}
             if action == "get_stand_height":
                 return {"ok": True, "stand_height": self.loco_state["stand_height"], "loco": dict(self.loco_state)}
+            if action == "get_phase":
+                return {"ok": True, "phase": list(self.loco_state.get("phase", [0.0, 0.0])), "loco": dict(self.loco_state)}
             if action == "set_fsm_id":
                 fsm_id = int(payload.get("fsm_id", 1))
                 self.loco_state["fsm_id"] = fsm_id
                 self.loco_state["fsm_mode"] = payload.get("mode") or str(fsm_id)
+                self.loco_state["phase"] = [float(fsm_id), self.loco_state.get("phase", [0.0, 0.0])[1]]
                 if fsm_id in (0, 1):
                     self.control_mode = None
                     self.lowcmd_state["received_at"] = None
@@ -1093,6 +1101,19 @@ class G1MujocoState:
                 return {"ok": True, "loco": dict(self.loco_state), "paused": self.paused}
             if action == "set_balance_mode":
                 self.loco_state["balance_mode"] = int(payload.get("balance_mode", 0))
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "switch_move_mode":
+                self.loco_state["continuous_move"] = bool(payload.get("continuous_move", False))
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "set_speed_mode":
+                self.loco_state["speed_mode"] = int(payload.get("speed_mode", 0))
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "switch_to_user_ctrl":
+                self.loco_state["control_owner"] = "user"
+                return {"ok": True, "loco": dict(self.loco_state)}
+            if action == "switch_to_internal_ctrl":
+                self.loco_state["control_owner"] = "internal"
+                self.loco_state["internal_mode"] = int(payload.get("internal_mode", 0))
                 return {"ok": True, "loco": dict(self.loco_state)}
             if action == "set_swing_height":
                 self.loco_state["swing_height"] = float(payload.get("swing_height", 0.0))

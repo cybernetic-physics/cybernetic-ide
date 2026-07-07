@@ -226,6 +226,11 @@ Tasks:
 - Remaining: promote the proven lowstate/lowcmd/motion probes into a long-lived
   DDS session transport for locomotion, richer arm action coverage, and lower
   latency streaming beyond the current bounded managed-session arm pose path.
+- Done: mirror more of the official C++ G1 `LocoClient` surface in the local
+  simulator shim: `GetPhase`, `Squat`, `StandUp`, `ContinuousGait`,
+  `SwitchMoveMode`, `SetSpeedMode`, `SwitchToUserCtrl`, and
+  `SwitchToInternalCtrl`. These are simulator compatibility calls and state
+  flags, not a real Unitree balance controller.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,
