@@ -30,12 +30,15 @@ The sidecar currently:
 - when `CYBER_UNITREE_ACTION=probe_official_mujoco_dds`, launches the upstream
   G1 peer under Xvfb, subscribes to `rt/lowstate` with official Unitree HG IDL
   types, and reports whether a sample was received from the simulator bridge.
+- when `CYBER_UNITREE_ACTION=probe_official_mujoco_lowcmd`, launches the same
+  peer, reads official `rt/lowstate`, builds a CRC-valid hold-position
+  `LowCmd_`, and reports how many `rt/lowcmd` writes matched the peer.
 
 It still does **not** replace the local HTTP viewer/control bridge as the
 default transport. The sidecar has now proven official `rt/lowstate` sample
-exchange; the next provider milestone is publishing official `rt/lowcmd` while
-the peer is running and then routing the Cybernetic Python facade through that
-transport.
+exchange and safe official `rt/lowcmd` hold-frame publishing. The next provider
+milestone is keeping that DDS connection alive as a session transport and then
+routing the Cybernetic Python facade through it.
 
 Prepare sources:
 
@@ -87,3 +90,17 @@ sample from `rt/lowstate` with `motor_count=35` and `mode_machine=5`. The
 report intentionally keeps CycloneDDS loopback multicast warnings visible
 because they may matter when moving from local read probes to sustained
 publisher/subscriber control.
+
+Probe whether the official peer accepts safe SDK2 lowcmd writes:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm -e CYBER_UNITREE_ACTION=probe_official_mujoco_lowcmd \
+  unitree-g1-sdk2-sidecar
+```
+
+The current verified local result reads the same `LowState_`, creates a
+35-motor `unitree_hg.msg.dds_.LowCmd_` with `mode_machine=5`, computes CRC, and
+successfully writes 8 of 8 hold frames to `rt/lowcmd`.

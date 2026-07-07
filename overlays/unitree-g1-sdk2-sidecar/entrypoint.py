@@ -261,6 +261,48 @@ def summarize_lowstate(sample) -> dict:
     return summary
 
 
+def make_hold_lowcmd(low_state, lowcmd_factory, crc_factory, kp: float = 0.0, kd: float = 0.0):
+    low_cmd = lowcmd_factory()
+    low_cmd.mode_pr = getattr(low_state, "mode_pr", 0)
+    low_cmd.mode_machine = getattr(low_state, "mode_machine", 0)
+    state_motors = list(getattr(low_state, "motor_state", []) or [])
+    command_motors = list(getattr(low_cmd, "motor_cmd", []) or [])
+    for index, motor_cmd in enumerate(command_motors):
+        motor_state = state_motors[index] if index < len(state_motors) else None
+        motor_cmd.mode = 1
+        motor_cmd.tau = 0.0
+        motor_cmd.q = float(getattr(motor_state, "q", 0.0)) if motor_state is not None else 0.0
+        motor_cmd.dq = 0.0
+        motor_cmd.kp = float(kp)
+        motor_cmd.kd = float(kd)
+    low_cmd.crc = crc_factory.Crc(low_cmd)
+    return low_cmd
+
+
+def summarize_lowcmd(command) -> dict:
+    motors = list(getattr(command, "motor_cmd", []) or [])
+    return {
+        "sample_type": type(command).__name__,
+        "idl_typename": getattr(type(command), "__idl_typename__", None),
+        "mode_pr": getattr(command, "mode_pr", None),
+        "mode_machine": getattr(command, "mode_machine", None),
+        "motor_count": len(motors),
+        "crc": getattr(command, "crc", None),
+        "first_motors": [
+            {
+                "index": index,
+                "mode": getattr(motor, "mode", None),
+                "q": float(getattr(motor, "q", 0.0)),
+                "dq": float(getattr(motor, "dq", 0.0)),
+                "tau": float(getattr(motor, "tau", 0.0)),
+                "kp": float(getattr(motor, "kp", 0.0)),
+                "kd": float(getattr(motor, "kd", 0.0)),
+            }
+            for index, motor in enumerate(motors[:6])
+        ],
+    }
+
+
 def terminate_process(process: subprocess.Popen, timeout: float = 4.0) -> tuple[str, str, int | None]:
     if process.poll() is None:
         try:
@@ -382,6 +424,125 @@ def probe_official_mujoco_dds_exchange(mujoco_root: str, domain: int, interface:
         report["next_step"] = "Retry with a multicast-capable CYBER_UNITREE_NETWORK_INTERFACE or a CycloneDDS unicast config; the peer launched but DDS discovery/sample exchange did not prove out."
     else:
         report["next_step"] = "Inspect stdout/stderr tails and retry after confirming the official peer reaches the SDK2 bridge before the read deadline."
+    return report
+
+
+def probe_official_mujoco_lowcmd_exchange(mujoco_root: str, domain: int, interface: str | None) -> dict:
+    plan = official_mujoco_plan(mujoco_root, domain, interface)
+    simulate_root = Path(plan["simulate_root"])
+    executable = Path(plan["binary_path"])
+    report = {
+        "action": "probe_official_mujoco_lowcmd",
+        "plan": plan,
+        "binary_exists": executable.exists(),
+        "library_path": runtime_library_path(),
+        "used_xvfb": True,
+        "read_topic": "rt/lowstate",
+        "write_topic": "rt/lowcmd",
+        "domain": domain,
+        "interface": interface or None,
+        "peer_started": False,
+        "lowstate_sample_received": False,
+        "lowcmd_write_attempts": 0,
+        "lowcmd_write_successes": 0,
+        "timeout_seconds": float(os.environ.get("CYBER_UNITREE_LOWCMD_PROBE_TIMEOUT", "10")),
+        "hold_frames": int(os.environ.get("CYBER_UNITREE_LOWCMD_PROBE_FRAMES", "8")),
+    }
+    if not executable.exists():
+        report["ok"] = False
+        report["error"] = "missing official unitree_mujoco binary; run build_official_mujoco first"
+        return report
+
+    command = [
+        "xvfb-run",
+        "-a",
+        str(executable),
+        "-r",
+        plan["robot"],
+        "-s",
+        plan["scene"],
+        "-i",
+        str(domain),
+    ]
+    if interface:
+        command.extend(["-n", interface])
+
+    process = subprocess.Popen(
+        command,
+        cwd=str(simulate_root),
+        env=runtime_env(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    report["peer_started"] = True
+    report["peer_pid"] = process.pid
+    report["command"] = " ".join(command)
+
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelPublisher, ChannelSubscriber
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowCmd_, LowState_
+        from unitree_sdk2py.utils.crc import CRC
+
+        subscriber = ChannelSubscriber("rt/lowstate", LowState_)
+        subscriber.Init(None, 0)
+        sample = None
+        deadline = time.monotonic() + report["timeout_seconds"]
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                report["peer_exited_before_sample"] = True
+                break
+            sample = subscriber.Read(0.5)
+            if sample is not None:
+                report["lowstate_sample_received"] = True
+                report["lowstate_summary_before_write"] = summarize_lowstate(sample)
+                break
+
+        if sample is not None:
+            publisher = ChannelPublisher("rt/lowcmd", LowCmd_)
+            publisher.Init()
+            crc = CRC()
+            low_cmd = make_hold_lowcmd(sample, unitree_hg_msg_dds__LowCmd_, crc)
+            report["lowcmd_summary"] = summarize_lowcmd(low_cmd)
+            for _ in range(max(1, report["hold_frames"])):
+                report["lowcmd_write_attempts"] += 1
+                if publisher.Write(low_cmd, 1.0):
+                    report["lowcmd_write_successes"] += 1
+                time.sleep(0.002)
+            publisher.Close()
+        subscriber.Close()
+    except Exception as exc:
+        report["probe_error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+    finally:
+        stdout_tail, stderr_tail, returncode = terminate_process(process)
+
+    output = f"{stdout_tail}\n{stderr_tail}"
+    report["stdout_tail"] = stdout_tail
+    report["stderr_tail"] = stderr_tail
+    report["returncode"] = returncode
+    report["startup_reached_mujoco"] = "MuJoCo version" in output
+    report["bridge_started"] = "Mujoco data is prepared" in output or "Try to start sdk2 thread" in output
+    report["loader_error"] = "error while loading shared libraries" in output
+    report["glfw_error"] = "could not initialize GLFW" in output
+    report["cyclonedds_warning"] = "selected interface" in output or "ddsi_udp_conn_write" in output
+    report["ok"] = (
+        report["peer_started"]
+        and report["startup_reached_mujoco"]
+        and report["lowstate_sample_received"]
+        and report["lowcmd_write_successes"] > 0
+        and not report["loader_error"]
+        and not report["glfw_error"]
+    )
+    if report["ok"]:
+        report["next_step"] = "Promote this hold-command writer into a long-lived DDS transport behind cybernetic_robotics, then add deliberate arm-motion demos against the official peer."
+    elif report["lowstate_sample_received"]:
+        report["next_step"] = "Lowstate is readable, but rt/lowcmd writes did not match a subscriber; inspect DDS discovery/interface settings before moving control to the official transport."
+    else:
+        report["next_step"] = "Lowstate was not received, so re-run unitree_probe_official_mujoco_dds before attempting lowcmd control."
     return report
 
 
@@ -517,6 +678,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_dds":
         report["dds_probe"] = probe_official_mujoco_dds_exchange(mujoco_root, domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_official_mujoco_lowcmd":
+        report["lowcmd_probe"] = probe_official_mujoco_lowcmd_exchange(mujoco_root, domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action != "status":
         report["status"] = "error"

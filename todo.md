@@ -181,19 +181,24 @@ Tasks:
   domain `1` with `mode_machine=5`. The report still surfaces CycloneDDS
   loopback multicast warnings so the next sustained-control work does not hide
   transport risk.
+- Done: add and verify `unitree_probe_official_mujoco_lowcmd`; it reads
+  official `rt/lowstate`, builds a CRC-valid 35-motor HG `LowCmd_` using the
+  current `mode_machine`, and successfully published 8 of 8 safe hold frames to
+  official `rt/lowcmd`.
 - Done: add bundle-gated LocoMuJoCo yoga policy runtime support to the local
   MuJoCo protocol server, including `yoga_policy` status/start/stop commands,
   cycle/fall telemetry, and `.runtime/unitree-g1-mujoco/policy/` compose
   mounting for deploy bundles.
-- Remaining: publish `rt/lowcmd` with official Unitree SDK2 types while the
-  official peer is running, then map the Cybernetic Python facade onto that
-  transport.
+- Remaining: promote the proven lowstate/lowcmd probes into a long-lived DDS
+  session transport, then map the Cybernetic Python facade onto that transport
+  for deliberate arm-motion demos.
 - Implement a provider that can choose `transport=local_http|dds`.
 - Keep the Python user code stable while swapping the backend.
 - Done: add first transport/session diagnostics that show selected transport,
   sim/real mode, DDS domain, interface, topic freshness, and lowcmd timestamps.
-- Remaining: connect the diagnostics to a real SDK2/CycloneDDS sidecar instead
-  of reporting `dds` as planned but not implemented.
+- Remaining: connect `unitree_session_status` and the Python SDK facade to the
+  real SDK2/CycloneDDS sidecar session instead of keeping DDS as a separate
+  opt-in probe path.
 
 Reasoning: preserving the user API while replacing the transport is the trick.
 The user should feel like the bridge is invisible, but the developer docs must
@@ -270,6 +275,9 @@ Tasks:
 - Done: expose `unitree_probe_official_mujoco_dds` in the default Robotics
   Agent profile so agents can prove official SDK2 lowstate sample exchange
   before attempting lowcmd control.
+- Done: expose `unitree_probe_official_mujoco_lowcmd` in the default Robotics
+  Agent profile so agents can prove safe official lowcmd writes before
+  attempting deliberate motion.
 - Done: add `scene_add_object`, `scene_remove_object`, and
   `scene_list_objects` for simple generated MJCF scene objects.
 - Done: add `sim_validate_behavior` that checks fallen state, command

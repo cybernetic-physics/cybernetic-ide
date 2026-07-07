@@ -1171,6 +1171,7 @@
               "unitree_build_official_mujoco_peer": true,
               "unitree_probe_official_mujoco_launch": true,
               "unitree_probe_official_mujoco_dds": true,
+              "unitree_probe_official_mujoco_lowcmd": true,
               "sim_pause": true,
               "sim_resume": true,
               "sim_reset": true,

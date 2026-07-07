@@ -197,9 +197,16 @@ returns a structured summary including motor count, `mode_machine`, IMU fields,
 stdout/stderr tails, and whether MuJoCo plus the SDK2 bridge started. On the
 current local runtime it has proven a 35-motor `LowState_` sample on DDS domain
 `1` using interface `lo`. CycloneDDS still warns that `lo` is not
-multicast-capable, so the warning is retained in the report; the next control
-milestone is publishing `rt/lowcmd` with official Unitree types while the peer
-is running, not merely suppressing the warning.
+multicast-capable, so the warning is retained in the report.
+
+`unitree_probe_official_mujoco_lowcmd` proves the corresponding write side
+without intentionally moving the robot. It reads one official `LowState_`,
+copies the current motor positions and `mode_machine` into an HG `LowCmd_`,
+computes the official CRC, and publishes a short sequence of hold frames to
+`rt/lowcmd`. The current verified result wrote 8 of 8 hold frames successfully
+with a 35-motor `LowCmd_`. The next control milestone is promoting that writer
+into a long-lived `cybernetic_robotics` DDS transport and then adding deliberate
+arm-motion demos against the official peer.
 
 Runtime environment knobs:
 
@@ -466,9 +473,11 @@ policies.
    Python, CycloneDDS, and the official Unitree G1 examples available. The
    current sidecar prepares pinned official SDK2 Python/C++ and MuJoCo sources,
    builds the CycloneDDS Python binding, initializes a DDS domain, imports
-   Unitree HG IDL, and creates `rt/lowcmd`/`rt/lowstate` probe channels.
-   Remaining work is launching official `unitree_mujoco` and proving real
-   lowstate/lowcmd sample exchange against that peer.
+   Unitree HG IDL, creates `rt/lowcmd`/`rt/lowstate` probe channels, launches
+   official `unitree_mujoco`, proves real `rt/lowstate` sample reads, and
+   proves safe CRC-valid `rt/lowcmd` hold-frame writes against that peer.
+   Remaining work is turning the short-lived probes into the default long-lived
+   DDS-backed session provider.
 2. Add session config for `mode=sim|real`, DDS domain, network interface, G1
    model variant, and safety profile.
 3. Replace the current local HTTP approximation for `rt/lowcmd` and

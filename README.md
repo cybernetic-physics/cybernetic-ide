@@ -320,6 +320,9 @@ ad hoc scripts first. The default tool surface includes:
 - official SDK2 data probe: `unitree_probe_official_mujoco_dds`, which runs
   the upstream G1 peer and verifies that SDK2/CycloneDDS can read an
   `rt/lowstate` sample with Unitree HG IDL types;
+- official SDK2 control probe: `unitree_probe_official_mujoco_lowcmd`, which
+  reads official `rt/lowstate`, builds a CRC-valid hold-position `LowCmd_`,
+  and verifies `rt/lowcmd` writes against the upstream peer;
 - viewer evidence: `viewer_camera_control`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
 - scene editing: `scene_get`, `scene_read_mjcf`, `scene_validate_mjcf`, and
