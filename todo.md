@@ -295,6 +295,20 @@ Tasks:
   reader matched `rt/api/sport/request` before timeout. Keep the normal
   `LocoClient` facade on the explicit local compatibility route until the
   upstream peer is shown to answer `rt/api/sport/request`.
+- Done: add read-only RPC service discovery through
+  `OfficialG1Sim.rpc_discovery_session()` and MCP
+  `unitree_probe_official_mujoco_rpc_discovery`. It checks whether `sport`,
+  `agv`, `arm`, and `voice` Unitree RPC request topics have matched DDS
+  service readers before any request is sent, which is the right preflight for
+  deciding whether the official Python `sport` service or C++-only G1 `agv`
+  service can back our locomotion facades.
+- Current discovery evidence: after restarting `unitree-g1-sdk2-session`,
+  `OfficialG1Sim.rpc_discovery_session(wait=1.0)` reported zero matched
+  service-side readers for `rt/api/sport/request`, `rt/api/agv/request`,
+  `rt/api/arm/request`, and `rt/api/voice/request`. That confirms the official
+  Unitree MuJoCo peer is currently useful for low-level `rt/lowcmd` /
+  `rt/lowstate`, not high-level Unitree RPC services, unless we add or launch a
+  separate service bridge.
 - Remaining: connect `unitree_session_status` and the normal Python SDK facade
   to a long-lived real SDK2/CycloneDDS sidecar session instead of only
   short-lived official probes. The arm-action path now crosses that boundary;

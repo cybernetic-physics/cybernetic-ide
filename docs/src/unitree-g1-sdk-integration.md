@@ -624,6 +624,18 @@ The current repo has the first narrow version of that API boundary:
   service-side reader before timeout or because DDS write failed. That is
   materially different from `3104` (`RPC_ERR_CLIENT_API_TIMEOUT`), where a
   request was written but no response arrived.
+- `unitree_probe_official_mujoco_rpc_discovery` is the read-only preflight for
+  that problem. It creates Unitree `Request_` writers for `sport`, `agv`,
+  `arm`, and `voice` request topics, waits for DDS publication matching, and
+  reports whether each request topic has a service-side reader before sending
+  an RPC. This matters because the official Python SDK exposes G1 `sport`
+  locomotion, while the official C++ SDK also contains a newer G1 `agv`
+  service; Cybernetic's authored AGV shim should not be promoted to official
+  DDS unless `rt/api/agv/request` is actually served.
+  Live evidence on the current managed `unitree-g1-sdk2-session` showed zero
+  matched service-side readers for `sport`, `agv`, `arm`, and `voice`, which
+  means the official MuJoCo peer should be treated as a low-level
+  `rt/lowcmd`/`rt/lowstate` peer rather than a high-level Unitree RPC server.
 - `cyber-g1 sdk-audit` and MCP `unitree_sdk_compatibility_audit` statically
   compare the cloned official Unitree G1 SDK2 Python examples with Cybernetic's
   current `unitree_sdk2py` shim. The current audit reports import/class/method

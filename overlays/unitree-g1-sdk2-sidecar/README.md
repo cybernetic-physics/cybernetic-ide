@@ -116,6 +116,25 @@ docker compose \
 The MCP wrapper is `unitree_read_official_mujoco_lowstate`. Python users can
 call `OfficialG1Sim.lowstate_session()`.
 
+Inspect which official Unitree RPC request topics have a matched service-side
+reader:
+
+```sh
+docker compose \
+  --env-file .runtime/unitree-g1-sdk2/compose.env \
+  -f overlays/unitree-g1-sdk2-sidecar/compose.yaml \
+  run --rm \
+  -e CYBER_UNITREE_ACTION=probe_official_mujoco_rpc_discovery \
+  -e CYBER_UNITREE_RPC_DISCOVERY_WAIT=1.0 \
+  unitree-g1-sdk2-sidecar
+```
+
+The MCP wrapper is `unitree_probe_official_mujoco_rpc_discovery`. Python users
+can call `OfficialG1Sim.rpc_discovery_session()`. This is a read-only DDS
+discovery check: it creates Unitree-typed request writers for `sport`, `agv`,
+`arm`, and `voice`, waits for publication matching, and reports whether a
+service-side reader exists before any RPC call is sent.
+
 Probe whether the managed official peer answers G1 sport/LocoClient RPCs:
 
 ```sh

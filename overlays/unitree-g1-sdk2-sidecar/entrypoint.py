@@ -1361,6 +1361,125 @@ def probe_official_mujoco_loco_rpc(domain: int, interface: str | None) -> dict:
     return report
 
 
+def probe_official_mujoco_rpc_discovery(domain: int, interface: str | None) -> dict:
+    """Inspect which Unitree RPC service request topics have matched readers."""
+
+    wait_seconds = float(os.environ.get("CYBER_UNITREE_RPC_DISCOVERY_WAIT", "1.0"))
+    services = [
+        {
+            "name": "sport",
+            "source": "unitree_sdk2_python.g1.loco",
+            "request_topic": "rt/api/sport/request",
+            "response_topic": "rt/api/sport/response",
+            "client": "LocoClient",
+        },
+        {
+            "name": "agv",
+            "source": "unitree_sdk2 C++ g1/agv headers",
+            "request_topic": "rt/api/agv/request",
+            "response_topic": "rt/api/agv/response",
+            "client": "AgvClient",
+        },
+        {
+            "name": "arm",
+            "source": "unitree_sdk2_python.g1.arm",
+            "request_topic": "rt/api/arm/request",
+            "response_topic": "rt/api/arm/response",
+            "client": "G1ArmActionClient",
+        },
+        {
+            "name": "voice",
+            "source": "unitree_sdk2_python.g1.audio",
+            "request_topic": "rt/api/voice/request",
+            "response_topic": "rt/api/voice/response",
+            "client": "AudioClient",
+        },
+    ]
+    report = {
+        "action": "probe_official_mujoco_rpc_discovery",
+        "domain": domain,
+        "interface": interface or None,
+        "wait_seconds": wait_seconds,
+        "services": [],
+    }
+    try:
+        sys.path.insert(0, os.environ.get("UNITREE_SDK2_PYTHON_ROOT", "/opt/unitree_sdk2_python"))
+        from unitree_sdk2py.core.channel import ChannelFactory, ChannelFactoryInitialize
+        from unitree_sdk2py.idl.unitree_api.msg.dds_ import Request_ as Request
+        from unitree_sdk2py.idl.unitree_api.msg.dds_ import Response_ as Response
+
+        ChannelFactoryInitialize(domain, interface)
+        factory = ChannelFactory()
+        channels = []
+        request_channels = []
+        for service in services:
+            entry = dict(service)
+            try:
+                request_channel = factory.CreateSendChannel(service["request_topic"], Request)
+                response_channel = factory.CreateRecvChannel(service["response_topic"], Response)
+                channels.extend([request_channel, response_channel])
+                request_channels.append((entry, request_channel))
+                entry["request_writer_created"] = True
+                entry["response_reader_created"] = True
+            except Exception as exc:
+                entry["request_writer_created"] = False
+                entry["response_reader_created"] = False
+                entry["error"] = str(exc)
+            report["services"].append(entry)
+
+        time.sleep(max(0.0, wait_seconds))
+
+        for entry, request_channel in request_channels:
+            if not entry.get("request_writer_created"):
+                continue
+            entry["request_matched_readers"] = _channel_publication_matched_count(request_channel)
+            entry["request_service_reader_present"] = entry["request_matched_readers"] > 0
+
+        for channel in channels:
+            try:
+                channel.CloseWriter()
+            except Exception:
+                pass
+            try:
+                channel.CloseReader()
+            except Exception:
+                pass
+    except Exception as exc:
+        report["error"] = str(exc)
+        report["traceback"] = traceback.format_exc()
+
+    matched = [service["name"] for service in report["services"] if service.get("request_service_reader_present")]
+    missing = [
+        service["name"]
+        for service in report["services"]
+        if service.get("request_writer_created") and not service.get("request_service_reader_present")
+    ]
+    report["matched_services"] = matched
+    report["missing_request_readers"] = missing
+    report["ok"] = bool(matched)
+    if "sport" in missing:
+        report["sport_rpc_diagnosis"] = {
+            "likely_cause": "no_service_reader_for_rt_api_sport_request",
+            "evidence": "A Unitree Request_ writer on rt/api/sport/request did not match any reader during DDS discovery.",
+            "next_step": "Keep LocoClient on the local compatibility route or add a sport service bridge for the managed official MuJoCo peer.",
+        }
+    if "agv" in missing:
+        report["agv_rpc_diagnosis"] = {
+            "likely_cause": "no_service_reader_for_rt_api_agv_request",
+            "evidence": "The C++ G1 AGV service topic rt/api/agv/request did not match any reader during DDS discovery.",
+            "next_step": "Do not promote authored AgvClient calls to official DDS until an AGV service reader is present.",
+        }
+    return report
+
+
+def _channel_publication_matched_count(channel) -> int:
+    try:
+        writer = getattr(channel, "_Channel__writer")
+        return int(getattr(writer, "_Channel__Writer__publication_matched_count", 0))
+    except Exception:
+        return 0
+
+
 def _loco_call_ok(value) -> bool:
     if isinstance(value, tuple) and value:
         return value[0] == 0
@@ -1589,6 +1708,8 @@ def main() -> int:
             "rt/hand_sdk",
             "rt/api/sport/request",
             "rt/api/sport/response",
+            "rt/api/agv/request",
+            "rt/api/agv/response",
             "rt/api/arm/request",
             "rt/api/arm/response",
         ],
@@ -1619,6 +1740,9 @@ def main() -> int:
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "probe_official_mujoco_loco_rpc":
         report["loco_rpc_probe"] = probe_official_mujoco_loco_rpc(domain, interface or None)
+        report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
+    elif action == "probe_official_mujoco_rpc_discovery":
+        report["rpc_discovery_probe"] = probe_official_mujoco_rpc_discovery(domain, interface or None)
         report["official_mujoco_peer"] = official_mujoco_plan(mujoco_root, domain, interface or None)
     elif action == "read_official_mujoco_lowstate":
         report["lowstate_read"] = read_official_mujoco_lowstate(domain, interface or None)

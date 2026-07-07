@@ -141,6 +141,30 @@ class OfficialG1Sim:
             "stderr_tail": completed.stderr[-12000:],
         }
 
+    def rpc_discovery_session(self, *, wait: float = 1.0) -> dict[str, Any]:
+        """Inspect official Unitree RPC service discovery against a managed session."""
+
+        env = {
+            "CYBER_UNITREE_ACTION": "probe_official_mujoco_rpc_discovery",
+            "CYBER_UNITREE_RPC_DISCOVERY_WAIT": str(_clamp_float(wait, 0.1, 10.0)),
+        }
+        completed = self._run_sidecar(env)
+        report = _parse_json_report(completed.stdout)
+        probe = report.get("rpc_discovery_probe") if isinstance(report, dict) else None
+        services = probe.get("services", []) if isinstance(probe, dict) else []
+        return {
+            "ok": bool(isinstance(probe, dict) and probe.get("ok")),
+            "source": "official_unitree_mujoco_managed_session",
+            "matched_services": probe.get("matched_services", []) if isinstance(probe, dict) else [],
+            "missing_request_readers": probe.get("missing_request_readers", []) if isinstance(probe, dict) else [],
+            "services": services,
+            "probe": probe,
+            "report": report,
+            "command": " ".join(_sidecar_command(self.compose_env, self.compose_file, env)),
+            "stdout_tail": completed.stdout[-12000:],
+            "stderr_tail": completed.stderr[-12000:],
+        }
+
     def start_session(self, *, wait: bool = True, wait_timeout: float = 12.0) -> dict[str, Any]:
         """Start the managed official Unitree MuJoCo DDS peer session.
 
@@ -203,7 +227,7 @@ class OfficialG1Sim:
             status = self.session_status()
         return status
 
-    def session_status(self, *, log_tail: int = 120) -> dict[str, Any]:
+    def session_status(self, *, log_tail: int = 2000) -> dict[str, Any]:
         """Inspect the managed official MuJoCo session container."""
 
         inspect = self._unchecked_runner(
@@ -218,6 +242,16 @@ class OfficialG1Sim:
         )
         state = _parse_json_report(inspect.stdout.strip()) if inspect.returncode == 0 else {}
         reports = _parse_json_objects(logs.stdout) if logs.returncode == 0 else []
+        lifecycle_source = "tail"
+        if state.get("Running") is True and not reports and logs.returncode == 0:
+            full_logs = self._unchecked_runner(
+                ["docker", "logs", OFFICIAL_MUJOCO_SESSION_CONTAINER],
+                self.root,
+                min(self.timeout, 30),
+            )
+            if full_logs.returncode == 0:
+                reports = _parse_json_objects(full_logs.stdout)
+                lifecycle_source = "full_logs_fallback"
         ready_report = next((report for report in reports if report.get("action") == "serve_official_mujoco"), None)
         if ready_report is None and reports:
             ready_report = reports[0]
@@ -240,6 +274,7 @@ class OfficialG1Sim:
             "last_report": last_report,
             "exit_report": exit_report,
             "lifecycle_reports_seen": len(reports),
+            "lifecycle_report_source": lifecycle_source,
             "ready": running and isinstance(ready_report, dict) and ready_report.get("ok") is True and exit_report is None,
             "logs_tail": logs.stdout if logs.returncode == 0 else None,
             "logs_error": None if logs.returncode == 0 else logs.stderr.strip(),
@@ -433,6 +468,9 @@ class OfficialG1ManagedSession:
 
     def loco_rpc(self, *, include_stop: bool = False, timeout: float = 2.0) -> dict[str, Any]:
         return self.sim.loco_rpc_session(include_stop=include_stop, timeout=timeout)
+
+    def rpc_discovery(self, *, wait: float = 1.0) -> dict[str, Any]:
+        return self.sim.rpc_discovery_session(wait=wait)
 
     def arm_pose(self, preset: str = "raise_right_hand", **kwargs: Any) -> dict[str, Any]:
         return self.sim.arm_pose_session(preset, **kwargs)

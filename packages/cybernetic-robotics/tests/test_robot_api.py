@@ -1321,6 +1321,41 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(status["last_report"]["returncode"], 1)
         self.assertEqual(status["lifecycle_reports_seen"], 2)
 
+    def test_official_g1_sim_session_status_falls_back_to_full_logs(self):
+        log_calls = []
+
+        def fake_unchecked_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            command = " ".join(args)
+            if "inspect unitree-g1-sdk2-session" in command:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"Running": True, "Status": "running", "ExitCode": 0}),
+                    stderr="",
+                )
+            if args[:2] == ["docker", "logs"]:
+                log_calls.append(args)
+                if "--tail" in args:
+                    return subprocess.CompletedProcess(args, 0, stdout="CycloneDDS noisy tail only\n", stderr="")
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"action": "serve_official_mujoco", "ok": True}) + "\nCycloneDDS noisy tail\n",
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="unexpected")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            official = OfficialG1Sim(Path(tmp), _unchecked_runner=fake_unchecked_runner)
+
+            status = official.session_status()
+
+        self.assertTrue(status["running"])
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["lifecycle_report_source"], "full_logs_fallback")
+        self.assertEqual(status["ready_report"]["action"], "serve_official_mujoco")
+        self.assertEqual(len(log_calls), 2)
+
     def test_official_g1_sim_stop_session_removes_named_container(self):
         unchecked_calls = []
 
@@ -1577,6 +1612,55 @@ class RobotApiTests(unittest.TestCase):
         self.assertIn("CYBER_UNITREE_ACTION=probe_official_mujoco_loco_rpc", command)
         self.assertIn("CYBER_UNITREE_LOCO_RPC_STOP_MOVE=1", command)
         self.assertIn("CYBER_UNITREE_LOCO_RPC_TIMEOUT=1.5", command)
+
+    def test_official_g1_sim_can_probe_managed_session_rpc_discovery(self):
+        captured = {}
+
+        def fake_runner(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+            captured["args"] = args
+            captured["cwd"] = cwd
+            captured["timeout"] = timeout
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout=json.dumps(
+                    {
+                        "rpc_discovery_probe": {
+                            "ok": False,
+                            "matched_services": [],
+                            "missing_request_readers": ["sport", "agv"],
+                            "services": [
+                                {
+                                    "name": "sport",
+                                    "request_topic": "rt/api/sport/request",
+                                    "request_matched_readers": 0,
+                                    "request_service_reader_present": False,
+                                }
+                            ],
+                        }
+                    }
+                ),
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".runtime/unitree-g1-sdk2").mkdir(parents=True)
+            (root / ".runtime/unitree-g1-sdk2/compose.env").write_text("UNITREE=test\n", encoding="utf-8")
+            (root / "overlays/unitree-g1-sdk2-sidecar").mkdir(parents=True)
+            (root / "overlays/unitree-g1-sdk2-sidecar/compose.yaml").write_text("services: {}\n", encoding="utf-8")
+            official = OfficialG1Sim(root, timeout=42, _runner=fake_runner)
+
+            result = official.rpc_discovery_session(wait=1.5)
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["source"], "official_unitree_mujoco_managed_session")
+        self.assertEqual(result["missing_request_readers"], ["sport", "agv"])
+        self.assertEqual(result["services"][0]["request_topic"], "rt/api/sport/request")
+        self.assertEqual(captured["timeout"], 42)
+        command = " ".join(captured["args"])
+        self.assertIn("CYBER_UNITREE_ACTION=probe_official_mujoco_rpc_discovery", command)
+        self.assertIn("CYBER_UNITREE_RPC_DISCOVERY_WAIT=1.5", command)
 
 
 if __name__ == "__main__":

@@ -131,6 +131,7 @@ official = OfficialG1Sim.discover()
 
 with official.session() as sim:
     print(sim.lowstate()["lowstate_summary"])
+    print(sim.rpc_discovery()["missing_request_readers"])
     print(sim.loco_rpc()["probe"])
     print(sim.raise_right_hand()["moved_joints"])
     sim.arm_pose_evidence(output_path=".runtime/official-mujoco-evidence/latest.json")
@@ -139,8 +140,10 @@ with official.session() as sim:
 Pass `keep_running=True` to leave the Docker peer up for follow-up MCP or CLI
 commands. `arm_pose_evidence()` writes a reviewable JSON bundle with before and
 after official `rt/lowstate` summaries, the bounded command parameters, moved
-joints, and agent hints. `loco_rpc()` probes whether the managed official peer
-answers G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
+joints, and agent hints. `rpc_discovery()` is a read-only DDS preflight for
+matched Unitree RPC service readers on `sport`, `agv`, `arm`, and `voice`
+request topics. `loco_rpc()` probes whether the managed official peer answers
+G1 `LocoClient` sport RPC calls on `rt/api/sport/request` and
 `rt/api/sport/response` before local locomotion calls are promoted to official
 DDS routing.
 

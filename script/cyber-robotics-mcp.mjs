@@ -225,6 +225,21 @@ const tools = [
     [],
     { readOnlyHint: false, idempotentHint: true, openWorldHint: true },
   ),
+  tool(
+    "unitree_probe_official_mujoco_rpc_discovery",
+    "Inspect which official Unitree G1 RPC service request topics have matched DDS readers on the managed MuJoCo session.",
+    {
+      wait_seconds: {
+        type: "number",
+        minimum: 0.1,
+        maximum: 10,
+        default: 1,
+        description: "Seconds to wait for DDS publication-match discovery.",
+      },
+    },
+    [],
+    { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+  ),
   tool("unitree_stop_official_mujoco_session", "Stop and remove the managed official Unitree MuJoCo G1 DDS peer session container.", {}, [], {
     readOnlyHint: false,
     idempotentHint: true,
@@ -1115,6 +1130,8 @@ async function callTool(name, args) {
       return textResult(sdk2ReadOfficialMujocoLowstate());
     case "unitree_probe_official_mujoco_loco_rpc":
       return textResult(sdk2ProbeOfficialMujocoLocoRpc(args));
+    case "unitree_probe_official_mujoco_rpc_discovery":
+      return textResult(sdk2ProbeOfficialMujocoRpcDiscovery(args));
     case "unitree_stop_official_mujoco_session":
       return textResult(sdk2StopOfficialMujocoSession());
     case "unitree_probe_official_mujoco_dds":
@@ -2419,6 +2436,12 @@ function roboticsToolReference() {
       toolReference("python_control_run", "script-execution", "Runs a workspace Python script to completion.", "Script reviewed; simulator state depends on script."),
       toolReference("python_control_start", "script-execution", "Starts managed long-running Python job.", "Script reviewed; monitor with python_control_logs."),
       toolReference(
+        "unitree_probe_official_mujoco_rpc_discovery",
+        "read",
+        "Creates Unitree-typed RPC request writers and reports DDS matched-reader counts.",
+        "Managed official MuJoCo DDS session running and ready.",
+      ),
+      toolReference(
         "unitree_probe_official_mujoco_loco_rpc",
         "read-with-optional-stop",
         "May send a safe StopMove RPC when include_stop is true.",
@@ -2771,7 +2794,7 @@ function waitForOfficialMujocoSessionReady(timeoutMs = 12_000) {
 
 function sdk2OfficialMujocoSessionStatus() {
   const inspect = run("docker", ["inspect", OFFICIAL_MUJOCO_SESSION_CONTAINER, "--format", "{{json .State}}"], { timeoutMs: 30_000 });
-  const logs = run("docker", ["logs", "--tail", "120", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 30_000 });
+  const logs = run("docker", ["logs", "--tail", "2000", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 30_000 });
   let state = null;
   if (inspect.status === 0 && inspect.stdout.trim()) {
     try {
@@ -2780,7 +2803,15 @@ function sdk2OfficialMujocoSessionStatus() {
       state = null;
     }
   }
-  const reports = logs.status === 0 ? parseJsonObjects(logs.stdout) : [];
+  let reports = logs.status === 0 ? parseJsonObjects(logs.stdout) : [];
+  let lifecycleSource = "tail";
+  if (state?.Running === true && reports.length === 0 && logs.status === 0) {
+    const fullLogs = run("docker", ["logs", OFFICIAL_MUJOCO_SESSION_CONTAINER], { timeoutMs: 30_000 });
+    if (fullLogs.status === 0) {
+      reports = parseJsonObjects(fullLogs.stdout);
+      lifecycleSource = "full_logs_fallback";
+    }
+  }
   const readyReport = reports.find((report) => report?.action === "serve_official_mujoco") ?? reports[0] ?? null;
   const exitReport =
     [...reports].reverse().find((report) => report?.action === "serve_official_mujoco_exit") ?? null;
@@ -2799,6 +2830,7 @@ function sdk2OfficialMujocoSessionStatus() {
     last_report: lastReport,
     exit_report: exitReport,
     lifecycle_reports_seen: reports.length,
+    lifecycle_report_source: lifecycleSource,
     ready: running && readyReport?.ok === true && !exitReport,
     logs_tail: logs.status === 0 ? logs.stdout : null,
     logs_error: logs.status === 0 ? null : logs.stderr.trim(),
@@ -2872,6 +2904,50 @@ function sdk2ProbeOfficialMujocoLocoRpc(options = {}) {
     "CYBER_UNITREE_ACTION=probe_official_mujoco_loco_rpc",
     `CYBER_UNITREE_LOCO_RPC_TIMEOUT=${timeoutSeconds}`,
     `CYBER_UNITREE_LOCO_RPC_STOP_MOVE=${includeStop ? 1 : 0}`,
+  ];
+  const args = [...sdk2ComposeArgs(), "run", "--rm"];
+  for (const entry of env) {
+    args.push("-e", entry);
+  }
+  args.push("unitree-g1-sdk2-sidecar");
+  const result = runChecked("docker", args, { timeoutMs: 120_000 });
+  let report = null;
+  const jsonStart = result.stdout.indexOf("{");
+  const jsonEnd = result.stdout.lastIndexOf("}");
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    try {
+      report = JSON.parse(result.stdout.slice(jsonStart, jsonEnd + 1));
+    } catch {
+      report = null;
+    }
+  }
+  return {
+    command: `docker ${args.join(" ")}`,
+    session,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    report,
+  };
+}
+
+function sdk2ProbeOfficialMujocoRpcDiscovery(options = {}) {
+  const envPath = sdk2ComposeEnvPath();
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Missing SDK2 sidecar compose env. Run unitree_prepare_sdk2_sidecar first.");
+  }
+  const session = sdk2OfficialMujocoSessionStatus();
+  if (!session.running || !session.ready) {
+    return {
+      ok: false,
+      error: "managed official MuJoCo session is not running and ready",
+      next_step: "Run unitree_start_official_mujoco_session, then inspect ready_report, exit_report, and logs_tail if readiness does not hold.",
+      session,
+    };
+  }
+  const waitSeconds = clampNumber(options.wait_seconds, 0.1, 10, 1);
+  const env = [
+    "CYBER_UNITREE_ACTION=probe_official_mujoco_rpc_discovery",
+    `CYBER_UNITREE_RPC_DISCOVERY_WAIT=${waitSeconds}`,
   ];
   const args = [...sdk2ComposeArgs(), "run", "--rm"];
   for (const entry of env) {

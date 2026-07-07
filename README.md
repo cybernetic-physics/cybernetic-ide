@@ -368,6 +368,10 @@ ad hoc scripts first. The default tool surface includes:
 - managed official SDK2 pose command: `unitree_command_official_mujoco_arm_pose`,
   which sends the same bounded multi-joint pose to an already-running
   `unitree-g1-sdk2-session` instead of launching a second MuJoCo peer;
+- official SDK2 RPC discovery: `unitree_probe_official_mujoco_rpc_discovery`,
+  which checks whether `sport`, `agv`, `arm`, and `voice` request topics have
+  matched service-side DDS readers before an agent tries a request/response
+  client;
 - viewer evidence: `viewer_camera_control`,
   `viewer_camera_bookmark_save/list/apply/delete`, `viewer_snapshot`,
   `viewer_snapshot_file`, and `viewer_snapshot_series`;
