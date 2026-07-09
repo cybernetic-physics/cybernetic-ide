@@ -1,4 +1,7 @@
-mujoco==3.3.6
+# must match the MuJoCo version the yoga policy was trained against
+# (loco-mujoco / .venv-rl); solver behavior differs enough across versions
+# that a mimic policy trained on one falls over on the other
+mujoco==3.10.0
 numpy
 msgpack
 websockets>=12,<16
