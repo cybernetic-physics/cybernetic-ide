@@ -29,7 +29,9 @@ def main() -> None:
     parser.add_argument("--settle", type=float, default=1.0,
                         help="Settle seconds before the first pose (must match the trajectory).")
     parser.add_argument("--glide", type=float, default=1.5,
-                        help="Glide seconds per pose (must match the trajectory).")
+                        help="Entry glide seconds per pose (must match the trajectory).")
+    parser.add_argument("--return-glide", type=float, default=None,
+                        help="Glide seconds back to standing when --neutral-hold is enabled (defaults to --glide).")
     parser.add_argument("--hold", type=float, default=3.0,
                         help="Hold seconds per pose (must match the trajectory).")
     parser.add_argument("--neutral-hold", type=float, default=0.0,
@@ -112,7 +114,7 @@ def main() -> None:
         "flow_settle_seconds": np.asarray(args.settle),
         "flow_segment_seconds": np.asarray(
             args.glide + args.hold
-            + ((args.glide + args.neutral_hold) if args.neutral_hold > 0 else 0.0)
+            + (((args.return_glide or args.glide) + args.neutral_hold) if args.neutral_hold > 0 else 0.0)
         ),
     }
     for key in ("obs_mean", "obs_var", "n_layers", "w0", "b0", "w1", "b1", "w2", "b2",

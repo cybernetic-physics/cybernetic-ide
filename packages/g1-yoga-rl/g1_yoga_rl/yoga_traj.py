@@ -148,6 +148,7 @@ def build_yoga_trajectory(
     hold_seconds: float = 3.0,
     settle_seconds: float = 1.0,
     neutral_hold_seconds: float = 0.0,
+    return_glide_seconds: float | None = None,
 ) -> Trajectory:
     """Assemble the glide+hold qpos sequence and extend it with kinematics.
 
@@ -179,26 +180,27 @@ def build_yoga_trajectory(
                   f"{projection.skipped_joints}")
 
     glide_frames = max(1, int(round(glide_seconds / dt)))
+    return_glide_frames = max(1, int(round((return_glide_seconds or glide_seconds) / dt)))
     hold_frames = max(1, int(round(hold_seconds / dt)))
     settle_frames = max(1, int(round(settle_seconds / dt)))
     neutral_frames = int(round(neutral_hold_seconds / dt))
 
     keyframes = []
     for projection in projections:
-        keyframes.append((projection.qpos, hold_frames))
+        keyframes.append((projection.qpos, glide_frames, hold_frames))
         if neutral_frames > 0:
-            keyframes.append((base_qpos, neutral_frames))
+            keyframes.append((base_qpos, return_glide_frames, neutral_frames))
 
     segment_frames = glide_frames + hold_frames
     if neutral_frames > 0:
-        segment_frames += glide_frames + neutral_frames
+        segment_frames += return_glide_frames + neutral_frames
     expected = settle_frames + segment_frames * len(projections)
 
     qpos_frames = []
     current = base_qpos
     qpos_frames.extend([current.copy() for _ in range(settle_frames)])
-    for target, target_hold in keyframes:
-        fractions = smoothstep(np.linspace(0.0, 1.0, glide_frames, endpoint=False))
+    for target, transition_frames, target_hold in keyframes:
+        fractions = smoothstep(np.linspace(0.0, 1.0, transition_frames, endpoint=False))
         for fraction in fractions:
             qpos_frames.append(current + (target - current) * fraction)
         qpos_frames.extend([target.copy() for _ in range(target_hold)])

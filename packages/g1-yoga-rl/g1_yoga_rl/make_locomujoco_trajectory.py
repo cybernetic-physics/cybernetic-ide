@@ -10,6 +10,8 @@ def main() -> int:
     parser.add_argument("--flow", choices=["full", "stable"], default="full")
     parser.add_argument("--poses", nargs="*", help="Explicit pose list, overriding --flow.")
     parser.add_argument("--glide", type=float, default=1.5, help="Glide seconds between poses.")
+    parser.add_argument("--return-glide", type=float, default=None,
+                        help="Glide seconds back to standing when --neutral-hold is enabled (defaults to --glide).")
     parser.add_argument("--hold", type=float, default=3.0, help="Hold seconds per pose.")
     parser.add_argument("--neutral-hold", type=float, default=0.0,
                         help="Seconds to hold the standing anchor between poses (0 disables the detour).")
@@ -22,7 +24,8 @@ def main() -> int:
     pose_names = args.poses or (FULL_FLOW if args.flow == "full" else STABLE_FLOW)
     env = make_cyber_env(headless=not args.replay)
     trajectory = build_yoga_trajectory(env, pose_names, glide_seconds=args.glide, hold_seconds=args.hold,
-                                       neutral_hold_seconds=args.neutral_hold)
+                                       neutral_hold_seconds=args.neutral_hold,
+                                       return_glide_seconds=args.return_glide)
     frame_count = int(trajectory.data.qpos.shape[0])
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
