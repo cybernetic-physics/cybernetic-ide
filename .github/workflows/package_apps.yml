@@ -1,0 +1,343 @@
+name: package_apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to package
+        type: choice
+        default: all
+        options:
+          - all
+          - linux
+          - macos
+          - windows
+      arch:
+        description: CPU architecture to package
+        type: choice
+        default: all
+        options:
+          - all
+          - x86_64
+          - aarch64
+      release_channel:
+        description: Release channel baked into the app bundle
+        type: choice
+        default: dev
+        options:
+          - dev
+          - nightly
+          - preview
+          - stable
+      linux_x86_64_runner:
+        description: Runner label for Linux x86_64 packages
+        type: string
+        default: ubuntu-24.04
+      linux_aarch64_runner:
+        description: Runner label for Linux aarch64 packages
+        type: string
+        default: ubuntu-24.04-arm
+      macos_x86_64_runner:
+        description: Runner label for macOS x86_64 packages
+        type: string
+        default: macos-15-intel
+      macos_aarch64_runner:
+        description: Runner label for macOS aarch64 packages
+        type: string
+        default: macos-15
+      windows_x86_64_runner:
+        description: Runner label for Windows x86_64 packages
+        type: string
+        default: windows-2022
+      windows_aarch64_runner:
+        description: Runner label for Windows aarch64 packages
+        type: string
+        default: windows-2022
+      use_windows_dev_drive:
+        description: Create a Windows Dev Drive before packaging
+        type: boolean
+        default: false
+      upload_release:
+        description: Upload built packages to a GitHub release
+        type: boolean
+        default: false
+      release_tag:
+        description: Release tag to upload assets to when upload_release is true
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  RELEASE_CHANNEL: ${{ inputs.release_channel }}
+  RUST_BACKTRACE: "1"
+  ZED_RELEASE_CHANNEL: ${{ inputs.release_channel }}
+  ZED_COMMIT_SHA: ${{ github.sha }}
+
+jobs:
+  package_linux:
+    name: package_linux_${{ matrix.arch }}
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - aarch64
+    runs-on: ${{ matrix.arch == 'x86_64' && inputs.linux_x86_64_runner || inputs.linux_aarch64_runner }}
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - name: Check architecture selection
+        id: selected
+        shell: bash
+        run: |
+          if [[ "${{ inputs.arch }}" == "all" || "${{ inputs.arch }}" == "${{ matrix.arch }}" ]]; then
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: steps::checkout_repo
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          clean: false
+
+      - name: package_apps::free_linux_disk_space
+        if: steps.selected.outputs.selected == 'true'
+        run: |
+          df -h
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache/CodeQL || true
+          df -h
+
+      - name: package_apps::set_release_channel
+        if: steps.selected.outputs.selected == 'true'
+        run: printf "%s" "${{ inputs.release_channel }}" > crates/zed/RELEASE_CHANNEL
+
+      - name: steps::setup_linux
+        if: steps.selected.outputs.selected == 'true'
+        run: ./script/linux
+
+      - name: steps::download_wasi_sdk
+        if: steps.selected.outputs.selected == 'true'
+        run: ./script/download-wasi-sdk
+
+      - name: package_apps::bundle_linux
+        if: steps.selected.outputs.selected == 'true'
+        run: ./script/bundle-linux
+
+      - name: package_apps::upload_linux_artifacts
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zed-linux-${{ matrix.arch }}
+          path: |
+            target/release/zed-linux-${{ matrix.arch }}.tar.gz
+            target/zed-remote-server-linux-${{ matrix.arch }}.gz
+          if-no-files-found: error
+
+  package_macos:
+    name: package_macos_${{ matrix.arch }}
+    if: inputs.platform == 'all' || inputs.platform == 'macos'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-apple-darwin
+          - arch: aarch64
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.arch == 'x86_64' && inputs.macos_x86_64_runner || inputs.macos_aarch64_runner }}
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARIZATION_KEY: ${{ secrets.APPLE_NOTARIZATION_KEY }}
+      APPLE_NOTARIZATION_KEY_ID: ${{ secrets.APPLE_NOTARIZATION_KEY_ID }}
+      APPLE_NOTARIZATION_ISSUER_ID: ${{ secrets.APPLE_NOTARIZATION_ISSUER_ID }}
+    steps:
+      - name: Check architecture selection
+        id: selected
+        shell: bash
+        run: |
+          if [[ "${{ inputs.arch }}" == "all" || "${{ inputs.arch }}" == "${{ matrix.arch }}" ]]; then
+            echo "selected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: steps::checkout_repo
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          clean: false
+
+      - name: steps::setup_node
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "24"
+          check-latest: true
+
+      - name: package_apps::set_release_channel
+        if: steps.selected.outputs.selected == 'true'
+        run: printf "%s" "${{ inputs.release_channel }}" > crates/zed/RELEASE_CHANNEL
+
+      - name: package_apps::bundle_macos
+        if: steps.selected.outputs.selected == 'true'
+        run: ./script/bundle-mac ${{ matrix.target }}
+
+      - name: package_apps::upload_macos_artifacts
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zed-macos-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.target }}/release/Zed-${{ matrix.arch }}.dmg
+            target/zed-remote-server-macos-${{ matrix.arch }}.gz
+          if-no-files-found: error
+
+  package_windows:
+    name: package_windows_${{ matrix.arch }}
+    if: inputs.platform == 'all' || inputs.platform == 'windows'
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - x86_64
+          - aarch64
+    runs-on: ${{ matrix.arch == 'x86_64' && inputs.windows_x86_64_runner || inputs.windows_aarch64_runner }}
+    steps:
+      - name: Check architecture selection
+        id: selected
+        shell: pwsh
+        run: |
+          if ("${{ inputs.arch }}" -eq "all" -or "${{ inputs.arch }}" -eq "${{ matrix.arch }}") {
+            "selected=true" >> $env:GITHUB_OUTPUT
+          } else {
+            "selected=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: steps::checkout_repo
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          clean: false
+
+      - name: package_apps::setup_windows_dev_drive
+        if: steps.selected.outputs.selected == 'true' && inputs.use_windows_dev_drive
+        shell: pwsh
+        run: ./script/setup-dev-driver.ps1
+
+      - name: package_apps::move_checkout_to_dev_drive
+        if: steps.selected.outputs.selected == 'true' && inputs.use_windows_dev_drive
+        shell: pwsh
+        run: |
+          New-Item -Path "$env:ZED_WORKSPACE" -ItemType Directory -Force
+          robocopy "$env:GITHUB_WORKSPACE" "$env:ZED_WORKSPACE" /MIR /XD .git target /NFL /NDL /NJH /NJS /NP
+          if ($LASTEXITCODE -le 7) {
+            exit 0
+          }
+          exit $LASTEXITCODE
+
+      - name: package_apps::install_inno_setup
+        if: steps.selected.outputs.selected == 'true'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: package_apps::set_release_channel
+        if: steps.selected.outputs.selected == 'true'
+        shell: pwsh
+        run: |
+          $workspace = if ("${{ inputs.use_windows_dev_drive }}" -eq "true") { $env:ZED_WORKSPACE } else { $env:GITHUB_WORKSPACE }
+          Set-Location $workspace
+          Set-Content -NoNewline -Path crates/zed/RELEASE_CHANNEL -Value "${{ inputs.release_channel }}"
+
+      - name: package_apps::bundle_windows_unsigned
+        if: steps.selected.outputs.selected == 'true'
+        shell: pwsh
+        run: |
+          $workspace = if ("${{ inputs.use_windows_dev_drive }}" -eq "true") { $env:ZED_WORKSPACE } else { $env:GITHUB_WORKSPACE }
+          Set-Location $workspace
+          Remove-Item Env:CI -ErrorAction SilentlyContinue
+          ./script/bundle-windows.ps1 -Architecture ${{ matrix.arch }}
+
+      - name: package_apps::copy_windows_artifacts_from_dev_drive
+        if: steps.selected.outputs.selected == 'true' && inputs.use_windows_dev_drive
+        shell: pwsh
+        run: |
+          New-Item -Path "$env:GITHUB_WORKSPACE\target" -ItemType Directory -Force
+          Copy-Item -Path "$env:ZED_WORKSPACE\target\Zed-${{ matrix.arch }}.exe" -Destination "$env:GITHUB_WORKSPACE\target\" -Force
+          Copy-Item -Path "$env:ZED_WORKSPACE\target\zed-remote-server-windows-${{ matrix.arch }}.zip" -Destination "$env:GITHUB_WORKSPACE\target\" -Force
+
+      - name: package_apps::upload_windows_artifacts
+        if: steps.selected.outputs.selected == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: zed-windows-${{ matrix.arch }}
+          path: |
+            target/Zed-${{ matrix.arch }}.exe
+            target/zed-remote-server-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+  upload_release_assets:
+    name: upload_release_assets
+    needs:
+      - package_linux
+      - package_macos
+      - package_windows
+    if: |
+      always() &&
+      inputs.upload_release &&
+      needs.package_linux.result != 'failure' &&
+      needs.package_macos.result != 'failure' &&
+      needs.package_windows.result != 'failure' &&
+      needs.package_linux.result != 'cancelled' &&
+      needs.package_macos.result != 'cancelled' &&
+      needs.package_windows.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: package_apps::validate_release_tag
+        run: |
+          if [[ -z "${{ inputs.release_tag }}" ]]; then
+            echo "::error::release_tag is required when upload_release is true"
+            exit 1
+          fi
+
+      - name: package_apps::download_workflow_artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: ./artifacts
+
+      - name: package_apps::upload_release_assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          find ./artifacts -type f -print
+          if ! find ./artifacts -type f | grep -q .; then
+            echo "::error::no package artifacts were downloaded"
+            exit 1
+          fi
+
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG"
+          fi
+
+          mapfile -d '' files < <(find ./artifacts -type f -print0)
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.arch }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash -euxo pipefail {0}
