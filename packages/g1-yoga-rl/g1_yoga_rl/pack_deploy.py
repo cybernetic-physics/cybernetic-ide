@@ -32,6 +32,8 @@ def main() -> None:
                         help="Glide seconds per pose (must match the trajectory).")
     parser.add_argument("--hold", type=float, default=3.0,
                         help="Hold seconds per pose (must match the trajectory).")
+    parser.add_argument("--neutral-hold", type=float, default=0.0,
+                        help="Standing-anchor hold seconds between poses (must match the trajectory).")
     args = parser.parse_args()
 
     import mujoco
@@ -108,7 +110,10 @@ def main() -> None:
         # hardcoding the trajectory's timing
         "flow_poses": np.array(FULL_FLOW),
         "flow_settle_seconds": np.asarray(args.settle),
-        "flow_segment_seconds": np.asarray(args.glide + args.hold),
+        "flow_segment_seconds": np.asarray(
+            args.glide + args.hold
+            + ((args.glide + args.neutral_hold) if args.neutral_hold > 0 else 0.0)
+        ),
     }
     for key in ("obs_mean", "obs_var", "n_layers", "w0", "b0", "w1", "b1", "w2", "b2",
                 "act_mean", "act_delta", "actuator_names", "obs_joint_names", "control_dt"):

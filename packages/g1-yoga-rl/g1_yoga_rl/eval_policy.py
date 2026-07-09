@@ -22,13 +22,14 @@ HOLD_S = 3.0
 MIN_PELVIS_Z = 0.35
 
 
-def pose_windows(frequency: float, full_flow: list[str] | None = None) -> list:
+def pose_windows(frequency: float, full_flow: list[str] | None = None,
+                 settle_s: float = SETTLE_S, segment_s: float = GLIDE_S + HOLD_S) -> list:
     """(pose, start_frame, end_frame) for each pose's glide+hold segment."""
     if full_flow is None:
         from .yoga_traj import FULL_FLOW
         full_flow = FULL_FLOW
-    settle = int(round(SETTLE_S * frequency))
-    segment = int(round((GLIDE_S + HOLD_S) * frequency))
+    settle = int(round(settle_s * frequency))
+    segment = int(round(segment_s * frequency))
     return [(pose, settle + i * segment, settle + (i + 1) * segment) for i, pose in enumerate(full_flow)]
 
 

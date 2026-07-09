@@ -49,7 +49,15 @@ def main() -> None:
 
     frequency = float(bundle["frequency"])
     substeps = int(round(1.0 / frequency / PHYSICS_DT))
-    windows = pose_windows(frequency)
+    if "flow_segment_seconds" in bundle:
+        windows = pose_windows(
+            frequency,
+            full_flow=[str(p) for p in bundle["flow_poses"]],
+            settle_s=float(bundle["flow_settle_seconds"]),
+            segment_s=float(bundle["flow_segment_seconds"]),
+        )
+    else:
+        windows = pose_windows(frequency)
 
     renderer = camera = None
     if args.render_dir is not None:

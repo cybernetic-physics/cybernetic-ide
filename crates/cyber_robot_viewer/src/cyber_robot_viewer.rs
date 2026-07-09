@@ -1,22 +1,25 @@
 use std::collections::BTreeMap;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::process::Stdio;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context as _, Result, anyhow};
 use gpui::{
-    App, Context, CursorStyle, Entity, EventEmitter, FocusHandle, Focusable, ImageSource,
-    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ObjectFit,
-    ParentElement, Pixels, Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent, SharedString,
-    Styled, Task, Window, actions, img, px, relative, rgb,
+    App, AppContext as _, Context, CursorStyle, Entity, EventEmitter, FocusHandle, Focusable,
+    ImageSource, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ObjectFit, ParentElement, Pixels, Point, Render, RenderImage, ScrollDelta, ScrollWheelEvent,
+    SharedString, Styled, Task, Window, actions, img, px, relative, rgb,
 };
 #[cfg(test)]
 use serde::Deserialize;
 use serde_json::{Value, json};
+use smol::io::AsyncBufReadExt as _;
 use ui::prelude::*;
 use util::ResultExt as _;
+use util::process::Child as ProcessChild;
 use workspace::item::{Item, ItemHandle};
 use workspace::{SplitDirection, Workspace, move_item};
 
@@ -32,10 +35,24 @@ const STATUS_PATH: &str = "/status";
 const VISUAL_FRAME_PATH: &str = "/visual_frame";
 const CAMERA_CONTROL_PATH: &str = "/camera";
 const CAMERA_FRAME_PATH: &str = "/camera_frame_0.jpg";
+const NATIVE_HEALTH_PATH: &str = "/health";
 const STATUS_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const FRAME_POLL_INTERVAL: Duration = Duration::from_millis(125);
 const MAX_READY_ATTEMPTS: usize = 45;
 const CAMERA_DRAG_THRESHOLD_PX: f32 = 4.0;
+
+// Native GPU-accelerated renderer: runs outside Docker (see
+// overlays/unitree-g1-mujoco-protocol/python/g1_native_renderer.py) so it can use
+// real hardware OpenGL instead of the container's software `osmesa` renderer.
+// Purely additive/opt-in-with-fallback -- if it fails to spawn or become healthy,
+// the panel keeps polling the container's own (slower) frames as it always has.
+const NATIVE_RENDER_HOST: &str = "127.0.0.1";
+const NATIVE_RENDER_PORT: u16 = 38384;
+const NATIVE_RENDER_SCRIPT: &str = "overlays/unitree-g1-mujoco-protocol/python/g1_native_renderer.py";
+const NATIVE_RENDERER_VENV: &str = ".venv-robot-viewer";
+const NATIVE_FRAME_POLL_INTERVAL: Duration = Duration::from_millis(33);
+const NATIVE_READY_POLL_INTERVAL: Duration = Duration::from_millis(500);
+const MAX_NATIVE_READY_ATTEMPTS: usize = 20;
 
 actions!(
     cyber,
@@ -168,6 +185,53 @@ pub struct CyberRobotViewer {
     log_lines: Vec<SharedString>,
     connection_task: Task<()>,
     camera_task: Task<()>,
+    render_source: RenderSource,
+    native_renderer: Option<NativeRendererHandle>,
+}
+
+impl Drop for CyberRobotViewer {
+    fn drop(&mut self) {
+        if let Some(mut handle) = self.native_renderer.take() {
+            handle.kill();
+        }
+    }
+}
+
+/// Where the panel is currently pulling camera frames/commands from. Starts as
+/// `Container` and flips to `Native` once the native GPU renderer (spawned
+/// alongside the container, see `setup_native_renderer`) reports healthy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RenderSource {
+    Container,
+    Native,
+}
+
+impl RenderSource {
+    fn host_port(self) -> (&'static str, u16) {
+        match self {
+            RenderSource::Container => (GAME_CONTROL_HOST, GAME_CONTROL_PORT),
+            RenderSource::Native => (NATIVE_RENDER_HOST, NATIVE_RENDER_PORT),
+        }
+    }
+
+    fn frame_poll_interval(self) -> Duration {
+        match self {
+            RenderSource::Container => FRAME_POLL_INTERVAL,
+            RenderSource::Native => NATIVE_FRAME_POLL_INTERVAL,
+        }
+    }
+}
+
+struct NativeRendererHandle {
+    child: ProcessChild,
+    output_log: Arc<Mutex<Vec<String>>>,
+    _log_tasks: [Task<()>; 2],
+}
+
+impl NativeRendererHandle {
+    fn kill(&mut self) {
+        self.child.kill().log_err();
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -291,6 +355,8 @@ impl CyberRobotViewer {
             log_lines: Vec::new(),
             connection_task: Task::ready(()),
             camera_task: Task::ready(()),
+            render_source: RenderSource::Container,
+            native_renderer: None,
         }
     }
 
@@ -336,6 +402,10 @@ impl CyberRobotViewer {
         self.latest_frame = None;
         self.camera_drag = None;
         self.camera_request = CameraRequestState::default();
+        self.render_source = RenderSource::Container;
+        if let Some(mut previous) = self.native_renderer.take() {
+            previous.kill();
+        }
         self.log_lines.clear();
         self.push_log(format!("Harness: {}", self.config.harness_dir.display()));
         self.push_log(format!("Image: {}", self.config.image));
@@ -395,7 +465,9 @@ impl CyberRobotViewer {
 
                 match probe_simulator(&config).await {
                     Ok(telemetry) => {
-                        let frame = fetch_camera_frame().await.ok();
+                        let frame = fetch_camera_frame(GAME_CONTROL_HOST, GAME_CONTROL_PORT)
+                            .await
+                            .ok();
                         update_view(
                             &this,
                             cx,
@@ -418,10 +490,15 @@ impl CyberRobotViewer {
                 }
             }
 
+            let render_source = setup_native_renderer(&this, cx, &config).await;
+
             let mut last_status_probe = Instant::now();
             loop {
-                cx.background_executor().timer(FRAME_POLL_INTERVAL).await;
-                if let Ok(frame) = fetch_camera_frame().await {
+                cx.background_executor()
+                    .timer(render_source.frame_poll_interval())
+                    .await;
+                let (host, port) = render_source.host_port();
+                if let Ok(frame) = fetch_camera_frame(host, port).await {
                     update_frame(&this, cx, frame).await;
                 }
 
@@ -541,8 +618,9 @@ impl CyberRobotViewer {
         }
 
         self.camera_request.in_flight = true;
+        let (host, port) = self.render_source.host_port();
         self.camera_task = cx.spawn_in(window, async move |this, cx| {
-            match send_camera_command(command).await {
+            match send_camera_command(host, port, command).await {
                 Ok(()) => {
                     this.update_in(cx, |viewer, window, cx| {
                         viewer.camera_request.in_flight = false;
@@ -991,6 +1069,35 @@ impl RobotDockerConfig {
                 .unwrap_or_else(|_| DEFAULT_MODEL_PATH.to_string()),
         }
     }
+
+    /// Translates the container-style `model_path` (e.g.
+    /// `/opt/unitree_mujoco/unitree_robots/g1/scene_29dof.xml`) into the real host
+    /// filesystem path, mirroring the bind mount `script/prepare-unitree-g1-mujoco-container.mjs`
+    /// sets up for the container (`UNITREE_G1_MUJOCO_ASSET_ROOT` -> `/opt/unitree_mujoco`).
+    /// A native (non-Docker) process needs the host path to load the same MJCF model.
+    fn host_model_path(&self) -> PathBuf {
+        const CONTAINER_ASSET_ROOT: &str = "/opt/unitree_mujoco/";
+        let relative = self
+            .model_path
+            .strip_prefix(CONTAINER_ASSET_ROOT)
+            .unwrap_or(self.model_path.as_str());
+        self.harness_dir
+            .join(".runtime/unitree-g1-mujoco/unitree_mujoco")
+            .join(relative)
+    }
+
+    fn native_renderer_venv_dir(&self) -> PathBuf {
+        self.harness_dir.join(NATIVE_RENDERER_VENV)
+    }
+
+    fn native_renderer_python(&self) -> PathBuf {
+        let venv = self.native_renderer_venv_dir();
+        if cfg!(windows) {
+            venv.join("Scripts").join("python.exe")
+        } else {
+            venv.join("bin").join("python3")
+        }
+    }
 }
 
 fn default_harness_dir() -> PathBuf {
@@ -1100,6 +1207,194 @@ async fn ensure_image(config: &RobotDockerConfig) -> Result<()> {
     Ok(())
 }
 
+async fn ensure_native_renderer_env(config: &RobotDockerConfig) -> Result<()> {
+    if config.native_renderer_python().exists() {
+        return Ok(());
+    }
+
+    run_command(
+        &config.harness_dir,
+        "uv",
+        &["venv", "--python", "3.12", NATIVE_RENDERER_VENV],
+        &[],
+    )
+    .await?;
+
+    let venv_python = format!("{NATIVE_RENDERER_VENV}/bin/python");
+    run_command(
+        &config.harness_dir,
+        "uv",
+        &[
+            "pip",
+            "install",
+            "--python",
+            &venv_python,
+            "-r",
+            "overlays/unitree-g1-mujoco-protocol/requirements.txt",
+        ],
+        &[],
+    )
+    .await?;
+    Ok(())
+}
+
+async fn spawn_native_renderer(
+    config: &RobotDockerConfig,
+    cx: &mut gpui::AsyncWindowContext,
+) -> Result<NativeRendererHandle> {
+    let python = config.native_renderer_python();
+    if !python.exists() {
+        anyhow::bail!("native renderer venv not found at {}", python.display());
+    }
+
+    let script = config.harness_dir.join(NATIVE_RENDER_SCRIPT);
+    let mut command = util::command::new_std_command(&python);
+    command.current_dir(&config.harness_dir);
+    command.arg(&script);
+    command.env("UNITREE_G1_NATIVE_MODEL_PATH", config.host_model_path());
+    command.env("UNITREE_G1_PHYSICS_WS", PHYSICS_URL);
+    command.env(
+        "UNITREE_G1_NATIVE_RENDER_HTTP_PORT",
+        NATIVE_RENDER_PORT.to_string(),
+    );
+
+    let mut child = ProcessChild::spawn(command, Stdio::null(), Stdio::piped(), Stdio::piped())
+        .context("failed to spawn native renderer process")?;
+
+    let output_log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+
+    let stdout = child.stdout.take();
+    let stdout_log = output_log.clone();
+    let stdout_task = cx.background_spawn(async move {
+        if let Some(stdout) = stdout {
+            read_log_lines(stdout, "renderer", stdout_log).await;
+        }
+    });
+
+    let stderr = child.stderr.take();
+    let stderr_log = output_log.clone();
+    let stderr_task = cx.background_spawn(async move {
+        if let Some(stderr) = stderr {
+            read_log_lines(stderr, "renderer-err", stderr_log).await;
+        }
+    });
+
+    Ok(NativeRendererHandle {
+        child,
+        output_log,
+        _log_tasks: [stdout_task, stderr_task],
+    })
+}
+
+async fn read_log_lines(
+    stream: impl smol::io::AsyncRead + Unpin,
+    label: &'static str,
+    log: Arc<Mutex<Vec<String>>>,
+) {
+    let mut reader = smol::io::BufReader::new(stream);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(mut log) = log.lock() {
+            log.push(format!("[{label}] {trimmed}"));
+            if log.len() > 50 {
+                log.remove(0);
+            }
+        }
+    }
+}
+
+async fn probe_native_renderer_health() -> Result<()> {
+    http_get_json(NATIVE_RENDER_HOST, NATIVE_RENDER_PORT, NATIVE_HEALTH_PATH).await?;
+    Ok(())
+}
+
+/// Spawns the native GPU renderer alongside the (already-ready) container and waits
+/// for it to report healthy. Purely additive: on any failure (missing venv, spawn
+/// error, GPU/CGL unavailable, health timeout) this logs why and falls back to
+/// `RenderSource::Container` -- the panel keeps working exactly as it did before,
+/// just without the speedup.
+async fn setup_native_renderer(
+    this: &gpui::WeakEntity<CyberRobotViewer>,
+    cx: &mut gpui::AsyncWindowContext,
+    config: &RobotDockerConfig,
+) -> RenderSource {
+    append_log(this, cx, "Preparing native GPU renderer".to_string()).await;
+
+    if let Err(error) = ensure_native_renderer_env(config).await {
+        append_log(
+            this,
+            cx,
+            format!("Native renderer unavailable, using container frames: {error:#}"),
+        )
+        .await;
+        return RenderSource::Container;
+    }
+
+    let handle = match spawn_native_renderer(config, cx).await {
+        Ok(handle) => handle,
+        Err(error) => {
+            append_log(
+                this,
+                cx,
+                format!("Native renderer unavailable, using container frames: {error:#}"),
+            )
+            .await;
+            return RenderSource::Container;
+        }
+    };
+
+    let mut native_ready = false;
+    for _ in 0..MAX_NATIVE_READY_ATTEMPTS {
+        if probe_native_renderer_health().await.is_ok() {
+            native_ready = true;
+            break;
+        }
+        cx.background_executor()
+            .timer(NATIVE_READY_POLL_INTERVAL)
+            .await;
+    }
+
+    if !native_ready {
+        let recent_output = handle
+            .output_log
+            .lock()
+            .map(|log| log.join("; "))
+            .unwrap_or_default();
+        let mut handle = handle;
+        handle.kill();
+        let suffix = if recent_output.is_empty() {
+            String::new()
+        } else {
+            format!(" ({recent_output})")
+        };
+        append_log(
+            this,
+            cx,
+            format!("Native renderer did not become healthy in time, using container frames{suffix}"),
+        )
+        .await;
+        return RenderSource::Container;
+    }
+
+    this.update(cx, |viewer, cx| {
+        viewer.native_renderer = Some(handle);
+        viewer.render_source = RenderSource::Native;
+        cx.notify();
+    })
+    .log_err();
+    append_log(this, cx, "Native GPU renderer connected".to_string()).await;
+    RenderSource::Native
+}
+
 async fn docker_image_exists(image: &str) -> Result<bool> {
     let output =
         run_command_allow_failure(Path::new("."), "docker", &["image", "inspect", image], &[])
@@ -1193,14 +1488,15 @@ async fn compose_up(config: &RobotDockerConfig) -> Result<()> {
 }
 
 async fn probe_simulator(_config: &RobotDockerConfig) -> Result<RobotTelemetry> {
-    let status = http_get_json(STATUS_PATH).await?;
+    let status = http_get_json(GAME_CONTROL_HOST, GAME_CONTROL_PORT, STATUS_PATH).await?;
     let decoded = status
         .get("simulation")
         .cloned()
         .ok_or_else(|| anyhow!("GameControl status did not contain simulation state"))?;
     let mut telemetry = parse_simulation_state_value(6, 0, decoded);
 
-    if let Ok(visual_frame) = http_get_json(VISUAL_FRAME_PATH).await
+    if let Ok(visual_frame) =
+        http_get_json(GAME_CONTROL_HOST, GAME_CONTROL_PORT, VISUAL_FRAME_PATH).await
         && let Ok(visual_frame) = parse_visual_frame_value(&visual_frame)
     {
         telemetry.visual_frame = Some(visual_frame);
@@ -1209,14 +1505,14 @@ async fn probe_simulator(_config: &RobotDockerConfig) -> Result<RobotTelemetry> 
     Ok(telemetry)
 }
 
-async fn fetch_camera_frame() -> Result<Arc<RenderImage>> {
-    let bytes = http_get_bytes(CAMERA_FRAME_PATH).await?;
+async fn fetch_camera_frame(host: &str, port: u16) -> Result<Arc<RenderImage>> {
+    let bytes = http_get_bytes(host, port, CAMERA_FRAME_PATH).await?;
     render_image_from_bytes(&bytes)
 }
 
-async fn send_camera_command(command: CameraCommand) -> Result<()> {
+async fn send_camera_command(host: &str, port: u16, command: CameraCommand) -> Result<()> {
     let body = command.body();
-    http_post_bytes(CAMERA_CONTROL_PATH, body.as_bytes(), "application/json").await?;
+    http_post_bytes(host, port, CAMERA_CONTROL_PATH, body.as_bytes(), "application/json").await?;
     Ok(())
 }
 
@@ -1234,39 +1530,101 @@ fn render_image_from_bytes(bytes: &[u8]) -> Result<Arc<RenderImage>> {
     Ok(Arc::new(RenderImage::new(vec![image::Frame::new(data)])))
 }
 
-async fn http_get_json(path: &str) -> Result<Value> {
-    let bytes = http_get_bytes(path).await?;
+async fn http_get_json(host: &str, port: u16, path: &str) -> Result<Value> {
+    let bytes = http_get_bytes(host, port, path).await?;
     serde_json::from_slice(&bytes).with_context(|| format!("failed to parse JSON from {path}"))
 }
 
-async fn http_get_bytes(path: &str) -> Result<Vec<u8>> {
-    http_request("GET", path, &[], None)
+async fn http_get_bytes(host: &str, port: u16, path: &str) -> Result<Vec<u8>> {
+    http_request(host, port, "GET", path, &[], None)
 }
 
-async fn http_post_bytes(path: &str, body: &[u8], content_type: &str) -> Result<Vec<u8>> {
-    http_request("POST", path, body, Some(content_type))
+async fn http_post_bytes(
+    host: &str,
+    port: u16,
+    path: &str,
+    body: &[u8],
+    content_type: &str,
+) -> Result<Vec<u8>> {
+    http_request(host, port, "POST", path, body, Some(content_type))
+}
+
+/// Idle keep-alive connections, one per (host, port), reused across polls instead
+/// of dialing a fresh TCP connection for every single request. Cleared/refreshed
+/// automatically on failure (see `http_request`).
+fn connection_pool() -> &'static Mutex<BTreeMap<(String, u16), TcpStream>> {
+    static POOL: OnceLock<Mutex<BTreeMap<(String, u16), TcpStream>>> = OnceLock::new();
+    POOL.get_or_init(|| Mutex::new(BTreeMap::new()))
+}
+
+fn dial(host: &str, port: u16) -> Result<TcpStream> {
+    let address = format!("{host}:{port}")
+        .parse()
+        .with_context(|| format!("failed to parse socket address {host}:{port}"))?;
+    let stream = TcpStream::connect_timeout(&address, Duration::from_secs(1))
+        .with_context(|| format!("failed to connect to {host}:{port}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .context("failed to set read timeout")?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(3)))
+        .context("failed to set write timeout")?;
+    Ok(stream)
 }
 
 fn http_request(
+    host: &str,
+    port: u16,
     method: &str,
     path: &str,
     body: &[u8],
     content_type: Option<&str>,
 ) -> Result<Vec<u8>> {
-    let address = format!("{GAME_CONTROL_HOST}:{GAME_CONTROL_PORT}")
-        .parse()
-        .context("failed to parse GameControl socket address")?;
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(1))
-        .with_context(|| format!("failed to connect to {GAME_CONTROL_URL}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .context("failed to set GameControl read timeout")?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(3)))
-        .context("failed to set GameControl write timeout")?;
+    let key = (host.to_string(), port);
+    let pooled = connection_pool().lock().unwrap().remove(&key);
+    let is_pooled = pooled.is_some();
+    let mut stream = match pooled {
+        Some(stream) => stream,
+        None => dial(host, port)?,
+    };
 
+    match http_request_on_stream(&mut stream, host, port, method, path, body, content_type) {
+        Ok(response_body) => {
+            connection_pool().lock().unwrap().insert(key, stream);
+            Ok(response_body)
+        }
+        Err(_stale_connection_error) if is_pooled => {
+            // The pooled connection may have gone stale between polls (e.g. an idle
+            // timeout on the server side) -- retry once against a fresh connection
+            // before giving up.
+            let mut stream = dial(host, port)?;
+            let response_body = http_request_on_stream(
+                &mut stream,
+                host,
+                port,
+                method,
+                path,
+                body,
+                content_type,
+            )?;
+            connection_pool().lock().unwrap().insert(key, stream);
+            Ok(response_body)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn http_request_on_stream(
+    stream: &mut TcpStream,
+    host: &str,
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &[u8],
+    content_type: Option<&str>,
+) -> Result<Vec<u8>> {
     let mut request = format!(
-        "{method} {path} HTTP/1.1\r\nHost: {GAME_CONTROL_HOST}:{GAME_CONTROL_PORT}\r\nConnection: close\r\nAccept: */*\r\n"
+        "{method} {path} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: keep-alive\r\nAccept: */*\r\n"
     );
     if let Some(content_type) = content_type {
         request.push_str(&format!("Content-Type: {content_type}\r\n"));
@@ -1275,40 +1633,62 @@ fn http_request(
 
     stream
         .write_all(request.as_bytes())
-        .context("failed to write GameControl HTTP request headers")?;
+        .context("failed to write HTTP request headers")?;
     if !body.is_empty() {
         stream
             .write_all(body)
-            .context("failed to write GameControl HTTP request body")?;
+            .context("failed to write HTTP request body")?;
     }
 
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .context("failed to read GameControl HTTP response")?;
+    let mut reader = BufReader::new(stream);
+    let mut header_bytes = Vec::new();
+    loop {
+        let mut line = Vec::new();
+        let read = reader
+            .read_until(b'\n', &mut line)
+            .context("failed to read HTTP response headers")?;
+        if read == 0 {
+            anyhow::bail!("connection closed while reading HTTP response headers");
+        }
+        if line == b"\r\n" || line == b"\n" {
+            break;
+        }
+        header_bytes.extend_from_slice(&line);
+    }
 
-    let headers_end = response
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .ok_or_else(|| anyhow!("GameControl HTTP response did not contain headers"))?;
-    let header_bytes = &response[..headers_end];
-    let body = response[headers_end + 4..].to_vec();
-    let headers = String::from_utf8_lossy(header_bytes);
+    let headers = String::from_utf8_lossy(&header_bytes);
     let status_line = headers
         .lines()
         .next()
-        .ok_or_else(|| anyhow!("GameControl HTTP response did not contain a status line"))?;
+        .ok_or_else(|| anyhow!("HTTP response did not contain a status line"))?;
     let status_code = status_line
         .split_whitespace()
         .nth(1)
         .and_then(|code| code.parse::<u16>().ok())
-        .ok_or_else(|| anyhow!("failed to parse GameControl HTTP status: {status_line}"))?;
+        .ok_or_else(|| anyhow!("failed to parse HTTP status: {status_line}"))?;
+    let content_length: usize = headers
+        .lines()
+        .skip(1)
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse().ok())
+                .flatten()
+        })
+        .ok_or_else(|| anyhow!("HTTP response did not contain a Content-Length header"))?;
+
+    let mut response_body = vec![0u8; content_length];
+    reader
+        .read_exact(&mut response_body)
+        .context("failed to read HTTP response body")?;
+
     if !(200..300).contains(&status_code) {
-        let body_preview = String::from_utf8_lossy(&body);
-        anyhow::bail!("GameControl HTTP {method} {path} returned {status_code}: {body_preview}");
+        let body_preview = String::from_utf8_lossy(&response_body);
+        anyhow::bail!("HTTP {method} {path} returned {status_code}: {body_preview}");
     }
 
-    Ok(body)
+    Ok(response_body)
 }
 
 async fn run_command(
@@ -2192,4 +2572,14 @@ mod tests {
             ]
         );
     }
+
+    // The native renderer is a real host process (unlike the detached Docker
+    // container), so it must not outlive the panel. `NativeRendererHandle::kill`
+    // delegates directly to `util::process::Child::kill` (`killpg` + `SIGKILL` on
+    // Unix), which is exercised by that crate's own process-group tests; `Drop for
+    // CyberRobotViewer` calling it is a plain Rust ownership guarantee. Spawning a
+    // real child process inside a `#[gpui::test]` isn't viable here -- gpui's test
+    // scheduler asserts determinism and aborts on activity from the background OS
+    // threads `async_process` spawns to reap real subprocesses -- so this behavior
+    // is instead verified by actually running the app (see PR description).
 }

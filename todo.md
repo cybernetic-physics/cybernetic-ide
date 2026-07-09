@@ -586,6 +586,10 @@ Tasks:
   effects, and expected simulator state for the default robotics tools.
 - Done: add `unitree_official_mujoco_evidence_bundle` for official-DDS
   before/after lowstate artifacts after bounded arm-pose commands.
+- Done: enable MCP `robot_behavior_trace` and
+  `unitree_probe_official_mujoco_loco_rpc` in the default Robotics Agent
+  profile, closing the gap between the server's advertised robotics tools and
+  the tools native Cybernetic/Zed agents can use immediately.
 - Done: add `unitree_sdk_compatibility_audit` so agents can inspect official G1
   SDK example import and method coverage before adapting upstream scripts.
 - Done: add `unitree_sdk_behavior_smoke` so agents can validate safe

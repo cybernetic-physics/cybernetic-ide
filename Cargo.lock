@@ -4679,6 +4679,7 @@ dependencies = [
  "project",
  "serde",
  "serde_json",
+ "smol",
  "ui",
  "util",
  "workspace",

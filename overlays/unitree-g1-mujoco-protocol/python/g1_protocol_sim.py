@@ -19,6 +19,7 @@ import numpy as np
 import websockets
 from PIL import Image
 
+import g1_camera
 import g1_policy_runtime
 
 
@@ -28,6 +29,7 @@ MESSAGE_TYPES = {
     "visual_scene": 10,
     "visual_frame": 11,
     "visual_scene_error": 12,
+    "physics_qpos": 13,
 }
 
 NAMED_POSES = {
@@ -194,15 +196,19 @@ NAMED_POSES = {
         "right_elbow_joint": 0.1,
     },
     "chair": {
+        # base_pitch leans the whole body forward (as in forward_fold) so the
+        # squatted CoM lands inside the support polygon instead of behind the
+        # heels (measured 0.7 cm behind with an upright base)
+        "base_pitch": 0.12,
         "waist_pitch_joint": 0.5,
         "left_hip_pitch_joint": -0.75,
         "right_hip_pitch_joint": -0.75,
         "left_knee_joint": 0.85,
         "right_knee_joint": 0.85,
-        "left_ankle_pitch_joint": -0.1,
-        "right_ankle_pitch_joint": -0.1,
-        "left_shoulder_pitch_joint": -1.7,
-        "right_shoulder_pitch_joint": -1.7,
+        "left_ankle_pitch_joint": -0.22,
+        "right_ankle_pitch_joint": -0.22,
+        "left_shoulder_pitch_joint": -1.5,
+        "right_shoulder_pitch_joint": -1.5,
         "left_shoulder_roll_joint": 0.15,
         "right_shoulder_roll_joint": -0.15,
         "left_elbow_joint": 0.15,
@@ -216,42 +222,48 @@ NAMED_POSES = {
         "left_knee_joint": 0.6,
         "left_ankle_pitch_joint": 0.0,
         "right_hip_pitch_joint": 0.35,
-        "right_knee_joint": 0.2,
-        "right_ankle_pitch_joint": -0.55,
+        "right_knee_joint": 0.17,
+        "right_ankle_pitch_joint": -0.52,
         "waist_pitch_joint": 0.1,
         "left_shoulder_pitch_joint": -2.4,
         "right_shoulder_pitch_joint": -2.4,
         "left_shoulder_roll_joint": 0.12,
         "right_shoulder_roll_joint": -0.12,
     },
+    # A true lateral warrior-two is unreachable on this robot: stance splay
+    # with flat feet is capped by the ankle-roll range (±0.26 rad), and the
+    # floating base has no roll freedom, so the deep side-bent leg can never
+    # plant. This reuses warrior_one's proven sagittal lunge (deeper front
+    # knee) with warrior_two's signature T-arms instead.
     "warrior_two": {
-        "left_hip_roll_joint": 0.55,
-        "left_hip_pitch_joint": -0.35,
-        "left_knee_joint": 0.35,
+        "left_hip_pitch_joint": -0.7,
+        "left_knee_joint": 0.7,
         "left_ankle_pitch_joint": 0.0,
-        "left_ankle_roll_joint": -0.26,
-        "right_hip_roll_joint": -0.55,
-        "right_hip_pitch_joint": 0.05,
-        "right_knee_joint": 0.1,
-        "right_ankle_pitch_joint": -0.15,
-        "right_ankle_roll_joint": 0.26,
+        "right_hip_pitch_joint": 0.4,
+        "right_knee_joint": 0.24,
+        "right_ankle_pitch_joint": -0.64,
+        "waist_pitch_joint": 0.1,
         "left_shoulder_pitch_joint": 0.0,
         "left_shoulder_roll_joint": 1.4,
         "right_shoulder_pitch_joint": 0.0,
         "right_shoulder_roll_joint": -1.4,
     },
     "goddess": {
-        "waist_pitch_joint": 0.2,
-        "left_hip_roll_joint": 0.45,
-        "right_hip_roll_joint": -0.45,
-        "left_hip_pitch_joint": -0.5,
-        "right_hip_pitch_joint": -0.5,
-        "left_knee_joint": 0.5,
-        "right_knee_joint": 0.5,
-        "left_ankle_pitch_joint": 0.0,
-        "right_ankle_pitch_joint": 0.0,
-        "left_ankle_roll_joint": -0.26,
-        "right_ankle_roll_joint": 0.26,
+        # shallower hip flexion keeps the feet under the body (deep flexion
+        # pushed them forward, leaving the CoM behind the heels); base_pitch
+        # nudges the CoM forward like chair
+        "base_pitch": 0.1,
+        "waist_pitch_joint": 0.3,
+        "left_hip_roll_joint": 0.26,
+        "right_hip_roll_joint": -0.26,
+        "left_hip_pitch_joint": -0.35,
+        "right_hip_pitch_joint": -0.35,
+        "left_knee_joint": 0.55,
+        "right_knee_joint": 0.55,
+        "left_ankle_pitch_joint": -0.29,
+        "right_ankle_pitch_joint": -0.29,
+        "left_ankle_roll_joint": -0.24,
+        "right_ankle_roll_joint": 0.24,
         "left_shoulder_pitch_joint": -0.3,
         "left_shoulder_roll_joint": 1.2,
         "left_elbow_joint": 1.5,
@@ -259,10 +271,14 @@ NAMED_POSES = {
         "right_shoulder_roll_joint": -1.2,
         "right_elbow_joint": 1.5,
     },
+    # toe-touch tree (the beginner modification): the raised foot's toe stays
+    # grounded so support is two-point rather than a true one-leg balance,
+    # which neither the PD hold nor the mimic policy could sustain
     "tree": {
-        "left_hip_roll_joint": 0.7,
-        "left_hip_pitch_joint": -0.2,
-        "left_knee_joint": 2.2,
+        "left_hip_roll_joint": 0.2,
+        "left_hip_pitch_joint": -0.08,
+        "left_knee_joint": 0.25,
+        "left_ankle_pitch_joint": -0.45,
         "left_shoulder_pitch_joint": -2.7,
         "left_shoulder_roll_joint": 0.15,
         "right_shoulder_pitch_joint": -2.7,
@@ -477,20 +493,27 @@ class G1MujocoState:
         self.policy_physics_dt = 0.002
         self.policy_substep_counter = 0
         self.policy_substeps = 1
+        self.policy_flow = list(self.POLICY_FLOW)
+        self.policy_flow_settle = 1.0
+        self.policy_flow_segment = 4.5
         if policy_bundle is not None:
             self.policy_controller = g1_policy_runtime.YogaPolicyController(self.model, policy_bundle)
             frequency = float(policy_bundle["frequency"])
             self.policy_substeps = max(1, int(round(1.0 / frequency / self.policy_physics_dt)))
             self.policy_state["frames_total"] = self.policy_controller.n_frames
+            if "flow_poses" in policy_bundle:
+                self.policy_flow = [str(p) for p in policy_bundle["flow_poses"]]
+                self.policy_flow_settle = float(policy_bundle["flow_settle_seconds"])
+                self.policy_flow_segment = float(policy_bundle["flow_segment_seconds"])
 
         self.camera = mujoco.MjvCamera()
         mujoco.mjv_defaultCamera(self.camera)
-        self.default_camera = {
-            "lookat": [0.0, 0.0, 0.72],
-            "distance": env_float("UNITREE_G1_CAMERA_DISTANCE", 3.2),
-            "azimuth": env_float("UNITREE_G1_CAMERA_AZIMUTH", -130.0),
-            "elevation": env_float("UNITREE_G1_CAMERA_ELEVATION", -18.0),
-        }
+        self.default_camera = g1_camera.default_camera_state(
+            lookat=(0.0, 0.0, 0.72),
+            distance=env_float("UNITREE_G1_CAMERA_DISTANCE", 3.2),
+            azimuth=env_float("UNITREE_G1_CAMERA_AZIMUTH", -130.0),
+            elevation=env_float("UNITREE_G1_CAMERA_ELEVATION", -18.0),
+        )
         self.desired_camera = dict(self.default_camera)
         self.reset_camera()
         self.apply_desired_camera_locked()
@@ -877,8 +900,9 @@ class G1MujocoState:
             self.stop_yoga_policy_locked()
             return {"ok": True, "policy": dict(self.policy_state)}
 
-    # the trajectory is settle(1s) then per pose glide(1.5s)+hold(3s), in the
-    # yoga flow order; used only to label the current segment in /status
+    # fallback flow schedule for bundles packed before the flow_* keys
+    # existed: settle(1s) then per pose glide(1.5s)+hold(3s), in the yoga
+    # flow order; used only to label the current segment in /status
     POLICY_FLOW = [
         "mountain", "upward_salute", "forward_fold", "chair", "warrior_one",
         "warrior_two", "goddess", "tree", "namaste",
@@ -888,14 +912,14 @@ class G1MujocoState:
         status = dict(self.policy_state)
         if status["active"] and self.policy_controller is not None:
             frequency = 1.0 / self.policy_controller.control_dt
-            settle = int(round(1.0 * frequency))
-            segment = int(round(4.5 * frequency))
+            settle = int(round(self.policy_flow_settle * frequency))
+            segment = int(round(self.policy_flow_segment * frequency))
             frame = int(status["frame"])
             if frame < settle:
                 status["pose"] = "settle"
             else:
-                index = min((frame - settle) // segment, len(self.POLICY_FLOW) - 1)
-                status["pose"] = self.POLICY_FLOW[index]
+                index = min((frame - settle) // segment, len(self.policy_flow) - 1)
+                status["pose"] = self.policy_flow[index]
         return status
 
     def apply_loco_velocity_locked(self, dt):
@@ -1569,23 +1593,11 @@ class G1MujocoState:
             return self._camera_payload_locked()
 
     def _camera_payload_locked(self):
-        return {
-            "cameraId": 0,
-            "type": "free",
-            "lookat": list(self.desired_camera["lookat"]),
-            "distance": float(self.desired_camera["distance"]),
-            "azimuth": float(self.desired_camera["azimuth"]),
-            "elevation": float(self.desired_camera["elevation"]),
-        }
+        return g1_camera.camera_payload(self.desired_camera)
 
     def apply_desired_camera_locked(self):
         with self.camera_lock:
-            desired = self.desired_camera
-            self.camera.type = mujoco.mjtCamera.mjCAMERA_FREE
-            self.camera.lookat[:] = desired["lookat"]
-            self.camera.distance = desired["distance"]
-            self.camera.azimuth = desired["azimuth"]
-            self.camera.elevation = desired["elevation"]
+            g1_camera.apply_to_mjv_camera(self.desired_camera, self.camera, mujoco)
 
     def desired_camera_snapshot(self):
         with self.camera_lock:
@@ -1604,52 +1616,22 @@ class G1MujocoState:
 
     def orbit_camera(self, dx=0.0, dy=0.0):
         with self.camera_lock:
-            self.desired_camera["azimuth"] = (
-                float(self.desired_camera["azimuth"]) + float(dx) * 0.28
-            )
-            self.desired_camera["elevation"] = clamp(
-                float(self.desired_camera["elevation"]) - float(dy) * 0.22,
-                -85.0,
-                85.0,
-            )
+            g1_camera.orbit(self.desired_camera, dx, dy)
             return self._camera_payload_locked()
 
     def pan_camera(self, dx=0.0, dy=0.0):
         with self.camera_lock:
-            azimuth = math.radians(float(self.desired_camera["azimuth"]))
-            right = np.array([math.cos(azimuth), math.sin(azimuth), 0.0])
-            up = np.array([0.0, 0.0, 1.0])
-            scale = max(float(self.desired_camera["distance"]), 0.5) * 0.0018
-            lookat = np.array(self.desired_camera["lookat"], dtype=float) + (
-                -float(dx) * scale * right + float(dy) * scale * up
-            )
-            lookat[2] = clamp(float(lookat[2]), -0.5, 2.5)
-            self.desired_camera["lookat"] = lookat.tolist()
+            g1_camera.pan(self.desired_camera, dx, dy)
             return self._camera_payload_locked()
 
     def zoom_camera(self, delta=0.0):
         with self.camera_lock:
-            factor = math.exp(-float(delta) * 0.0018)
-            self.desired_camera["distance"] = clamp(
-                float(self.desired_camera["distance"]) * factor,
-                0.45,
-                12.0,
-            )
+            g1_camera.zoom(self.desired_camera, delta)
             return self._camera_payload_locked()
 
     def set_camera(self, camera):
         with self.camera_lock:
-            if "lookat" in camera:
-                lookat = camera["lookat"]
-                if not isinstance(lookat, list) or len(lookat) != 3:
-                    raise ValueError("camera.lookat must be a 3-element list")
-                self.desired_camera["lookat"] = [float(value) for value in lookat]
-            if "distance" in camera:
-                self.desired_camera["distance"] = clamp(float(camera["distance"]), 0.45, 12.0)
-            if "azimuth" in camera:
-                self.desired_camera["azimuth"] = float(camera["azimuth"]) % 360.0
-            if "elevation" in camera:
-                self.desired_camera["elevation"] = clamp(float(camera["elevation"]), -89.0, 20.0)
+            g1_camera.set_absolute(self.desired_camera, camera)
             return self._camera_payload_locked()
 
     def advance_for_wall_time(self):
@@ -1911,6 +1893,14 @@ class G1MujocoState:
                 "data": png,
             }
 
+    def physics_qpos_payload(self):
+        with self.lock:
+            return {
+                "frame_id": int(self.frame_id),
+                "time": float(self.data.time),
+                "qpos": self.data.qpos.tolist(),
+            }
+
     def envelope(self, topic, payload):
         encoded = msgpack.packb(payload, use_bin_type=True)
         message_type = MESSAGE_TYPES.get(topic, MESSAGE_TYPES["visual_scene_error"])
@@ -1925,6 +1915,8 @@ class G1MujocoState:
             return self.envelope(topic, self.visual_frame_payload())
         if topic == "camera_frame_0":
             return self.envelope(topic, self.camera_frame_payload())
+        if topic == "physics_qpos":
+            return self.envelope(topic, self.physics_qpos_payload())
         return self.envelope(
             "visual_scene_error",
             {"topic": topic, "error": f"unsupported topic: {topic}"},
@@ -2014,6 +2006,7 @@ class G1MujocoState:
 def start_http_server(state):
     class Handler(BaseHTTPRequestHandler):
         server_version = "UnitreeG1MujocoProtocol/0.1"
+        protocol_version = "HTTP/1.1"
 
         def log_message(self, fmt, *args):
             print(f"[http] {self.address_string()} {fmt % args}", flush=True)

@@ -147,11 +147,17 @@ def build_yoga_trajectory(
     glide_seconds: float = 1.5,
     hold_seconds: float = 3.0,
     settle_seconds: float = 1.0,
+    neutral_hold_seconds: float = 0.0,
 ) -> Trajectory:
     """Assemble the glide+hold qpos sequence and extend it with kinematics.
 
     The sequence starts at the env default (standing) pose, holds it for
-    settle_seconds, then glides into each pose in order and holds it.
+    settle_seconds, then glides into each pose in order and holds it. With
+    neutral_hold_seconds > 0, every pose is followed by a glide back to the
+    standing anchor held for that long — direct pose-to-pose interpolation
+    drags loaded feet through infeasible contact states during stance
+    changes, which the mimic policy cannot track; routing through standing
+    keeps every transition a weight shift the policy already masters.
     """
     model = env.get_model()
     data = env.get_data()
@@ -175,21 +181,30 @@ def build_yoga_trajectory(
     glide_frames = max(1, int(round(glide_seconds / dt)))
     hold_frames = max(1, int(round(hold_seconds / dt)))
     settle_frames = max(1, int(round(settle_seconds / dt)))
+    neutral_frames = int(round(neutral_hold_seconds / dt))
 
-    keyframes = [base_qpos] + [p.qpos for p in projections]
-    segments = [settle_frames] + [glide_frames + hold_frames] * len(projections)
+    keyframes = []
+    for projection in projections:
+        keyframes.append((projection.qpos, hold_frames))
+        if neutral_frames > 0:
+            keyframes.append((base_qpos, neutral_frames))
+
+    segment_frames = glide_frames + hold_frames
+    if neutral_frames > 0:
+        segment_frames += glide_frames + neutral_frames
+    expected = settle_frames + segment_frames * len(projections)
 
     qpos_frames = []
-    current = keyframes[0]
+    current = base_qpos
     qpos_frames.extend([current.copy() for _ in range(settle_frames)])
-    for target in keyframes[1:]:
+    for target, target_hold in keyframes:
         fractions = smoothstep(np.linspace(0.0, 1.0, glide_frames, endpoint=False))
         for fraction in fractions:
             qpos_frames.append(current + (target - current) * fraction)
-        qpos_frames.extend([target.copy() for _ in range(hold_frames)])
+        qpos_frames.extend([target.copy() for _ in range(target_hold)])
         current = target
     qpos = np.stack(qpos_frames)
-    assert len(qpos) == sum(segments)
+    assert len(qpos) == expected
 
     base_z = int(model.jnt_qposadr[0]) + 2
     for i in range(len(qpos)):
