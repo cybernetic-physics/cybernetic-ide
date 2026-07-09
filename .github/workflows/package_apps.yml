@@ -32,7 +32,7 @@ on:
       linux_x86_64_runner:
         description: Runner label for Linux x86_64 packages
         type: string
-        default: ubuntu-24.04
+        default: ubuntu-22.04
       linux_aarch64_runner:
         description: Runner label for Linux aarch64 packages
         type: string
