@@ -171,8 +171,9 @@ def teach_policy(args: argparse.Namespace) -> tuple[int, int]:
             return payload.get("policy", {})
 
         frequency = 100.0
-        settle_frames = int(1.0 * frequency)
-        segment_frames = int(4.5 * frequency)
+        first_status = policy_status()
+        settle_frames = int(first_status.get("settle_seconds", 1.0) * frequency)
+        segment_frames = int(first_status.get("segment_seconds", 4.5) * frequency)
 
         for round_index in range(1, max(1, args.rounds) + 1):
             if args.rounds > 1:

@@ -920,6 +920,8 @@ class G1MujocoState:
             else:
                 index = min((frame - settle) // segment, len(self.policy_flow) - 1)
                 status["pose"] = self.policy_flow[index]
+            status["settle_seconds"] = float(self.policy_flow_settle)
+            status["segment_seconds"] = float(self.policy_flow_segment)
         return status
 
     def apply_loco_velocity_locked(self, dt):
