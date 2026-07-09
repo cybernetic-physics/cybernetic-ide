@@ -25,13 +25,19 @@ REWARD_PARAMS = dict(
 )
 
 
-def build_env(traj_path: Path, horizon: int = 1000):
+def build_env(traj_path: Path, horizon: int = 1000, observation_noise_params: dict | None = None):
     """Imitation env on the 29-DOF deploy model spec (see cyber_env)."""
     from loco_mujoco.trajectory import Trajectory, TrajectoryHandler
 
     from .cyber_env import make_cyber_env
 
     trajectory = Trajectory.load(str(traj_path))
+    env_params = {}
+    if observation_noise_params is not None:
+        env_params = {
+            "domain_randomization_type": "YogaObservationNoiseRandomizer",
+            "domain_randomization_params": observation_noise_params,
+        }
     env = make_cyber_env(
         headless=True,
         horizon=horizon,
@@ -41,6 +47,7 @@ def build_env(traj_path: Path, horizon: int = 1000):
         goal_params=dict(visualize_goal=False),
         reward_type="MimicReward",
         reward_params=dict(REWARD_PARAMS),
+        **env_params,
     )
     handler = TrajectoryHandler(env.get_model(), control_dt=env.dt, traj=trajectory)
     env.load_trajectory(traj=handler.traj, warn=False)
@@ -108,6 +115,12 @@ def main() -> None:
     parser.add_argument("--resume-agent", type=Path, default=None,
                         help="PPOJax_saved.pkl to continue training from, so an "
                              "interrupted multi-hour run does not start over")
+    parser.add_argument("--observation-noise", action="store_true",
+                        help="add mild joint/base-velocity observation noise during training")
+    parser.add_argument("--joint-pos-noise", type=float, default=0.002)
+    parser.add_argument("--joint-vel-noise", type=float, default=0.04)
+    parser.add_argument("--free-joint-lin-vel-noise", type=float, default=0.04)
+    parser.add_argument("--free-joint-ang-vel-noise", type=float, default=0.01)
     args = parser.parse_args()
     args.total_timesteps = int(args.total_timesteps) // args.chunks
 
@@ -117,7 +130,16 @@ def main() -> None:
     from loco_mujoco.algorithms import PPOJax
 
     print(f"[train] jax backend={jax.default_backend()} devices={jax.devices()}")
-    env = build_env(args.traj, horizon=args.horizon)
+    observation_noise_params = None
+    if args.observation_noise:
+        observation_noise_params = {
+            "joint_pos_noise_scale": args.joint_pos_noise,
+            "joint_vel_noise_scale": args.joint_vel_noise,
+            "free_joint_lin_vel_noise_scale": args.free_joint_lin_vel_noise,
+            "free_joint_ang_vel_noise_scale": args.free_joint_ang_vel_noise,
+        }
+        print(f"[train] observation noise={observation_noise_params}")
+    env = build_env(args.traj, horizon=args.horizon, observation_noise_params=observation_noise_params)
     print(f"[train] obs={env.info.observation_space.shape} act={env.info.action_space.shape}")
 
     config = build_config(args)

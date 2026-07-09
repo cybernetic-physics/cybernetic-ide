@@ -77,6 +77,7 @@ def make_cyber_env(**kwargs):
     joint in model order — the same layout pattern as the stock env, extended
     to all 29 joints.
     """
+    from . import recovery_randomizer  # noqa: F401
     from loco_mujoco.core import ObservationType
     from loco_mujoco.environments.humanoids.unitreeG1_mjx import MjxUnitreeG1
 

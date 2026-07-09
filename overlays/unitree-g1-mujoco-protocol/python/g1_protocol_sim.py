@@ -236,13 +236,13 @@ NAMED_POSES = {
     # plant. This reuses warrior_one's proven sagittal lunge (deeper front
     # knee) with warrior_two's signature T-arms instead.
     "warrior_two": {
-        "left_hip_pitch_joint": -0.7,
-        "left_knee_joint": 0.7,
+        "left_hip_pitch_joint": -0.5,
+        "left_knee_joint": 0.55,
         "left_ankle_pitch_joint": 0.0,
-        "right_hip_pitch_joint": 0.4,
-        "right_knee_joint": 0.24,
-        "right_ankle_pitch_joint": -0.64,
-        "waist_pitch_joint": 0.1,
+        "right_hip_pitch_joint": 0.2,
+        "right_knee_joint": 0.28,
+        "right_ankle_pitch_joint": -0.5,
+        "waist_pitch_joint": 0.0,
         "left_shoulder_pitch_joint": 0.0,
         "left_shoulder_roll_joint": 1.4,
         "right_shoulder_pitch_joint": 0.0,
@@ -252,8 +252,8 @@ NAMED_POSES = {
         # shallower hip flexion keeps the feet under the body (deep flexion
         # pushed them forward, leaving the CoM behind the heels); base_pitch
         # nudges the CoM forward like chair
-        "base_pitch": 0.1,
-        "waist_pitch_joint": 0.3,
+        "base_pitch": 0.05,
+        "waist_pitch_joint": 0.2,
         "left_hip_roll_joint": 0.26,
         "right_hip_roll_joint": -0.26,
         "left_hip_pitch_joint": -0.35,
@@ -277,7 +277,7 @@ NAMED_POSES = {
     "tree": {
         "left_hip_roll_joint": 0.2,
         "left_hip_pitch_joint": -0.08,
-        "left_knee_joint": 0.25,
+        "left_knee_joint": 0.2,
         "left_ankle_pitch_joint": -0.45,
         "left_shoulder_pitch_joint": -2.7,
         "left_shoulder_roll_joint": 0.15,
