@@ -211,6 +211,9 @@ jobs:
           - x86_64
           - aarch64
     runs-on: ${{ matrix.arch == 'x86_64' && inputs.windows_x86_64_runner || inputs.windows_aarch64_runner }}
+    env:
+      CARGO_HOME: C:\c
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
     steps:
       - name: Check architecture selection
         id: selected
@@ -243,6 +246,14 @@ jobs:
             exit 0
           }
           exit $LASTEXITCODE
+
+      - name: package_apps::prepare_windows_cargo
+        if: steps.selected.outputs.selected == 'true'
+        shell: pwsh
+        run: |
+          New-Item -Path "$env:CARGO_HOME\bin" -ItemType Directory -Force
+          "$env:CARGO_HOME\bin" >> $env:GITHUB_PATH
+          git config --global core.longpaths true
 
       - name: package_apps::install_inno_setup
         if: steps.selected.outputs.selected == 'true'
