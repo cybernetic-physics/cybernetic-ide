@@ -257,6 +257,7 @@ jobs:
         shell: pwsh
         run: |
           $workspace = if ("${{ inputs.use_windows_dev_drive }}" -eq "true") { $env:ZED_WORKSPACE } else { $env:GITHUB_WORKSPACE }
+          $env:ZED_WORKSPACE = $workspace
           Set-Location $workspace
           Set-Content -NoNewline -Path crates/zed/RELEASE_CHANNEL -Value "${{ inputs.release_channel }}"
 
@@ -265,6 +266,7 @@ jobs:
         shell: pwsh
         run: |
           $workspace = if ("${{ inputs.use_windows_dev_drive }}" -eq "true") { $env:ZED_WORKSPACE } else { $env:GITHUB_WORKSPACE }
+          $env:ZED_WORKSPACE = $workspace
           Set-Location $workspace
           Remove-Item Env:CI -ErrorAction SilentlyContinue
           ./script/bundle-windows.ps1 -Architecture ${{ matrix.arch }}
